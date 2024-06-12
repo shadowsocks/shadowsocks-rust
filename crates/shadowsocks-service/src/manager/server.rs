@@ -85,7 +85,6 @@ pub struct ManagerBuilder {
     acl: Option<Arc<AccessControl>>,
     ipv6_first: bool,
     security: SecurityConfig,
-    worker_count: usize,
 }
 
 impl ManagerBuilder {
@@ -106,7 +105,6 @@ impl ManagerBuilder {
             acl: None,
             ipv6_first: false,
             security: SecurityConfig::default(),
-            worker_count: 1,
         }
     }
 
@@ -156,14 +154,6 @@ impl ManagerBuilder {
         self.security = security;
     }
 
-    /// Set runtime worker count
-    ///
-    /// Should be replaced with tokio's metric API when it is stablized.
-    /// https://github.com/tokio-rs/tokio/issues/4073
-    pub fn set_worker_count(&mut self, worker_count: usize) {
-        self.worker_count = worker_count;
-    }
-
     /// Build the manager server instance
     pub async fn build(self) -> io::Result<Manager> {
         let listener = ManagerListener::bind(&self.context, &self.svr_cfg.addr).await?;
@@ -178,7 +168,6 @@ impl ManagerBuilder {
             acl: self.acl,
             ipv6_first: self.ipv6_first,
             security: self.security,
-            worker_count: self.worker_count,
             listener,
         })
     }
@@ -196,7 +185,6 @@ pub struct Manager {
     acl: Option<Arc<AccessControl>>,
     ipv6_first: bool,
     security: SecurityConfig,
-    worker_count: usize,
     listener: ManagerListener,
 }
 
@@ -292,8 +280,6 @@ impl Manager {
         }
 
         server_builder.set_security_config(&self.security);
-
-        server_builder.set_worker_count(self.worker_count);
 
         let server_port = server_builder.server_config().addr().port();
 

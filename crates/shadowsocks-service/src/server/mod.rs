@@ -150,10 +150,6 @@ pub async fn run(config: Config) -> io::Result<()> {
             server_builder.set_ipv6_first(config.ipv6_first);
         }
 
-        if config.worker_count >= 1 {
-            server_builder.set_worker_count(config.worker_count);
-        }
-
         server_builder.set_security_config(&config.security);
 
         let server = server_builder.build().await?;

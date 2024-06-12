@@ -520,23 +520,18 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
         info!("shadowsocks server {} build {}", crate::VERSION, crate::BUILD_TIME);
 
-        let mut worker_count = 1;
         let mut builder = match service_config.runtime.mode {
             RuntimeMode::SingleThread => Builder::new_current_thread(),
             #[cfg(feature = "multi-threaded")]
             RuntimeMode::MultiThread => {
                 let mut builder = Builder::new_multi_thread();
                 if let Some(worker_threads) = service_config.runtime.worker_count {
-                    worker_count = worker_threads;
                     builder.worker_threads(worker_threads);
-                } else {
-                    worker_count = num_cpus::get();
                 }
 
                 builder
             }
         };
-        config.worker_count = worker_count;
 
         let runtime = builder.enable_all().build().expect("create tokio Runtime");
 

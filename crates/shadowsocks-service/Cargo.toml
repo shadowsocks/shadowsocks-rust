@@ -144,7 +144,7 @@ rand = { version = "0.8", features = ["small_rng"] }
 sled = { version = "0.34.7", optional = true }
 
 futures = "0.3"
-tokio = { version = "1.5", features = [
+tokio = { version = "1.38", features = [
     "io-util",
     "macros",
     "net",

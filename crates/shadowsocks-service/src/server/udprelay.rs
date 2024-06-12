@@ -27,7 +27,7 @@ use shadowsocks::{
     },
     ServerConfig,
 };
-use tokio::{sync::mpsc, task::JoinHandle, time};
+use tokio::{runtime::Handle, sync::mpsc, task::JoinHandle, time};
 #[cfg(windows)]
 use windows_sys::Win32::Networking::WinSock::WSAEAFNOSUPPORT;
 
@@ -93,7 +93,6 @@ pub struct UdpServer {
     keepalive_tx: mpsc::Sender<NatKey>,
     keepalive_rx: mpsc::Receiver<NatKey>,
     time_to_live: Duration,
-    worker_count: usize,
     listener: Arc<MonProxySocket>,
     svr_cfg: ServerConfig,
 }
@@ -140,15 +139,9 @@ impl UdpServer {
             keepalive_tx,
             keepalive_rx,
             time_to_live,
-            worker_count: 1,
             listener,
             svr_cfg,
         })
-    }
-
-    #[inline]
-    pub(crate) fn set_worker_count(&mut self, worker_count: usize) {
-        self.worker_count = worker_count;
     }
 
     /// Server's configuration
@@ -173,7 +166,7 @@ impl UdpServer {
 
         let mut orx_opt = None;
 
-        let cpus = self.worker_count;
+        let cpus = Handle::current().metrics().num_workers();
         let mut other_receivers = Vec::new();
         if cpus > 1 {
             let (otx, orx) = mpsc::channel((cpus - 1) * 16);
