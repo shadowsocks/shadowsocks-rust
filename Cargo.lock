@@ -3210,6 +3210,7 @@ version = "1.19.3"
 dependencies = [
  "arc-swap",
  "async-trait",
+ "brotli",
  "bson",
  "byte_string",
  "byteorder",
@@ -3217,6 +3218,7 @@ dependencies = [
  "cfg-if",
  "env_logger",
  "etherparse",
+ "flate2",
  "futures",
  "hickory-resolver",
  "http 1.1.0",
@@ -3250,6 +3252,7 @@ dependencies = [
  "tun2",
  "webpki-roots 0.26.2",
  "windows-sys 0.52.0",
+ "zstd",
 ]
 
 [[package]]
