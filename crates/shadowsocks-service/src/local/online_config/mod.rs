@@ -14,6 +14,7 @@ use crate::{
 };
 
 use futures::StreamExt;
+use http::StatusCode;
 use http_body_util::BodyExt;
 use log::{debug, error, trace, warn};
 use mime::Mime;
@@ -107,6 +108,19 @@ impl OnlineConfigService {
         };
 
         let fetch_time = Instant::now();
+
+        // Check status=200
+        if rsp.status() != StatusCode::OK {
+            error!(
+                "server-loader task failed to get {}, status: {}",
+                self.config_url,
+                rsp.status()
+            );
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("status: {}", rsp.status()),
+            ));
+        }
 
         // Content-Type: application/json; charset=utf-8
         // mandatory in standard SIP008
