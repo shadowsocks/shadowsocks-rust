@@ -232,8 +232,8 @@ impl Server {
                 balancer_builder.check_best_interval(intv);
             }
 
-            for server in &config.server {
-                balancer_builder.add_server(server.clone());
+            for server in config.server {
+                balancer_builder.add_server(server);
             }
 
             balancer_builder.build().await?
