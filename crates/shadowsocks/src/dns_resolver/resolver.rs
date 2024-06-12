@@ -40,9 +40,9 @@ pub trait DnsResolve {
 #[cfg(feature = "hickory-dns")]
 pub struct HickoryDnsSystemResolver {
     resolver: ArcSwap<HickoryDnsResolver>,
-    #[cfg_attr(windows, allow(dead_code))]
+    #[cfg_attr(any(windows, target_os = "android"), allow(dead_code))]
     connect_opts: ConnectOpts,
-    #[cfg_attr(windows, allow(dead_code))]
+    #[cfg_attr(any(windows, target_os = "android"), allow(dead_code))]
     opts: Option<ResolverOpts>,
 }
 
