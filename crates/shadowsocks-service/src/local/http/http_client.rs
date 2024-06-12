@@ -64,7 +64,7 @@ impl Timer for TokioTimer {
 
     fn reset(&self, sleep: &mut Pin<Box<dyn Sleep>>, new_deadline: Instant) {
         if let Some(sleep) = sleep.as_mut().downcast_mut_pin::<TokioSleep>() {
-            sleep.reset(new_deadline.into())
+            sleep.reset(new_deadline)
         }
     }
 }
@@ -102,6 +102,17 @@ impl<B> Clone for HttpClient<B> {
         HttpClient {
             cache_conn: self.cache_conn.clone(),
         }
+    }
+}
+
+impl<B> Default for HttpClient<B>
+where
+    B: Body + Send + Unpin + Debug + 'static,
+    B::Data: Send,
+    B::Error: Into<Box<dyn ::std::error::Error + Send + Sync>>,
+{
+    fn default() -> Self {
+        HttpClient::new()
     }
 }
 

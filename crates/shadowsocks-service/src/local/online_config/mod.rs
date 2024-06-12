@@ -164,7 +164,7 @@ impl OnlineConfigService {
 
         let parsed_body = match String::from_utf8(collected_body) {
             Ok(b) => b,
-            Err(..) => return Err(io::Error::new(io::ErrorKind::Other, "body contains non-utf8 bytes").into()),
+            Err(..) => return Err(io::Error::new(io::ErrorKind::Other, "body contains non-utf8 bytes")),
         };
 
         let online_config = match Config::load_from_str(&parsed_body, ConfigType::OnlineConfig) {
@@ -174,7 +174,7 @@ impl OnlineConfigService {
                     "server-loader task failed to load from url: {}, error: {}",
                     self.config_url, err
                 );
-                return Err(io::Error::new(io::ErrorKind::Other, err).into());
+                return Err(io::Error::new(io::ErrorKind::Other, err));
             }
         };
 
@@ -183,7 +183,7 @@ impl OnlineConfigService {
                 "server-loader task failed to load from url: {}, error: {}",
                 self.config_url, err
             );
-            return Err(io::Error::new(io::ErrorKind::Other, err).into());
+            return Err(io::Error::new(io::ErrorKind::Other, err));
         }
 
         let after_read_time = Instant::now();
