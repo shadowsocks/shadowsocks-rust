@@ -405,6 +405,13 @@ where
 {
     let password = password.into();
 
+    if method == CipherKind::SS_TABLE {
+        // TABLE cipher doesn't need key derivation.
+        // Reference implemenation: shadowsocks-libev, shadowsocks (Python)
+        let enc_key = password.clone().into_bytes().into_boxed_slice();
+        return (password, enc_key, Vec::new());
+    }
+
     #[cfg(feature = "aead-cipher-2022")]
     if method_support_eih(method) {
         // Extensible Identity Headers

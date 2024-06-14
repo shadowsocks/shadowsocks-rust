@@ -1,3 +1,9 @@
+shadowsocks-rust (1.20.0) unstable; urgency=medium
+
+  ## Breaking Changes
+
+  - #887 shadowsocks stream cipher (`TABLE`) doesn't need to make a derived key instead of using user's predefined key directly. This change will make shadowsocks-rust not going to be compatible with its older version. Users who are using `TABLE` cipher should upgrade all your local and server instances to the latest version of shadowsocks-rust. On the other hand, `TABLE` cipher is marked deprecated because it is vulnerable, users **must** migrate to other more secured methods immediately.
+
 shadowsocks-rust (1.19.4) unstable; urgency=medium
 
   ## Features
