@@ -405,6 +405,7 @@ where
 {
     let password = password.into();
 
+    #[cfg(feature = "stream-cipher")]
     if method == CipherKind::SS_TABLE {
         // TABLE cipher doesn't need key derivation.
         // Reference implemenation: shadowsocks-libev, shadowsocks (Python)
