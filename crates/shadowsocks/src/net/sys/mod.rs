@@ -176,32 +176,11 @@ static IP_STACK_CAPABILITIES: Lazy<IpStackCapabilities> = Lazy::new(|| {
 });
 
 fn check_ipv4_mapped_ipv6_capability() -> io::Result<()> {
-    // https://stackoverflow.com/questions/30184377/how-to-detect-if-dual-stack-socket-is-supported
+    let socket = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP))?;
+    socket.set_only_v6(false)?;
 
     let local_host = SockAddr::from(SocketAddr::new(Ipv4Addr::LOCALHOST.to_ipv6_mapped().into(), 0));
-    let local_host_53 = SockAddr::from(SocketAddr::new(Ipv4Addr::LOCALHOST.to_ipv6_mapped().into(), 53));
-
-    let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
-    socket.set_only_v6(false)?;
     socket.bind(&local_host)?;
-    socket.connect(&local_host_53)?;
-
-    // getsockname()
-    let local_addr = socket.local_addr()?;
-    match local_addr.as_socket() {
-        None => return Err(io::Error::new(ErrorKind::Other, "invalid local_addr")),
-        Some(addr) => match addr {
-            SocketAddr::V4(..) => return Err(io::Error::new(ErrorKind::Other, "local_addr returned an IPv4 address")),
-            SocketAddr::V6(v6) => {
-                if v6.ip().to_ipv4_mapped().is_none() {
-                    return Err(io::Error::new(
-                        ErrorKind::Other,
-                        "local_addr returned a non IPv4-mapped-IPv6 address",
-                    ));
-                }
-            }
-        },
-    }
 
     Ok(())
 }

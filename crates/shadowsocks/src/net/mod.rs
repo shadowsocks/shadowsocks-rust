@@ -46,7 +46,8 @@ impl From<SocketAddr> for AddrFamily {
 /// Check if `SocketAddr` could be used for creating dual-stack sockets
 pub fn is_dual_stack_addr(addr: &SocketAddr) -> bool {
     if let SocketAddr::V6(ref v6) = *addr {
-        v6.ip().is_unspecified()
+        let ip = v6.ip();
+        ip.is_unspecified() || ip.to_ipv4_mapped().is_some()
     } else {
         false
     }
