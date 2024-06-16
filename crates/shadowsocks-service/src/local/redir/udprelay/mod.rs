@@ -219,7 +219,7 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
                         ErrorKind::InvalidInput if addr_mapped_ipv6 => {
                             SUPPORT_IPV6_TRANSPARENT.store(false, Ordering::Relaxed);
                             debug!(
-                                "redir destination socket doesn't support IPv6, addr cannot be IPv4-mapped-IPv6: {}",
+                                "redir destination socket doesn't support dual-stack routing, addr cannot be IPv4-mapped-IPv6: {}",
                                 addr
                             );
                         }

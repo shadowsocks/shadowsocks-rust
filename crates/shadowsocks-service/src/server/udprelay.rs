@@ -32,10 +32,7 @@ use tokio::{runtime::Handle, sync::mpsc, task::JoinHandle, time};
 use windows_sys::Win32::Networking::WinSock::WSAEAFNOSUPPORT;
 
 use crate::net::{
-    packet_window::PacketWindowFilter,
-    utils::to_ipv4_mapped,
-    MonProxySocket,
-    UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+    packet_window::PacketWindowFilter, utils::to_ipv4_mapped, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
     UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
 };
 
@@ -704,11 +701,13 @@ impl UdpAssociationContext {
                                 #[cfg(unix)]
                                 Some(libc::EAFNOSUPPORT) => {
                                     UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
+                                    debug!("udp relay destination {} cannot be IPv4-mapped-IPv6, current platform doesn't support IPv6", target_addr);
                                     continue;
                                 }
                                 #[cfg(windows)]
                                 Some(WSAEAFNOSUPPORT) => {
                                     UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
+                                    debug!("udp relay destination {} cannot be IPv4-mapped-IPv6, current platform doesn't support IPv6", target_addr);
                                     continue;
                                 }
                                 _ => return Err(err),
