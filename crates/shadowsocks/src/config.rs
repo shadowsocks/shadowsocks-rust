@@ -846,7 +846,10 @@ impl ServerConfig {
         }
 
         if let Some(frag) = parsed.fragment() {
-            svrconfig.set_remarks(frag);
+            match percent_encoding::percent_decode_str(frag).decode_utf8() {
+                Ok(m) => svrconfig.set_remarks(m),
+                Err(..) => svrconfig.set_remarks(frag),
+            }
         }
 
         Ok(svrconfig)
