@@ -152,6 +152,7 @@ static IP_STACK_CAPABILITIES: Lazy<IpStackCapabilities> = Lazy::new(|| {
     // Check IPv4
     if let Ok(_) = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP)) {
         caps.support_ipv4 = true;
+        debug!("IpStackCapability support_ipv4=true");
     }
 
     // Check IPv6 (::1)
@@ -160,6 +161,7 @@ static IP_STACK_CAPABILITIES: Lazy<IpStackCapabilities> = Lazy::new(|| {
             let local_host = SockAddr::from(SocketAddr::new(Ipv6Addr::LOCALHOST.into(), 0));
             if let Ok(..) = ipv6_socket.bind(&local_host) {
                 caps.support_ipv6 = true;
+                debug!("IpStackCapability support_ipv6=true");
             }
         }
     }
@@ -167,9 +169,10 @@ static IP_STACK_CAPABILITIES: Lazy<IpStackCapabilities> = Lazy::new(|| {
     // Check IPv4-mapped-IPv6 (127.0.0.1)
     if let Ok(ipv6_socket) = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP)) {
         if let Ok(..) = ipv6_socket.set_only_v6(false) {
-            let local_host = SockAddr::from(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0));
+            let local_host = SockAddr::from(SocketAddr::new(Ipv4Addr::LOCALHOST.to_ipv6_mapped().into(), 0));
             if let Ok(..) = ipv6_socket.bind(&local_host) {
                 caps.support_ipv4_mapped_ipv6 = true;
+                debug!("IpStackCapability support_ipv4_mapped_ipv6=true");
             }
         }
     }
