@@ -191,28 +191,28 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
                 }
             }
 
-            let send_result = inbound.send_to(data, peer_addr).await.map(|n| {
-                if n < data.len() {
-                    warn!(
-                        "udp redir send back data (actual: {} bytes, sent: {} bytes), remote: {}, peer: {}",
+            match inbound.send_to(data, peer_addr).await {
+                Ok(n) => {
+                    if n < data.len() {
+                        warn!(
+                            "udp redir send back data (actual: {} bytes, sent: {} bytes), remote: {}, peer: {}",
+                            n,
+                            data.len(),
+                            remote_addr,
+                            peer_addr
+                        );
+                    }
+
+                    trace!(
+                        "udp redir send back data {} bytes, remote: {}, peer: {}, socket_opts: {:?}",
                         n,
-                        data.len(),
                         remote_addr,
-                        peer_addr
+                        peer_addr,
+                        self.socket_opts
                     );
+
+                    return Ok(());
                 }
-
-                trace!(
-                    "udp redir send back data {} bytes, remote: {}, peer: {}, socket_opts: {:?}",
-                    n,
-                    remote_addr,
-                    peer_addr,
-                    self.socket_opts
-                );
-            });
-
-            match send_result {
-                Ok(()) => return Ok(()),
                 Err(err) => {
                     match err.kind() {
                         // Invalid Argument
