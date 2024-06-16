@@ -667,7 +667,7 @@ impl UdpAssociationContext {
         }
     }
 
-    async fn send_received_outbound_packet(&mut self, mut target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
+    async fn send_received_outbound_packet(&mut self, original_target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
         static UDP_SOCKET_SUPPORT_DUAL_STACK: AtomicBool = AtomicBool::new(cfg!(any(
             target_os = "linux",
             target_os = "android",
@@ -679,8 +679,17 @@ impl UdpAssociationContext {
             target_os = "windows",
         )));
 
-        let socket = loop {
+        loop {
+            let mut target_addr = original_target_addr;
+            let mut target_addr_mapped_ipv6 = false;
+
             let socket = if UDP_SOCKET_SUPPORT_DUAL_STACK.load(Ordering::Relaxed) {
+                if let SocketAddr::V4(saddr) = target_addr {
+                    let mapped_ip = saddr.ip().to_ipv6_mapped();
+                    target_addr = SocketAddr::V6(SocketAddrV6::new(mapped_ip, saddr.port(), 0, 0));
+                    target_addr_mapped_ipv6 = true;
+                }
+
                 match self.outbound_ipv6_socket {
                     Some(ref mut socket) => socket,
                     None => {
@@ -691,22 +700,19 @@ impl UdpAssociationContext {
                         .await
                         {
                             Ok(socket) => socket,
-                            Err(err) => {
-                                match err.raw_os_error() {
-                                    #[cfg(unix)]
-                                    Some(libc::EAFNOSUPPORT) => {
-                                        UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
-                                        continue;
-                                    }
-                                    #[cfg(windows)]
-                                    Some(WSAEAFNOSUPPORT) => {
-                                        UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
-                                        continue;
-                                    }
-                                    _ => {}
+                            Err(err) => match err.raw_os_error() {
+                                #[cfg(unix)]
+                                Some(libc::EAFNOSUPPORT) => {
+                                    UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
+                                    continue;
                                 }
-                                return Err(err);
-                            }
+                                #[cfg(windows)]
+                                Some(WSAEAFNOSUPPORT) => {
+                                    UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
+                                    continue;
+                                }
+                                _ => return Err(err),
+                            },
                         };
 
                         self.outbound_ipv6_socket.insert(socket)
@@ -734,28 +740,29 @@ impl UdpAssociationContext {
                     },
                 }
             };
-            break socket;
-        };
 
-        if UDP_SOCKET_SUPPORT_DUAL_STACK.load(Ordering::Relaxed) {
-            if let SocketAddr::V4(saddr) = target_addr {
-                let mapped_ip = saddr.ip().to_ipv6_mapped();
-                target_addr = SocketAddr::V6(SocketAddrV6::new(mapped_ip, saddr.port(), 0, 0));
+            match socket.send_to(data, target_addr).await {
+                Ok(n) => {
+                    if n != data.len() {
+                        warn!(
+                            "{} -> {} sent {} bytes != expected {} bytes",
+                            self.peer_addr,
+                            target_addr,
+                            n,
+                            data.len()
+                        );
+                    }
+                    return Ok(());
+                }
+                Err(err) => match err.kind() {
+                    ErrorKind::InvalidInput if target_addr_mapped_ipv6 => {
+                        debug!("udp relay destination {} cannot be IPv4-mapped-IPv6, current platform doesn't support dual-stack routing", target_addr);
+                        UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
+                    }
+                    _ => return Err(err),
+                },
             }
         }
-
-        let n = socket.send_to(data, target_addr).await?;
-        if n != data.len() {
-            warn!(
-                "{} -> {} sent {} bytes != expected {} bytes",
-                self.peer_addr,
-                target_addr,
-                n,
-                data.len()
-            );
-        }
-
-        Ok(())
     }
 
     async fn send_received_respond_packet(&mut self, mut addr: Address, data: &[u8]) {
