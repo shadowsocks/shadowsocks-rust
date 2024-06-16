@@ -1,6 +1,7 @@
 use std::{
     io::{self, ErrorKind},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    time::Duration,
 };
 
 use cfg_if::cfg_if;
@@ -167,18 +168,31 @@ static IP_STACK_CAPABILITIES: Lazy<IpStackCapabilities> = Lazy::new(|| {
     }
 
     // Check IPv4-mapped-IPv6 (127.0.0.1)
-    if let Ok(ipv6_socket) = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP)) {
-        if let Ok(..) = ipv6_socket.set_only_v6(false) {
-            let local_host = SockAddr::from(SocketAddr::new(Ipv4Addr::LOCALHOST.to_ipv6_mapped().into(), 0));
-            if let Ok(..) = ipv6_socket.bind(&local_host) {
-                caps.support_ipv4_mapped_ipv6 = true;
-                debug!("IpStackCapability support_ipv4_mapped_ipv6=true");
-            }
-        }
+    if let Ok(..) = check_ipv4_mapped_ipv6_capability() {
+        caps.support_ipv4_mapped_ipv6 = true;
+        debug!("IpStackCapability support_ipv4_mapped_ipv6=true");
     }
 
     caps
 });
+
+fn check_ipv4_mapped_ipv6_capability() -> io::Result<()> {
+    let local_host = SockAddr::from(SocketAddr::new(Ipv4Addr::LOCALHOST.to_ipv6_mapped().into(), 0));
+
+    let socket1 = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP))?;
+    socket1.set_only_v6(false)?;
+    socket1.bind(&local_host)?;
+    socket1.listen(128)?;
+
+    let socket1_address = socket1.local_addr()?;
+
+    let socket2 = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP))?;
+    socket2.set_only_v6(false)?;
+    socket2.bind(&local_host)?;
+    socket2.connect_timeout(&socket1_address, Duration::from_secs(1))?;
+
+    Ok(())
+}
 
 /// Get globally probed `IpStackCapabilities`
 pub fn get_ip_stack_capabilities() -> &'static IpStackCapabilities {
