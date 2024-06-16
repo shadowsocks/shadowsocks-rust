@@ -1,11 +1,12 @@
 use std::{
     io::{self, ErrorKind},
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 use cfg_if::cfg_if;
 use log::{debug, warn};
-use socket2::{SockAddr, Socket};
+use once_cell::sync::Lazy;
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::TcpSocket;
 
 use super::ConnectOpts;
@@ -126,4 +127,57 @@ fn socket_bind_dual_stack_inner(socket: &Socket, addr: &SocketAddr, ipv6_only: b
     }
 
     Ok(())
+}
+
+/// IP Stack Capabilities
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IpStackCapabilities {
+    /// IP stack supports IPv4
+    pub support_ipv4: bool,
+    /// IP stack supports IPv6
+    pub support_ipv6: bool,
+    /// IP stack supports IPv4-mapped-IPv6
+    pub support_ipv4_mapped_ipv6: bool,
+}
+
+static IP_STACK_CAPABILITIES: Lazy<IpStackCapabilities> = Lazy::new(|| {
+    // Reference Implementation: https://github.com/golang/go/blob/master/src/net/ipsock_posix.go
+
+    let mut caps = IpStackCapabilities {
+        support_ipv4: false,
+        support_ipv6: false,
+        support_ipv4_mapped_ipv6: false,
+    };
+
+    // Check IPv4
+    if let Ok(_) = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP)) {
+        caps.support_ipv4 = true;
+    }
+
+    // Check IPv6 (::1)
+    if let Ok(ipv6_socket) = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP)) {
+        if let Ok(..) = ipv6_socket.set_only_v6(true) {
+            let local_host = SockAddr::from(SocketAddr::new(Ipv6Addr::LOCALHOST.into(), 0));
+            if let Ok(..) = ipv6_socket.bind(&local_host) {
+                caps.support_ipv6 = true;
+            }
+        }
+    }
+
+    // Check IPv4-mapped-IPv6 (127.0.0.1)
+    if let Ok(ipv6_socket) = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP)) {
+        if let Ok(..) = ipv6_socket.set_only_v6(false) {
+            let local_host = SockAddr::from(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0));
+            if let Ok(..) = ipv6_socket.bind(&local_host) {
+                caps.support_ipv4_mapped_ipv6 = true;
+            }
+        }
+    }
+
+    caps
+});
+
+/// Get globally probed `IpStackCapabilities`
+pub fn get_ip_stack_capabilities() -> &'static IpStackCapabilities {
+    &IP_STACK_CAPABILITIES
 }

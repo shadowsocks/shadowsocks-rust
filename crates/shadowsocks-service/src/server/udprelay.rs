@@ -3,11 +3,8 @@
 use std::{
     cell::RefCell,
     io::{self, ErrorKind},
-    net::{SocketAddr, SocketAddrV6},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    net::SocketAddr,
+    sync::Arc,
     time::Duration,
 };
 
@@ -20,7 +17,7 @@ use shadowsocks::{
     config::ServerUser,
     crypto::CipherCategory,
     lookup_then,
-    net::{AcceptOpts, AddrFamily, UdpSocket as OutboundUdpSocket},
+    net::{get_ip_stack_capabilities, AcceptOpts, AddrFamily, UdpSocket as OutboundUdpSocket},
     relay::{
         socks5::Address,
         udprelay::{options::UdpSocketControlData, ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
@@ -32,7 +29,10 @@ use tokio::{runtime::Handle, sync::mpsc, task::JoinHandle, time};
 use windows_sys::Win32::Networking::WinSock::WSAEAFNOSUPPORT;
 
 use crate::net::{
-    packet_window::PacketWindowFilter, utils::to_ipv4_mapped, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+    packet_window::PacketWindowFilter,
+    utils::to_ipv4_mapped,
+    MonProxySocket,
+    UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
     UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
 };
 
@@ -665,106 +665,67 @@ impl UdpAssociationContext {
     }
 
     async fn send_received_outbound_packet(&mut self, original_target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        static UDP_SOCKET_SUPPORT_DUAL_STACK: AtomicBool = AtomicBool::new(cfg!(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "macos",
-            target_os = "ios",
-            target_os = "watchos",
-            target_os = "tvos",
-            target_os = "freebsd",
-            target_os = "windows",
-        )));
+        let ip_stack_caps = get_ip_stack_capabilities();
 
-        loop {
-            let mut target_addr = original_target_addr;
-            let mut target_addr_mapped_ipv6 = false;
-
-            let socket = if UDP_SOCKET_SUPPORT_DUAL_STACK.load(Ordering::Relaxed) {
-                if let SocketAddr::V4(saddr) = target_addr {
-                    let mapped_ip = saddr.ip().to_ipv6_mapped();
-                    target_addr = SocketAddr::V6(SocketAddrV6::new(mapped_ip, saddr.port(), 0, 0));
-                    target_addr_mapped_ipv6 = true;
+        let target_addr = match original_target_addr {
+            SocketAddr::V4(ref v4) => {
+                // If IPv4-mapped-IPv6 is supported.
+                // Converts IPv4 address to IPv4-mapped-IPv6
+                // All sockets will be created in IPv6 (nearly all modern OS supports IPv6 sockets)
+                if ip_stack_caps.support_ipv4_mapped_ipv6 {
+                    SocketAddr::new(v4.ip().to_ipv6_mapped().into(), v4.port())
+                } else {
+                    original_target_addr
                 }
-
-                match self.outbound_ipv6_socket {
-                    Some(ref mut socket) => socket,
-                    None => {
-                        let socket = match OutboundUdpSocket::connect_any_with_opts(
-                            AddrFamily::Ipv6,
-                            self.context.connect_opts_ref(),
-                        )
-                        .await
-                        {
-                            Ok(socket) => socket,
-                            Err(err) => match err.raw_os_error() {
-                                #[cfg(unix)]
-                                Some(libc::EAFNOSUPPORT) => {
-                                    UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
-                                    debug!("udp relay destination {} cannot be IPv4-mapped-IPv6, current platform doesn't support IPv6", target_addr);
-                                    continue;
-                                }
-                                #[cfg(windows)]
-                                Some(WSAEAFNOSUPPORT) => {
-                                    UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
-                                    debug!("udp relay destination {} cannot be IPv4-mapped-IPv6, current platform doesn't support IPv6", target_addr);
-                                    continue;
-                                }
-                                _ => return Err(err),
-                            },
-                        };
-
-                        self.outbound_ipv6_socket.insert(socket)
-                    }
-                }
-            } else {
-                match target_addr {
-                    SocketAddr::V4(..) => match self.outbound_ipv4_socket {
-                        Some(ref mut socket) => socket,
-                        None => {
-                            let socket = OutboundUdpSocket::connect_any_with_opts(
-                                AddrFamily::Ipv4,
-                                self.context.connect_opts_ref(),
-                            )
-                            .await?;
-                            self.outbound_ipv4_socket.insert(socket)
-                        }
-                    },
-                    SocketAddr::V6(..) => match self.outbound_ipv6_socket {
-                        Some(ref mut socket) => socket,
-                        None => {
-                            let socket = OutboundUdpSocket::connect_any_with_opts(
-                                AddrFamily::Ipv6,
-                                self.context.connect_opts_ref(),
-                            )
-                            .await?;
-                            self.outbound_ipv6_socket.insert(socket)
-                        }
-                    },
-                }
-            };
-
-            match socket.send_to(data, target_addr).await {
-                Ok(n) => {
-                    if n != data.len() {
-                        warn!(
-                            "{} -> {} sent {} bytes != expected {} bytes",
-                            self.peer_addr,
-                            target_addr,
-                            n,
-                            data.len()
-                        );
-                    }
-                    return Ok(());
-                }
-                Err(err) => match err.kind() {
-                    ErrorKind::InvalidInput if target_addr_mapped_ipv6 => {
-                        debug!("udp relay destination {} cannot be IPv4-mapped-IPv6, current platform doesn't support dual-stack routing", target_addr);
-                        UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
-                    }
-                    _ => return Err(err),
-                },
             }
+            SocketAddr::V6(ref v6) => {
+                // If IPv6 is not supported. Try to map it back to IPv4.
+                if !ip_stack_caps.support_ipv6 || !ip_stack_caps.support_ipv4_mapped_ipv6 {
+                    match v6.ip().to_ipv4_mapped() {
+                        Some(v4) => SocketAddr::new(v4.into(), v6.port()),
+                        None => original_target_addr,
+                    }
+                } else {
+                    original_target_addr
+                }
+            }
+        };
+
+        let socket = match target_addr {
+            SocketAddr::V4(..) => match self.outbound_ipv4_socket {
+                Some(ref mut socket) => socket,
+                None => {
+                    let socket =
+                        OutboundUdpSocket::connect_any_with_opts(AddrFamily::Ipv4, self.context.connect_opts_ref())
+                            .await?;
+                    self.outbound_ipv4_socket.insert(socket)
+                }
+            },
+            SocketAddr::V6(..) => match self.outbound_ipv6_socket {
+                Some(ref mut socket) => socket,
+                None => {
+                    let socket =
+                        OutboundUdpSocket::connect_any_with_opts(AddrFamily::Ipv6, self.context.connect_opts_ref())
+                            .await?;
+                    self.outbound_ipv6_socket.insert(socket)
+                }
+            },
+        };
+
+        match socket.send_to(data, target_addr).await {
+            Ok(n) => {
+                if n != data.len() {
+                    warn!(
+                        "{} -> {} sent {} bytes != expected {} bytes",
+                        self.peer_addr,
+                        target_addr,
+                        n,
+                        data.len()
+                    );
+                }
+                Ok(())
+            }
+            Err(err) => Err(err),
         }
     }
 
