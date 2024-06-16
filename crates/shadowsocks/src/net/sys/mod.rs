@@ -192,15 +192,14 @@ fn check_ipv4_mapped_ipv6_capability() -> io::Result<()> {
         None => return Err(io::Error::new(ErrorKind::Other, "invalid local_addr")),
         Some(addr) => match addr {
             SocketAddr::V4(..) => return Err(io::Error::new(ErrorKind::Other, "local_addr returned an IPv4 address")),
-            SocketAddr::V6(v6) => match v6.ip().to_ipv4_mapped() {
-                Some(_) => {}
-                None => {
+            SocketAddr::V6(v6) => {
+                if v6.ip().to_ipv4_mapped().is_none() {
                     return Err(io::Error::new(
                         ErrorKind::Other,
-                        "local_addr returned an non IPv4-mapped-IPv6 address",
+                        "local_addr returned a non IPv4-mapped-IPv6 address",
                     ));
                 }
-            },
+            }
         },
     }
 
