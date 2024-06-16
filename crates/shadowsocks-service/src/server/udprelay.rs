@@ -722,18 +722,22 @@ impl UdpAssociationContext {
                     SocketAddr::V4(..) => match self.outbound_ipv4_socket {
                         Some(ref mut socket) => socket,
                         None => {
-                            let socket =
-                                OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref())
-                                    .await?;
+                            let socket = OutboundUdpSocket::connect_any_with_opts(
+                                AddrFamily::Ipv4,
+                                self.context.connect_opts_ref(),
+                            )
+                            .await?;
                             self.outbound_ipv4_socket.insert(socket)
                         }
                     },
                     SocketAddr::V6(..) => match self.outbound_ipv6_socket {
                         Some(ref mut socket) => socket,
                         None => {
-                            let socket =
-                                OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref())
-                                    .await?;
+                            let socket = OutboundUdpSocket::connect_any_with_opts(
+                                AddrFamily::Ipv6,
+                                self.context.connect_opts_ref(),
+                            )
+                            .await?;
                             self.outbound_ipv6_socket.insert(socket)
                         }
                     },
