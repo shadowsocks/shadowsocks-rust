@@ -185,6 +185,25 @@ fn check_ipv4_mapped_ipv6_capability() -> io::Result<()> {
     socket1.listen(128)?;
 
     let socket1_address = socket1.local_addr()?;
+    match socket1_address.as_socket() {
+        None => return Err(io::Error::new(ErrorKind::Other, "invalid local_addr")),
+        Some(socket_addr) => match socket_addr {
+            SocketAddr::V4(..) => {
+                return Err(io::Error::new(
+                    ErrorKind::Other,
+                    "local_addr shouldn't be an IPv4 address",
+                ))
+            }
+            SocketAddr::V6(ref v6) => {
+                if let None = v6.ip().to_ipv4_mapped() {
+                    return Err(io::Error::new(
+                        ErrorKind::Other,
+                        "local_addr is not an IPv4-mapped-IPv6 address",
+                    ));
+                }
+            }
+        },
+    }
 
     let socket2 = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP))?;
     socket2.set_only_v6(false)?;
