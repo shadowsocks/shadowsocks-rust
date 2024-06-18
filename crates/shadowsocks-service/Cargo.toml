@@ -156,7 +156,11 @@ tokio = { version = "1.38", features = [
 tokio-native-tls = { version = "0.3", optional = true }
 native-tls = { version = "0.2.8", optional = true, features = ["alpn"] }
 webpki-roots = { version = "0.26", optional = true }
-tokio-rustls = { version = "0.25", optional = true }
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
+    "logging",
+    "tls12",
+    "ring",
+] }
 rustls-native-certs = { version = "0.7", optional = true }
 async-trait = "0.1"
 
