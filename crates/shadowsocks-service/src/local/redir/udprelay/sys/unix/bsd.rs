@@ -77,8 +77,10 @@ impl UdpRedirSocket {
         if is_dual_stack_addr(&addr) {
             // set IP_ORIGDSTADDR before bind()
 
-            set_ip_origdstaddr(libc::IPPROTO_IP, &socket)?;
-            set_disable_ip_fragmentation(libc::IPPROTO_IP, &socket)?;
+            // NOTE: FreeBSD doesn't allow setting IPPROTO_IP level on an IPv6 socket
+            //
+            // set_ip_origdstaddr(libc::IPPROTO_IP, &socket)?;
+            // set_disable_ip_fragmentation(libc::IPPROTO_IP, &socket)?;
 
             match set_ipv6_only(&socket, false) {
                 Ok(..) => {
