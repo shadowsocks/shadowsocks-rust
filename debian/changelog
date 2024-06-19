@@ -1,3 +1,17 @@
+shadowsocks-rust (1.20.1) unstable; urgency=medium
+
+  ## Bug Fixes
+
+  - `local-online-config`: SIP008 auto reload configuration task will add online servers without replacing the existed ones. This bug will eventually cause `sslocal` consumes too many memories and get OOM killed.
+
+  Users are encourage to update to this version if using 1.19.4 to 1.20.0.
+
+  ## Features
+
+  - `shadowsocks-service`: Updated [`rustls`](https://crates.io/crates/rustls) to v0.23 with [`ring`](https://crates.io/crates/ring) backend.
+  - `local-redir`, `server`: Better approach to check current platform IP stack capabilities like Go (IPv4, IPv6, IPv4-mapped-IPv6 supports).
+  - Explicitly enable dual-stack if listen addresses (`server`, `local_address`) are IPv4-mapped-IPv6, by setting `IPV6_V6ONLY=0`.
+
 shadowsocks-rust (1.20.0) unstable; urgency=medium
 
   ## Breaking Changes
