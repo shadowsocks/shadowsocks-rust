@@ -741,6 +741,14 @@ impl PingBalancer {
             }
         }
 
+        trace!(
+            "ping balancer going to replace {} servers (total: {}) with {} servers, sources: {:?}",
+            old_context.servers.len() - old_servers.len(),
+            old_context.servers.len(),
+            servers.len(),
+            replace_server_sources
+        );
+
         let mut servers = servers
             .into_iter()
             .map(|s| {
@@ -762,6 +770,8 @@ impl PingBalancer {
                 old_context.check_interval * EXPECTED_CHECK_POINTS_IN_CHECK_WINDOW,
             )));
         }
+
+        trace!("ping balancer merged {} new servers", servers.len());
 
         let (shared_context, task_abortable) = PingBalancerContext::new(
             servers,
