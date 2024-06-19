@@ -70,14 +70,7 @@ use serde::{Deserialize, Serialize};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
-        ManagerAddr,
-        Mode,
-        ReplayAttackPolicy,
-        ServerAddr,
-        ServerConfig,
-        ServerSource,
-        ServerUser,
-        ServerUserManager,
+        ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerSource, ServerUser, ServerUserManager,
         ServerWeight,
     },
     crypto::CipherKind,
@@ -1866,6 +1859,7 @@ impl Config {
 
         let server_source = match config_type {
             ConfigType::Local | ConfigType::Server | ConfigType::Manager => ServerSource::Configuration,
+            #[cfg(feature = "local-online-config")]
             ConfigType::OnlineConfig => ServerSource::OnlineConfig,
         };
 
