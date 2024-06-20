@@ -3273,6 +3273,7 @@ dependencies = [
  "hickory-resolver",
  "http 1.1.0",
  "http-body-util",
+ "httparse",
  "hyper",
  "idna 1.0.0",
  "ipnet",

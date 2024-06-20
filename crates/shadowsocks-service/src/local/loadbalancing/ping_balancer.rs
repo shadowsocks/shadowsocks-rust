@@ -841,6 +841,8 @@ impl PingChecker {
     /// Detect TCP connectivity with Chromium [Network Portal Detection](https://www.chromium.org/chromium-os/chromiumos-design-docs/network-portal-detection)
     #[allow(dead_code)]
     async fn check_request_tcp_chromium(&self) -> io::Result<()> {
+        use std::io::{Error, ErrorKind};
+
         static GET_BODY: &[u8] =
             b"GET /generate_204 HTTP/1.1\r\nHost: clients3.google.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
@@ -860,27 +862,28 @@ impl PingChecker {
         let mut buf = Vec::new();
         reader.read_until(b'\n', &mut buf).await?;
 
-        static EXPECTED_HTTP_STATUS_LINE: &[u8] = b"HTTP/1.1 204 No Content\r\n";
-        if buf != EXPECTED_HTTP_STATUS_LINE {
-            use std::io::{Error, ErrorKind};
+        let mut headers = [httparse::EMPTY_HEADER; 1];
+        let mut response = httparse::Response::new(&mut headers);
 
-            debug!(
-                "unexpected response from http://clients3.google.com/generate_204, {:?}",
-                ByteStr::new(&buf)
-            );
-
-            let err = Error::new(
-                ErrorKind::InvalidData,
-                "unexpected response from http://clients3.google.com/generate_204",
-            );
-            return Err(err);
+        if let Ok(..) = response.parse(&buf) {
+            if matches!(response.code, Some(204)) {
+                return Ok(());
+            }
         }
 
-        Ok(())
+        Err(Error::new(
+            ErrorKind::InvalidData,
+            format!(
+                "unexpected response from http://clients3.google.com/generate_204, {:?}",
+                ByteStr::new(&buf)
+            ),
+        ))
     }
 
     /// Detect TCP connectivity with Firefox's http://detectportal.firefox.com/success.txt
     async fn check_request_tcp_firefox(&self) -> io::Result<()> {
+        use std::io::{Error, ErrorKind};
+
         static GET_BODY: &[u8] =
             b"GET /success.txt HTTP/1.1\r\nHost: detectportal.firefox.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
@@ -900,23 +903,22 @@ impl PingChecker {
         let mut buf = Vec::new();
         reader.read_until(b'\n', &mut buf).await?;
 
-        static EXPECTED_HTTP_STATUS_LINE: &[u8] = b"HTTP/1.1 200 OK\r\n";
-        if buf != EXPECTED_HTTP_STATUS_LINE {
-            use std::io::{Error, ErrorKind};
+        let mut headers = [httparse::EMPTY_HEADER; 1];
+        let mut response = httparse::Response::new(&mut headers);
 
-            debug!(
-                "unexpected response from http://detectportal.firefox.com/success.txt, {:?}",
-                ByteStr::new(&buf)
-            );
-
-            let err = Error::new(
-                ErrorKind::InvalidData,
-                "unexpected response from http://detectportal.firefox.com/success.txt",
-            );
-            return Err(err);
+        if let Ok(..) = response.parse(&buf) {
+            if matches!(response.code, Some(200) | Some(204)) {
+                return Ok(());
+            }
         }
 
-        Ok(())
+        Err(Error::new(
+            ErrorKind::InvalidData,
+            format!(
+                "unexpected response from http://detectportal.firefox.com/success.txt, {:?}",
+                ByteStr::new(&buf)
+            ),
+        ))
     }
 
     async fn check_request_udp(&self) -> io::Result<()> {
