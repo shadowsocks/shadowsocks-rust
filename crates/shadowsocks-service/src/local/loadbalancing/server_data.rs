@@ -40,7 +40,17 @@ impl ServerScore {
     }
 
     /// Append a `Score` into statistic and recalculate score of the server
-    pub async fn push_score(&self, score: Score) -> (u32, ServerStatData) {
+    pub async fn push_score(&self, score: Score) -> u32 {
+        let updated_score = {
+            let mut stat = self.stat_data.lock().await;
+            stat.push_score(score)
+        };
+        self.score.store(updated_score, Ordering::Release);
+        updated_score
+    }
+
+    /// Append a `Score` into statistic and recalculate score of the server
+    pub async fn push_score_fetch_statistic(&self, score: Score) -> (u32, ServerStatData) {
         let (updated_score, data) = {
             let mut stat = self.stat_data.lock().await;
             (stat.push_score(score), stat.data().clone())
@@ -50,7 +60,7 @@ impl ServerScore {
     }
 
     /// Report request failure of this server, which will eventually records an `Errored` score
-    pub async fn report_failure(&self) -> (u32, ServerStatData) {
+    pub async fn report_failure(&self) -> u32 {
         self.push_score(Score::Errored).await
     }
 

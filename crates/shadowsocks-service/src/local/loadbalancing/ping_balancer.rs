@@ -824,9 +824,9 @@ impl PingChecker {
         };
 
         let (score, stat_data) = match self.check_delay().await {
-            Ok(d) => server_score.push_score(Score::Latency(d)).await,
+            Ok(d) => server_score.push_score_fetch_statistic(Score::Latency(d)).await,
             // Penalty
-            Err(..) => server_score.push_score(Score::Errored).await,
+            Err(..) => server_score.push_score_fetch_statistic(Score::Errored).await,
         };
 
         if stat_data.fail_rate > 0.5 {
