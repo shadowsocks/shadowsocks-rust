@@ -818,24 +818,36 @@ struct PingChecker {
 impl PingChecker {
     /// Checks server's score and update into `ServerScore<E>`
     async fn check_update_score(self) {
-        let score = match self.check_delay().await {
-            Ok(d) => match self.server_type {
-                ServerType::Tcp => self.server.tcp_score().push_score(Score::Latency(d)).await,
-                ServerType::Udp => self.server.udp_score().push_score(Score::Latency(d)).await,
-            },
-            // Penalty
-            Err(..) => match self.server_type {
-                ServerType::Tcp => self.server.tcp_score().push_score(Score::Errored).await,
-                ServerType::Udp => self.server.udp_score().push_score(Score::Errored).await,
-            },
+        let server_score = match self.server_type {
+            ServerType::Tcp => self.server.tcp_score(),
+            ServerType::Udp => self.server.udp_score(),
         };
 
-        trace!(
-            "updated remote {} server {} (score: {})",
-            self.server_type,
-            self.server.server_config().addr(),
-            score
-        );
+        let score = match self.check_delay().await {
+            Ok(d) => server_score.push_score(Score::Latency(d)).await,
+            // Penalty
+            Err(..) => server_score.push_score(Score::Errored).await,
+        };
+
+        let stat_data = server_score.stat_data().await;
+
+        if stat_data.fail_rate > 0.5 {
+            warn!(
+                "balancer: checked & updated remote {} server {} (score: {}), {:?}",
+                self.server_type,
+                ServerConfigFormatter::new(self.server.server_config()),
+                score,
+                stat_data,
+            );
+        } else {
+            debug!(
+                "balancer: checked & updated remote {} server {} (score: {}), {:?}",
+                self.server_type,
+                ServerConfigFormatter::new(self.server.server_config()),
+                score,
+                stat_data,
+            );
+        }
     }
 
     /// Detect TCP connectivity with Chromium [Network Portal Detection](https://www.chromium.org/chromium-os/chromiumos-design-docs/network-portal-detection)
@@ -988,7 +1000,7 @@ impl PingChecker {
                 trace!(
                     "checked remote {} server {} latency with {} ms",
                     self.server_type,
-                    self.server.server_config().addr(),
+                    ServerConfigFormatter::new(self.server.server_config()),
                     elapsed
                 );
                 Ok(elapsed)
@@ -997,7 +1009,7 @@ impl PingChecker {
                 debug!(
                     "failed to check {} server {}, error: {}",
                     self.server_type,
-                    self.server.server_config().addr(),
+                    ServerConfigFormatter::new(self.server.server_config()),
                     err
                 );
 
@@ -1011,7 +1023,7 @@ impl PingChecker {
                 trace!(
                     "checked remote {} server {} latency timeout, elapsed {} ms",
                     self.server_type,
-                    self.server.server_config().addr(),
+                    ServerConfigFormatter::new(self.server.server_config()),
                     elapsed
                 );
 

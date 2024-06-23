@@ -19,30 +19,37 @@ pub enum Score {
     Errored,
 }
 
-/// Statistic of a remote server
-#[derive(Debug)]
-pub struct ServerStat {
+/// Server statistic data
+#[derive(Debug, Clone, Copy)]
+pub struct ServerStatData {
     /// Median of latency time (in millisec)
     ///
     /// Use median instead of average time,
     /// because probing result may have some really bad cases
-    rtt: u32,
+    pub latency_median: u32,
+    /// Total_Fail / Total_Probe
+    pub fail_rate: f64,
+    /// Score's standard deviation
+    pub latency_stdev: f64,
+    /// Score's average
+    pub latency_mean: f64,
+}
+
+/// Statistic of a remote server
+#[derive(Debug)]
+pub struct ServerStat {
     /// MAX server's RTT, normally the check timeout milliseconds
     max_server_rtt: u32,
-    /// Total_Fail / Total_Probe
-    fail_rate: f64,
     /// Recently probe data
     latency_queue: VecDeque<(Score, Instant)>,
-    /// Score's standard deviation
-    latency_stdev: f64,
     /// Score's standard deviation MAX
     max_latency_stdev: f64,
-    /// Score's average
-    latency_mean: f64,
     /// User's customized weight
     user_weight: f32,
     /// Checking window size
     check_window: Duration,
+    /// Statistic Data
+    data: ServerStatData,
 }
 
 fn max_latency_stdev(max_server_rtt: u32) -> f64 {
@@ -58,25 +65,28 @@ impl ServerStat {
     pub fn new(user_weight: f32, max_server_rtt: u32, check_window: Duration) -> ServerStat {
         assert!((0.0..=1.0).contains(&user_weight));
 
+        let max_latency_stdev = max_latency_stdev(max_server_rtt);
         ServerStat {
-            rtt: max_server_rtt,
             max_server_rtt,
-            fail_rate: 1.0,
             latency_queue: VecDeque::new(),
-            latency_stdev: 0.0,
-            max_latency_stdev: max_latency_stdev(max_server_rtt),
-            latency_mean: 0.0,
+            max_latency_stdev,
             user_weight,
             check_window,
+            data: ServerStatData {
+                latency_median: max_server_rtt,
+                fail_rate: 1.0,
+                latency_stdev: max_latency_stdev,
+                latency_mean: max_server_rtt as f64,
+            },
         }
     }
 
     fn score(&self) -> u32 {
         // Normalize rtt
-        let nrtt = self.rtt as f64 / self.max_server_rtt as f64;
+        let nrtt = self.data.latency_median as f64 / self.max_server_rtt as f64;
 
         // Normalize stdev
-        let nstdev = self.latency_stdev / self.max_latency_stdev;
+        let nstdev = self.data.latency_stdev / self.max_latency_stdev;
 
         const SCORE_RTT_WEIGHT: f64 = 1.0;
         const SCORE_FAIL_WEIGHT: f64 = 3.0;
@@ -92,7 +102,7 @@ impl ServerStat {
         // 2. The lower errored count, the better
         // 3. The lower latency's stdev, the better
         // 4. The higher user's weight, the better
-        let score = (nrtt * SCORE_RTT_WEIGHT + self.fail_rate * SCORE_FAIL_WEIGHT + nstdev * SCORE_STDEV_WEIGHT)
+        let score = (nrtt * SCORE_RTT_WEIGHT + self.data.fail_rate * SCORE_FAIL_WEIGHT + nstdev * SCORE_STDEV_WEIGHT)
             / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_STDEV_WEIGHT)
             / user_weight as f64;
 
@@ -132,15 +142,17 @@ impl ServerStat {
         }
 
         // Error rate
-        self.fail_rate = cerr as f64 / self.latency_queue.len() as f64;
+        self.data.fail_rate = cerr as f64 / self.latency_queue.len() as f64;
 
+        self.data.latency_stdev = self.max_latency_stdev;
+        self.data.latency_mean = self.max_server_rtt as f64;
         if !vlat.is_empty() {
             vlat.sort_unstable();
 
             // Find median of latency
             let mid = vlat.len() / 2;
 
-            self.rtt = if vlat.len() % 2 == 0 {
+            self.data.latency_median = if vlat.len() % 2 == 0 {
                 (vlat[mid] + vlat[mid - 1]) / 2
             } else {
                 vlat[mid]
@@ -154,17 +166,23 @@ impl ServerStat {
                 for s in &vlat {
                     total_lat += *s;
                 }
-                self.latency_mean = total_lat as f64 / n;
+                self.data.latency_mean = total_lat as f64 / n;
                 let mut acc_diff = 0.0;
                 for s in &vlat {
-                    let diff = *s as f64 - self.latency_mean;
+                    let diff = *s as f64 - self.data.latency_mean;
                     acc_diff += diff * diff;
                 }
                 // Corrected Sample Standard Deviation
-                self.latency_stdev = ((1.0 / (n - 1.0)) * acc_diff).sqrt();
+                self.data.latency_stdev = ((1.0 / (n - 1.0)) * acc_diff).sqrt();
+            } else {
+                self.data.latency_mean = vlat[0] as f64;
             }
         }
 
         self.score()
+    }
+
+    pub fn data(&self) -> &ServerStatData {
+        &self.data
     }
 }

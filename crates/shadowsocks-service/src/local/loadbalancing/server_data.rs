@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 
 use crate::{config::ServerInstanceConfig, local::context::ServiceContext};
 
-use super::server_stat::{Score, ServerStat};
+use super::server_stat::{Score, ServerStat, ServerStatData};
 
 /// Server's statistic score
 pub struct ServerScore {
@@ -52,6 +52,11 @@ impl ServerScore {
     /// Report request failure of this server, which will eventually records an `Errored` score
     pub async fn report_failure(&self) -> u32 {
         self.push_score(Score::Errored).await
+    }
+
+    /// Get statistic data
+    pub async fn stat_data(&self) -> ServerStatData {
+        self.stat_data.lock().await.data().clone()
     }
 }
 
