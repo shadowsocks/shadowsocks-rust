@@ -823,13 +823,11 @@ impl PingChecker {
             ServerType::Udp => self.server.udp_score(),
         };
 
-        let score = match self.check_delay().await {
+        let (score, stat_data) = match self.check_delay().await {
             Ok(d) => server_score.push_score(Score::Latency(d)).await,
             // Penalty
             Err(..) => server_score.push_score(Score::Errored).await,
         };
-
-        let stat_data = server_score.stat_data().await;
 
         if stat_data.fail_rate > 0.5 {
             warn!(
