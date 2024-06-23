@@ -829,7 +829,7 @@ impl PingChecker {
             Err(..) => server_score.push_score_fetch_statistic(Score::Errored).await,
         };
 
-        if stat_data.fail_rate > 0.5 {
+        if stat_data.fail_rate > 0.8 {
             warn!(
                 "balancer: checked & updated remote {} server {} (score: {}), {:?}",
                 self.server_type,
