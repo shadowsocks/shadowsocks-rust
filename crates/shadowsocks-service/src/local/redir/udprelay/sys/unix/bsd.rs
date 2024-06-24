@@ -188,29 +188,30 @@ fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     Ok(())
 }
 
-// #[cfg(target_os = "openbsd")]
-// fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
-//     let fd = socket.as_raw_fd();
-//
-//     let enable: libc::c_int = 1;
-//
-//     // https://man.openbsd.org/getsockopt.2
-//     unsafe {
-//         let ret = libc::setsockopt(
-//             fd,
-//             libc::SOL_SOCKET,
-//             libc::SO_BINDANY,
-//             &enable as *const _ as *const _,
-//             mem::size_of_val(&enable) as libc::socklen_t,
-//         );
-//         if ret != 0 {
-//             return Err(Error::last_os_error());
-//         }
-//     }
-//
-//     Ok(())
-// }
+#[cfg(target_os = "openbsd")]
+fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
 
+    let enable: libc::c_int = 1;
+
+    // https://man.openbsd.org/getsockopt.2
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_BINDANY,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+        if ret != 0 {
+            return Err(Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "freebsd")]
 fn set_ip_origdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
 
@@ -237,6 +238,52 @@ fn set_ip_origdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+#[cfg(target_os = "openbsd")]
+fn set_ip_origdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
+    // https://man.openbsd.org/pf.conf
+    let fd = socket.as_raw_fd();
+
+    let enable: libc::c_int = 1;
+
+    let opt = match level {
+        libc::IPPROTO_IP => libc::IP_RECVDSTADDR,
+        libc::IPPROTO_IPV6 => libc::IPV6_RECVPKTINFO,
+        _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
+    };
+
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+        if ret != 0 {
+            return Err(Error::last_os_error());
+        }
+    }
+
+    let opt2 = match level {
+        libc::IPPROTO_IP => 33, //TODO: use libc::IP_RECVDSTPORT,
+        libc::IPPROTO_IPV6 => 64, //TODO: use libc::IPV6_RECVDSTPORT,
+        _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
+    };
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt2,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+        if ret != 0 {
+            return Err(Error::last_os_error());
+        }
+    }
     Ok(())
 }
 
@@ -288,11 +335,13 @@ fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> 
     set_ip_origdstaddr(level, socket)?;
 
     // 3. disable IP fragmentation
+    #[cfg(not(target_os = "openbsd"))]//seems unsupported in OpenBSD
     set_disable_ip_fragmentation(level, socket)?;
 
     Ok(())
 }
 
+#[cfg(target_os = "freebsd")]
 fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
     // https://www.freebsd.org/cgi/man.cgi?ip(4)
     //
@@ -329,6 +378,66 @@ fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
                 cmsg = libc::CMSG_NXTHDR(msg, cmsg);
             }
 
+            let err = Error::new(ErrorKind::InvalidData, "missing destination address in msghdr");
+            Err(err)
+        })?;
+
+        Ok(addr.as_socket().expect("SocketAddr"))
+    }
+}
+
+#[cfg(target_os = "openbsd")]
+fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
+    unsafe {
+        let (_, addr) = SockAddr::try_init(|dst_addr, dst_addr_len| {
+            let mut cmsg: *mut libc::cmsghdr = libc::CMSG_FIRSTHDR(msg);
+            while !cmsg.is_null() {
+                let rcmsg = &*cmsg;
+                match (rcmsg.cmsg_level, rcmsg.cmsg_type) {
+                    (libc::IPPROTO_IP, libc::IP_RECVDSTADDR) => {
+                        let toaddr_in = &mut *(dst_addr as *mut libc::sockaddr_in);
+                        ptr::copy_nonoverlapping(
+                            libc::CMSG_DATA(cmsg),
+                            &(*toaddr_in).sin_addr as *const _ as *mut _,
+                            mem::size_of::<libc::in_addr>(),
+                        );
+                        toaddr_in.sin_family = libc::AF_INET as u8;
+                        *dst_addr_len = mem::size_of::<libc::sockaddr_in>() as libc::socklen_t;
+                    }
+                    (libc::IPPROTO_IP, 33) => {//TODO: use libc::IP_RECVDSTPORT
+                        let toaddr_in = &mut *(dst_addr as *mut libc::sockaddr_in);
+                        ptr::copy_nonoverlapping(
+                            libc::CMSG_DATA(cmsg),
+                            &(*toaddr_in).sin_port as *const _ as *mut _,
+                            mem::size_of::<libc::in_port_t>(),
+                        );
+                        //assuming address comes first, and then port
+                        return Ok(());
+                    }
+                    (libc::IPPROTO_IPV6, libc::IPV6_PKTINFO) => {
+                        let toaddr_in = &mut *(dst_addr as *mut libc::sockaddr_in6);
+                        ptr::copy_nonoverlapping(
+                            libc::CMSG_DATA(cmsg),
+                            &(*toaddr_in).sin6_addr as *const _ as *mut _,
+                            mem::size_of::<libc::in6_addr>(),
+                        );
+                        toaddr_in.sin6_family = libc::AF_INET6 as u8;
+                        *dst_addr_len = mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t;
+                    }
+                    (libc::IPPROTO_IPV6, 64) => {//TODO: use libc::IPV6_RECVDSTPORT
+                        let toaddr_in = &mut *(dst_addr as *mut libc::sockaddr_in6);
+                        ptr::copy_nonoverlapping(
+                            libc::CMSG_DATA(cmsg),
+                            &(*toaddr_in).sin6_port as *const _ as *mut _,
+                            mem::size_of::<libc::in_port_t>(),
+                        );
+                        //assuming address comes first, and then port
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+                cmsg = libc::CMSG_NXTHDR(msg, cmsg);
+            }
             let err = Error::new(ErrorKind::InvalidData, "missing destination address in msghdr");
             Err(err)
         })?;
