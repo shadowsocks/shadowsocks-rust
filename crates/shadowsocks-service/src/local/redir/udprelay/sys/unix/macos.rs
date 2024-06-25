@@ -164,16 +164,16 @@ fn set_disable_ip_fragmentation(level: libc::c_int, socket: &Socket) -> io::Resu
     // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
 
     // sys/netinet/in.h
-    const IP_DONTFRAG: libc::c_int = 67; // don't fragment packet
-
+    // const IP_DONTFRAG: libc::c_int = 67; // don't fragment packet
+    //
     // sys/netinet6/in6.h
-    const IPV6_DONTFRAG: libc::c_int = 62; // bool; disable IPv6 fragmentation
+    // const IPV6_DONTFRAG: libc::c_int = 62; // bool; disable IPv6 fragmentation
 
     let enable: libc::c_int = 1;
 
     let opt = match level {
-        libc::IPPROTO_IP => IP_DONTFRAG,
-        libc::IPPROTO_IPV6 => IPV6_DONTFRAG,
+        libc::IPPROTO_IP => libc::IP_DONTFRAG,
+        libc::IPPROTO_IPV6 => libc::IPV6_DONTFRAG,
         _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
     };
 
