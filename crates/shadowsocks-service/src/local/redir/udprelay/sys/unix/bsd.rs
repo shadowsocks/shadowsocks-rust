@@ -219,8 +219,8 @@ fn set_ip_origdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     let enable: libc::c_int = 1;
 
     let opt = match level {
-        libc::IPPROTO_IP => libc::IP_ORIGDSTADDR,
-        libc::IPPROTO_IPV6 => libc::IPV6_ORIGDSTADDR,
+        libc::IPPROTO_IP => libc::IP_RECVORIGDSTADDR,
+        libc::IPPROTO_IPV6 => libc::IPV6_RECVORIGDSTADDR,
         _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
     };
 
