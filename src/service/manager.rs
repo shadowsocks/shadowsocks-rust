@@ -93,7 +93,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                 .num_args(1)
                 .action(ArgAction::Set)
                 .value_hint(ValueHint::CommandName)
-                .help("Default SIP003 (https://shadowsocks.org/guide/sip003.html) plugin"),
+                .help("Default SIP003 (https://shadowsocks.org/doc/sip003.html) plugin"),
         )
         .arg(
             Arg::new("PLUGIN_MODE")
