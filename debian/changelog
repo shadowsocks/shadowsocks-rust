@@ -1,3 +1,9 @@
+shadowsocks-rust (1.20.2) unstable; urgency=medium
+
+  ## Features
+
+  - #1560 PingBalancer check Firefox portal allowing `200` HTTP status
+
 shadowsocks-rust (1.20.1) unstable; urgency=medium
 
   ## Bug Fixes
