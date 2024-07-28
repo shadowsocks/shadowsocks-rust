@@ -33,6 +33,8 @@ pub struct ServerStatData {
     pub latency_stdev: f64,
     /// Score's average
     pub latency_mean: f64,
+    /// Score's median absolute deviation
+    pub latency_mad: f64,
 }
 
 /// Statistic of a remote server
@@ -77,6 +79,7 @@ impl ServerStat {
                 fail_rate: 1.0,
                 latency_stdev: max_latency_stdev,
                 latency_mean: max_server_rtt as f64,
+                latency_mad: max_server_rtt as f64,
             },
         }
     }
@@ -86,24 +89,27 @@ impl ServerStat {
         let nrtt = self.data.latency_median as f64 / self.max_server_rtt as f64;
 
         // Normalize stdev
-        let nstdev = self.data.latency_stdev / self.max_latency_stdev;
+        // let nstdev = self.data.latency_stdev / self.max_latency_stdev;
+        // Mormalize mad
+        let nmad = self.data.latency_mad / self.max_server_rtt as f64;
 
         const SCORE_RTT_WEIGHT: f64 = 1.0;
         const SCORE_FAIL_WEIGHT: f64 = 3.0;
-        const SCORE_STDEV_WEIGHT: f64 = 1.0;
+        // const SCORE_STDEV_WEIGHT: f64 = 0.0;
+        const SCORE_MAD_WEIGHT: f64 = 1.0;
 
         // [EPSILON, 1]
         // Just for avoiding divide by 0
         let user_weight = self.user_weight.max(f32::EPSILON);
 
-        // Score = (norm_lat * 1.0 + prop_err * 3.0 + stdev * 1.0) / 5.0 / user_weight
+        // Score = (norm_lat * 1.0 + prop_err * 3.0 + (stdev || mad) * 1.0) / 5.0 / user_weight
         //
         // 1. The lower latency, the better
         // 2. The lower errored count, the better
-        // 3. The lower latency's stdev, the better
+        // 3. The lower latency's stdev / mad, the better
         // 4. The higher user's weight, the better
-        let score = (nrtt * SCORE_RTT_WEIGHT + self.data.fail_rate * SCORE_FAIL_WEIGHT + nstdev * SCORE_STDEV_WEIGHT)
-            / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_STDEV_WEIGHT)
+        let score = (nrtt * SCORE_RTT_WEIGHT + self.data.fail_rate * SCORE_FAIL_WEIGHT + nmad * SCORE_MAD_WEIGHT)
+            / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_MAD_WEIGHT)
             / user_weight as f64;
 
         // Times 10000 converts to u32, for 0.0001 precision
@@ -146,6 +152,8 @@ impl ServerStat {
 
         self.data.latency_stdev = self.max_latency_stdev;
         self.data.latency_mean = self.max_server_rtt as f64;
+        self.data.latency_mad = self.max_server_rtt as f64;
+
         if !vlat.is_empty() {
             vlat.sort_unstable();
 
@@ -159,23 +167,33 @@ impl ServerStat {
             };
 
             if vlat.len() > 1 {
-                // STDEV
                 let n = vlat.len() as f64;
 
+                // mean
                 let mut total_lat = 0;
                 for s in &vlat {
                     total_lat += *s;
                 }
                 self.data.latency_mean = total_lat as f64 / n;
+
+                // STDEV
                 let mut acc_diff = 0.0;
                 for s in &vlat {
                     let diff = *s as f64 - self.data.latency_mean;
                     acc_diff += diff * diff;
                 }
                 // Corrected Sample Standard Deviation
-                self.data.latency_stdev = ((1.0 / (n - 1.0)) * acc_diff).sqrt();
+                self.data.latency_stdev = (acc_diff / (n - 1.0)).sqrt();
+
+                // MAD
+                let mut acc_abs_diff = 0.0;
+                for s in &vlat {
+                    acc_abs_diff += (*s as f64 - self.data.latency_median as f64).abs();
+                }
+                self.data.latency_mad = acc_abs_diff / n;
             } else {
                 self.data.latency_mean = vlat[0] as f64;
+                self.data.latency_mad = self.data.latency_mean; // mean = median in this case
             }
         }
 
