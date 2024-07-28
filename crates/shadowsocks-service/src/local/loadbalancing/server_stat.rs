@@ -34,7 +34,7 @@ pub struct ServerStatData {
     /// Score's average
     pub latency_mean: f64,
     /// Score's median absolute deviation
-    pub latency_mad: f64,
+    pub latency_mad: u32,
 }
 
 /// Statistic of a remote server
@@ -79,7 +79,7 @@ impl ServerStat {
                 fail_rate: 1.0,
                 latency_stdev: max_latency_stdev,
                 latency_mean: max_server_rtt as f64,
-                latency_mad: max_server_rtt as f64,
+                latency_mad: max_server_rtt,
             },
         }
     }
@@ -91,7 +91,7 @@ impl ServerStat {
         // Normalize stdev
         // let nstdev = self.data.latency_stdev / self.max_latency_stdev;
         // Mormalize mad
-        let nmad = self.data.latency_mad / self.max_server_rtt as f64;
+        let nmad = self.data.latency_mad as f64 / self.max_server_rtt as f64;
 
         const SCORE_RTT_WEIGHT: f64 = 1.0;
         const SCORE_FAIL_WEIGHT: f64 = 3.0;
@@ -150,9 +150,10 @@ impl ServerStat {
         // Error rate
         self.data.fail_rate = cerr as f64 / self.latency_queue.len() as f64;
 
+        self.data.latency_median = self.max_server_rtt;
         self.data.latency_stdev = self.max_latency_stdev;
         self.data.latency_mean = self.max_server_rtt as f64;
-        self.data.latency_mad = self.max_server_rtt as f64;
+        self.data.latency_mad = self.max_server_rtt;
 
         if !vlat.is_empty() {
             vlat.sort_unstable();
@@ -170,30 +171,36 @@ impl ServerStat {
                 let n = vlat.len() as f64;
 
                 // mean
-                let mut total_lat = 0;
-                for s in &vlat {
-                    total_lat += *s;
-                }
+                let total_lat: u32 = vlat.iter().sum();
                 self.data.latency_mean = total_lat as f64 / n;
 
                 // STDEV
-                let mut acc_diff = 0.0;
-                for s in &vlat {
-                    let diff = *s as f64 - self.data.latency_mean;
-                    acc_diff += diff * diff;
-                }
+                let acc_mean_diff_square: f64 = vlat
+                    .iter()
+                    .map(|s| {
+                        let diff = *s as f64 - self.data.latency_mean;
+                        diff * diff
+                    })
+                    .sum();
                 // Corrected Sample Standard Deviation
-                self.data.latency_stdev = (acc_diff / (n - 1.0)).sqrt();
+                self.data.latency_stdev = (acc_mean_diff_square / (n - 1.0)).sqrt();
 
                 // MAD
-                let mut acc_abs_diff = 0.0;
-                for s in &vlat {
-                    acc_abs_diff += (*s as f64 - self.data.latency_median as f64).abs();
-                }
-                self.data.latency_mad = acc_abs_diff / n;
+                let mut vlat_abs_diff: Vec<u32> = vlat
+                    .iter()
+                    .map(|s| (*s as i32 - self.data.latency_median as i32).abs() as u32)
+                    .collect();
+                vlat_abs_diff.sort_unstable();
+
+                let abs_diff_median_mid = vlat_abs_diff.len() / 2;
+                self.data.latency_mad = if vlat_abs_diff.len() % 2 == 0 {
+                    (vlat_abs_diff[abs_diff_median_mid] + vlat_abs_diff[abs_diff_median_mid - 1]) / 2
+                } else {
+                    vlat_abs_diff[abs_diff_median_mid]
+                };
             } else {
                 self.data.latency_mean = vlat[0] as f64;
-                self.data.latency_mad = self.data.latency_mean; // mean = median in this case
+                self.data.latency_mad = 0;
             }
         }
 
