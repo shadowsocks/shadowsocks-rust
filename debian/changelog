@@ -1,3 +1,13 @@
+shadowsocks-rust (1.20.3) unstable; urgency=medium
+
+  ## Features
+
+  - `local`: Ping Balancer scores replaced standard deviation with median absolute deviation, which should help focusing less on outlying observations in latency samples.
+
+  ## Bug Fixes
+
+  - #1589 `local-tun`: Removes linking to [`SetInterfaceDnsSettings`](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings) on Windows
+
 shadowsocks-rust (1.20.2) unstable; urgency=medium
 
   ## Features
