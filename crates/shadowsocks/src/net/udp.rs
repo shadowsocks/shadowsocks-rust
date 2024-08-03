@@ -53,8 +53,11 @@ use super::{
     target_os = "freebsd"
 ))]
 pub struct BatchSendMessage<'a> {
+    /// Optional target address
     pub addr: Option<SocketAddr>,
+    /// Data to be transmitted
     pub data: &'a [IoSlice<'a>],
+    /// Output result. The number of bytes sent by `batch_send`
     pub data_len: usize,
 }
 
@@ -67,8 +70,11 @@ pub struct BatchSendMessage<'a> {
     target_os = "freebsd"
 ))]
 pub struct BatchRecvMessage<'a> {
+    /// Peer address
     pub addr: SocketAddr,
+    /// Data buffer for receiving
     pub data: &'a mut [IoSliceMut<'a>],
+    /// Output result. The number of bytes received by `batch_recv`
     pub data_len: usize,
 }
 
