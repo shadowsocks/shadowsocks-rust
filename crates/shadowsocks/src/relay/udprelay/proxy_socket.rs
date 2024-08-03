@@ -222,7 +222,7 @@ impl ProxySocket {
             .map_err(Into::into)
     }
 
-    /// Send a UDP packet to addr through proxy
+    /// Send a UDP packet to addr through proxy with `ControlData`
     pub async fn send_with_ctrl(
         &self,
         addr: &Address,
@@ -261,11 +261,19 @@ impl ProxySocket {
     }
 
     /// poll family functions
-    /// the send_timeout is ignored.
+    ///
+    /// Send a UDP packet to addr through proxy
+    ///
+    /// NOTE: the `send_timeout` is ignored.
     pub fn poll_send(&self, addr: &Address, payload: &[u8], cx: &mut Context<'_>) -> Poll<ProxySocketResult<usize>> {
         self.poll_send_with_ctrl(addr, &DEFAULT_SOCKET_CONTROL, payload, cx)
     }
 
+    /// poll family functions
+    ///
+    /// Send a UDP packet to addr through proxy with `ControlData`
+    ///
+    /// NOTE: the `send_timeout` is ignored.
     pub fn poll_send_with_ctrl(
         &self,
         addr: &Address,
@@ -299,6 +307,11 @@ impl ProxySocket {
         }
     }
 
+    /// poll family functions
+    ///
+    /// Send a UDP packet to addr through proxy `target`
+    ///
+    /// NOTE: the `send_timeout` is ignored.
     pub fn poll_send_to(
         &self,
         target: SocketAddr,
@@ -309,6 +322,11 @@ impl ProxySocket {
         self.poll_send_to_with_ctrl(target, addr, &DEFAULT_SOCKET_CONTROL, payload, cx)
     }
 
+    /// poll family functions
+    ///
+    /// Send a UDP packet to addr through proxy `target` with `ControlData`
+    ///
+    /// NOTE: the `send_timeout` is ignored.
     pub fn poll_send_to_with_ctrl(
         &self,
         target: SocketAddr,
@@ -341,11 +359,14 @@ impl ProxySocket {
         }
     }
 
+    /// poll family functions
+    ///
+    /// Check if socket is ready to `send`, or writable.
     pub fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<ProxySocketResult<()>> {
         self.socket.poll_send_ready(cx).map_err(|x| x.into())
     }
 
-    /// Send a UDP packet to target from proxy
+    /// Send a UDP packet to target through proxy `target`
     pub async fn send_to<A: ToSocketAddrs>(
         &self,
         target: A,
@@ -357,7 +378,7 @@ impl ProxySocket {
             .map_err(Into::into)
     }
 
-    /// Send a UDP packet to target from proxy
+    /// Send a UDP packet to target through proxy `target`
     pub async fn send_to_with_ctrl<A: ToSocketAddrs>(
         &self,
         target: A,
