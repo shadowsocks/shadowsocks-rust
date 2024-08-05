@@ -99,7 +99,7 @@ shadowsocks-crypto = { version = "0.5.4", features = [] }
 tokio-tfo = "0.3"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", features = [
+windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",

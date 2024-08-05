@@ -212,7 +212,7 @@ shadowsocks = { version = "1.20.1", path = "../shadowsocks", default-features = 
 nix = { version = "0.29", features = ["ioctl"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", features = ["Win32_Networking_WinSock"] }
+windows-sys = { version = "0.59", features = ["Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 byteorder = "1.5"
