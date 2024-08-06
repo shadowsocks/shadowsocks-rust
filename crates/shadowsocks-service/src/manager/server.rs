@@ -13,23 +13,13 @@ use shadowsocks::{
     manager::{
         datagram::ManagerSocketAddr,
         protocol::{
-            self,
-            AddRequest,
-            AddResponse,
-            ErrorResponse,
-            ListResponse,
-            ManagerRequest,
-            PingResponse,
-            RemoveRequest,
-            RemoveResponse,
-            ServerUserConfig,
-            StatRequest,
+            self, AddRequest, AddResponse, ErrorResponse, ListResponse, ManagerRequest, PingResponse, RemoveRequest,
+            RemoveResponse, ServerUserConfig, StatRequest,
         },
     },
     net::{AcceptOpts, ConnectOpts},
     plugin::PluginConfig,
-    ManagerListener,
-    ServerAddr,
+    ManagerListener, ServerAddr,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 

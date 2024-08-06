@@ -15,4 +15,4 @@ use_try_shorthand = true
 reorder_impl_items = true
 #use_small_heuristics = "Max"
 imports_layout = "HorizontalVertical"
-imports_granularity = "Crate"
+#imports_granularity = "Crate"

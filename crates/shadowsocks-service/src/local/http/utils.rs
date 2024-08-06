@@ -9,9 +9,7 @@ use std::{
 use hyper::{
     header::{self, HeaderValue},
     http::uri::Authority,
-    HeaderMap,
-    Uri,
-    Version,
+    HeaderMap, Uri, Version,
 };
 use log::error;
 use shadowsocks::relay::socks5::Address;

@@ -29,10 +29,7 @@ use tokio::{runtime::Handle, sync::mpsc, task::JoinHandle, time};
 use windows_sys::Win32::Networking::WinSock::WSAEAFNOSUPPORT;
 
 use crate::net::{
-    packet_window::PacketWindowFilter,
-    utils::to_ipv4_mapped,
-    MonProxySocket,
-    UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+    packet_window::PacketWindowFilter, utils::to_ipv4_mapped, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
     UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
 };
 

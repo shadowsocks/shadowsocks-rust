@@ -9,8 +9,7 @@ use tokio::time::{self, Duration};
 use shadowsocks_service::{
     config::{Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType, ServerInstanceConfig},
     local::socks::client::socks5::Socks5UdpClient,
-    run_local,
-    run_server,
+    run_local, run_server,
     shadowsocks::{config::Mode, crypto::CipherKind, relay::socks5::Address, ServerConfig},
 };
 

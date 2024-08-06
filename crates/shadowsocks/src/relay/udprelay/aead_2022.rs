@@ -58,9 +58,7 @@ use std::{
 
 use aes::{
     cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
-    Aes128,
-    Aes256,
-    Block,
+    Aes128, Aes256, Block,
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};

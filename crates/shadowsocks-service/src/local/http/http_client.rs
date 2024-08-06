@@ -16,8 +16,7 @@ use hyper::{
     client::conn::{http1, http2},
     http::uri::Scheme,
     rt::{Sleep, Timer},
-    Request,
-    Response,
+    Request, Response,
 };
 use log::{error, trace};
 use lru_time_cache::LruCache;

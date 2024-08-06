@@ -7,9 +7,7 @@ use tokio::{net::TcpStream, time};
 #[cfg(feature = "local-http")]
 use crate::local::http::HttpConnectionHandler;
 use crate::local::{
-    context::ServiceContext,
-    loadbalancing::PingBalancer,
-    net::tcp::listener::create_standard_tcp_listener,
+    context::ServiceContext, loadbalancing::PingBalancer, net::tcp::listener::create_standard_tcp_listener,
     socks::config::Socks5AuthConfig,
 };
 

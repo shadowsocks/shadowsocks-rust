@@ -21,12 +21,7 @@ use crate::local::{
 };
 
 use crate::local::socks::socks4::{
-    Address,
-    Command,
-    Error as Socks4Error,
-    HandshakeRequest,
-    HandshakeResponse,
-    ResultCode,
+    Address, Command, Error as Socks4Error, HandshakeRequest, HandshakeResponse, ResultCode,
 };
 
 pub struct Socks4TcpHandler {

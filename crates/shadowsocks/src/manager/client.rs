@@ -8,16 +8,8 @@ use super::{
     datagram::ManagerDatagram,
     error::Error,
     protocol::{
-        AddRequest,
-        AddResponse,
-        ListRequest,
-        ListResponse,
-        ManagerProtocol,
-        PingRequest,
-        PingResponse,
-        RemoveRequest,
-        RemoveResponse,
-        StatRequest,
+        AddRequest, AddResponse, ListRequest, ListResponse, ManagerProtocol, PingRequest, PingResponse, RemoveRequest,
+        RemoveResponse, StatRequest,
     },
 };
 

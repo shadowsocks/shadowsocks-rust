@@ -20,8 +20,7 @@ use hickory_resolver::{
         udp::{DnsUdpSocket, QuicLocalAddr},
         TokioTime,
     },
-    AsyncResolver,
-    TokioHandle,
+    AsyncResolver, TokioHandle,
 };
 use log::trace;
 use tokio::{io::ReadBuf, net::UdpSocket};

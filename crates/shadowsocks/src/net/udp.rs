@@ -39,9 +39,7 @@ use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
 use super::{
     sys::{bind_outbound_udp_socket, create_inbound_udp_socket, create_outbound_udp_socket},
-    AcceptOpts,
-    AddrFamily,
-    ConnectOpts,
+    AcceptOpts, AddrFamily, ConnectOpts,
 };
 
 /// Message struct for `batch_send`

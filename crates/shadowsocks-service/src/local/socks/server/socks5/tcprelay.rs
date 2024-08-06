@@ -11,17 +11,8 @@ use log::{debug, error, trace, warn};
 use shadowsocks::{
     config::Mode,
     relay::socks5::{
-        self,
-        Address,
-        Command,
-        Error as Socks5Error,
-        HandshakeRequest,
-        HandshakeResponse,
-        PasswdAuthRequest,
-        PasswdAuthResponse,
-        Reply,
-        TcpRequestHeader,
-        TcpResponseHeader,
+        self, Address, Command, Error as Socks5Error, HandshakeRequest, HandshakeResponse, PasswdAuthRequest,
+        PasswdAuthResponse, Reply, TcpRequestHeader, TcpResponseHeader,
     },
     ServerAddr,
 };

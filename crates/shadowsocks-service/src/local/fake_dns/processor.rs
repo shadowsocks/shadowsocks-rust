@@ -6,10 +6,7 @@ use hickory_resolver::proto::{
     op::{header::MessageType, response_code::ResponseCode, Header, Message, OpCode},
     rr::{
         rdata::{A, AAAA},
-        DNSClass,
-        RData,
-        Record,
-        RecordType,
+        DNSClass, RData, Record, RecordType,
     },
 };
 use log::{debug, trace};

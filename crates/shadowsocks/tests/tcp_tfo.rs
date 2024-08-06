@@ -21,9 +21,7 @@ use shadowsocks::{
         socks5::Address,
         tcprelay::utils::{copy_from_encrypted, copy_to_encrypted},
     },
-    ProxyClientStream,
-    ProxyListener,
-    ServerConfig,
+    ProxyClientStream, ProxyListener, ServerConfig,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
