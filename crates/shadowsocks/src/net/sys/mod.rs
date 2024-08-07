@@ -68,7 +68,7 @@ where
 
     let sock = unsafe { Socket::from_raw_fd(fd) };
     let result = socket_bind_dual_stack_inner(&sock, addr, ipv6_only);
-    sock.into_raw_fd();
+    let _ = sock.into_raw_fd();
 
     result
 }
