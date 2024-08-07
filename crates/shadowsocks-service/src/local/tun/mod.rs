@@ -27,7 +27,8 @@ cfg_if! {
                  target_os = "linux",
                  target_os = "android",
                  target_os = "windows",
-                 target_os = "freebsd"))] {
+                 target_os = "freebsd",
+                 target_os = "openbsd"))] {
         use tun2::{
             create_as_async, AsyncDevice, Configuration as TunConfiguration, AbstractDevice, Error as TunError, Layer,
         };

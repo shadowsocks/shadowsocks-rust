@@ -480,6 +480,7 @@ cfg_if! {
             /// Document: <https://www.freebsd.org/doc/handbook/firewalls-pf.html>
             #[cfg(any(
                 target_os = "freebsd",
+                target_os = "openbsd",
                 target_os = "macos",
                 target_os = "ios"
             ))]
@@ -542,6 +543,30 @@ cfg_if! {
                     #[doc(hidden)]
                     pub const fn udp_available_types() -> &'static [&'static str] {
                         const AVAILABLE_TYPES: &[&str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
+                        AVAILABLE_TYPES
+                    }
+                } else if #[cfg(target_os = "openbsd")] {
+                    /// Default TCP transparent proxy solution on this platform
+                    pub fn tcp_default() -> RedirType {
+                        RedirType::PacketFilter
+                    }
+
+                    /// Available TCP transparent proxy types
+                    #[doc(hidden)]
+                    pub fn tcp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &[&str] = &[RedirType::PacketFilter.name()];
+                        AVAILABLE_TYPES
+                    }
+
+                    /// Default UDP transparent proxy solution on this platform
+                    pub fn udp_default() -> RedirType {
+                        RedirType::PacketFilter
+                    }
+
+                    /// Available UDP transparent proxy types
+                    #[doc(hidden)]
+                    pub const fn udp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &[&str] = &[RedirType::PacketFilter.name()];
                         AVAILABLE_TYPES
                     }
                 } else if #[cfg(any(target_os = "macos", target_os = "ios"))] {
@@ -614,6 +639,7 @@ cfg_if! {
 
                     #[cfg(any(
                         target_os = "freebsd",
+                        target_os = "openbsd",
                         target_os = "macos",
                         target_os = "ios"
                     ))]
@@ -654,6 +680,7 @@ cfg_if! {
 
                     #[cfg(any(
                         target_os = "freebsd",
+                        target_os = "openbsd",
                         target_os = "macos",
                         target_os = "ios",
                     ))]
