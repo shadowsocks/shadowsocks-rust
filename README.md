@@ -13,6 +13,7 @@
 [![NixOS](https://img.shields.io/badge/NixOS-shadowsocks--rust-blue?logo=nixos)](https://github.com/NixOS/nixpkgs/tree/master/pkgs/tools/networking/shadowsocks-rust)
 [![snap shadowsocks-rust](https://snapcraft.io/shadowsocks-rust/badge.svg)](https://snapcraft.io/shadowsocks-rust)
 [![homebrew shadowsocks-rust](https://img.shields.io/homebrew/v/shadowsocks-rust)](https://formulae.brew.sh/formula/shadowsocks-rust#default)
+[![MacPorts shadowsocks-rust](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fports.macports.org%2Fapi%2Fv1%2Fports%2Fshadowsocks-rust%2F&query=%24.version&label=macports)](https://ports.macports.org/port/shadowsocks-rust/)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
