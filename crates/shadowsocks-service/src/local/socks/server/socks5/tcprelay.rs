@@ -124,7 +124,7 @@ impl Socks5TcpHandler {
 
                 return Err(Error::new(
                     ErrorKind::Other,
-                    "Username/Password Authentication Initial request uname contains invaid characters",
+                    "Username/Password Authentication Initial request uname contains invalid characters",
                 ));
             }
         };
@@ -137,7 +137,7 @@ impl Socks5TcpHandler {
 
                 return Err(Error::new(
                     ErrorKind::Other,
-                    "Username/Password Authentication Initial request passwd contains invaid characters",
+                    "Username/Password Authentication Initial request passwd contains invalid characters",
                 ));
             }
         };
