@@ -444,7 +444,7 @@ impl ConfigType {
         self == ConfigType::Manager
     }
 
-    /// Chec if it is online config type (SIP008)
+    /// Check if it is online config type (SIP008)
     #[cfg(feature = "local-online-config")]
     pub fn is_online_config(self) -> bool {
         self == ConfigType::OnlineConfig
@@ -3144,7 +3144,7 @@ pub fn read_variable_field_value(value: &str) -> Cow<'_, str> {
                 Ok(value) => return value.into(),
                 Err(err) => {
                     warn!(
-                        "couldn't read password from environemnt variable {}, error: {}",
+                        "couldn't read password from environment variable {}, error: {}",
                         var_name, err
                     );
                 }

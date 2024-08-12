@@ -115,7 +115,7 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
 
     unsafe {
         let (_, target_addr) = SockAddr::try_init(|target_addr, target_addr_len| {
-            // No suffcient method to know whether the destination IPv4 or IPv6.
+            // No sufficient method to know whether the destination IPv4 or IPv6.
             // Follow the method in shadowsocks-libev.
 
             let ret = libc::getsockopt(
