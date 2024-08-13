@@ -31,7 +31,7 @@ use crate::{
 
 pub struct Socks5TcpHandler {
     context: Arc<ServiceContext>,
-    udp_bind_addr: Arc<ServerAddr>,
+    udp_associate_addr: Arc<ServerAddr>,
     balancer: PingBalancer,
     mode: Mode,
     auth: Arc<Socks5AuthConfig>,
@@ -40,14 +40,14 @@ pub struct Socks5TcpHandler {
 impl Socks5TcpHandler {
     pub fn new(
         context: Arc<ServiceContext>,
-        udp_bind_addr: Arc<ServerAddr>,
+        udp_associate_addr: Arc<ServerAddr>,
         balancer: PingBalancer,
         mode: Mode,
         auth: Arc<Socks5AuthConfig>,
     ) -> Socks5TcpHandler {
         Socks5TcpHandler {
             context,
-            udp_bind_addr,
+            udp_associate_addr,
             balancer,
             mode,
             auth,
@@ -304,7 +304,7 @@ impl Socks5TcpHandler {
 
         // shadowsocks accepts both TCP and UDP from the same address
 
-        let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, self.udp_bind_addr.as_ref().into());
+        let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, self.udp_associate_addr.as_ref().into());
         rh.write_to(&mut stream).await?;
 
         // Hold connection until EOF.
