@@ -310,6 +310,9 @@ impl Server {
                     if let Some(b) = local_config.udp_addr {
                         server_builder.set_udp_bind_addr(b.clone());
                     }
+                    if let Some(b) = local_config.udp_associate_addr {
+                        server_builder.set_udp_associate_addr(b.clone());
+                    }
 
                     #[cfg(target_os = "macos")]
                     if let Some(n) = local_config.launchd_tcp_socket_name {

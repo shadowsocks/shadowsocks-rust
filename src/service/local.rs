@@ -132,6 +132,14 @@ pub fn define_command_line_options(mut app: Command) -> Command {
             .help("UDP relay's bind address, default is the same as local-addr"),
     )
     .arg(
+        Arg::new("UDP_ASSOCIATE_ADDR")
+        .long("udp-associate-addr")
+        .num_args(1)
+        .action(ArgAction::Set)
+        .value_parser(vparser::parse_server_addr)
+        .help("UDP relay's externally visible address return in UDP Associate responses"),
+    )
+    .arg(
         Arg::new("SERVER_ADDR")
             .short('s')
             .long("server-addr")
@@ -729,6 +737,10 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
             if let Some(udp_bind_addr) = matches.get_one::<ServerAddr>("UDP_BIND_ADDR").cloned() {
                 local_config.udp_addr = Some(udp_bind_addr);
+            }
+
+            if let Some(udp_associate_addr) = matches.get_one::<ServerAddr>("UDP_ASSOCIATE_ADDR").cloned() {
+                local_config.udp_associate_addr = Some(udp_associate_addr);
             }
 
             #[cfg(feature = "local-tunnel")]
