@@ -42,7 +42,15 @@ pub struct ProxyServerStream<S> {
 }
 
 impl<S> ProxyServerStream<S> {
-    pub(crate) fn from_stream(
+    /// Create a `ProxyServerStream` from a connection stream
+    pub fn from_stream(context: SharedContext, stream: S, method: CipherKind, key: &[u8]) -> ProxyServerStream<S> {
+        ProxyServerStream::from_stream_with_user_manager(context, stream, method, key, None)
+    }
+
+    /// Create a `ProxyServerStream` from a connection stream
+    ///
+    /// Set `user_manager` to enable support of verifying EIH users.
+    pub fn from_stream_with_user_manager(
         context: SharedContext,
         stream: S,
         method: CipherKind,
