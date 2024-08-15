@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks"
-version = "1.20.1"
+version = "1.20.2"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
