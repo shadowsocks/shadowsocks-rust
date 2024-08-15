@@ -2,15 +2,12 @@
 
 use std::{
     collections::HashMap,
-    future::Future,
     io::{self, ErrorKind},
-    pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
     time::Duration,
 };
 
-use futures::{future, ready};
+use futures::future;
 use log::{error, trace};
 use shadowsocks::{
     config::{ManagerAddr, ServerConfig},
@@ -19,9 +16,9 @@ use shadowsocks::{
     plugin::{Plugin, PluginMode},
     ManagerClient,
 };
-use tokio::{task::JoinHandle, time};
+use tokio::time;
 
-use crate::{acl::AccessControl, config::SecurityConfig, net::FlowStat};
+use crate::{acl::AccessControl, config::SecurityConfig, net::FlowStat, utils::ServerHandle};
 
 use super::{context::ServiceContext, tcprelay::TcpServer, udprelay::UdpServer};
 
@@ -159,27 +156,6 @@ impl ServerBuilder {
             manager_addr: self.manager_addr,
             plugin,
         })
-    }
-}
-
-struct ServerHandle(JoinHandle<io::Result<()>>);
-
-impl Drop for ServerHandle {
-    #[inline]
-    fn drop(&mut self) {
-        self.0.abort();
-    }
-}
-
-impl Future for ServerHandle {
-    type Output = io::Result<()>;
-
-    #[inline]
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match ready!(Pin::new(&mut self.0).poll(cx)) {
-            Ok(res) => res.into(),
-            Err(err) => Err(io::Error::new(ErrorKind::Other, err)).into(),
-        }
     }
 }
 

@@ -1,22 +1,15 @@
 //! Shadowsocks server
 
-use std::{
-    future::Future,
-    io::{self, ErrorKind},
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::{io, sync::Arc, time::Duration};
 
-use futures::{future, ready};
+use futures::future;
 use log::trace;
 use shadowsocks::net::{AcceptOpts, ConnectOpts};
-use tokio::task::JoinHandle;
 
 use crate::{
     config::{Config, ConfigType},
     dns::build_dns_resolver,
+    utils::ServerHandle,
 };
 
 pub use self::{
@@ -169,25 +162,4 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let (res, ..) = future::select_all(vfut).await;
     res
-}
-
-struct ServerHandle(JoinHandle<io::Result<()>>);
-
-impl Drop for ServerHandle {
-    #[inline]
-    fn drop(&mut self) {
-        self.0.abort();
-    }
-}
-
-impl Future for ServerHandle {
-    type Output = io::Result<()>;
-
-    #[inline]
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match ready!(Pin::new(&mut self.0).poll(cx)) {
-            Ok(res) => res.into(),
-            Err(err) => Err(io::Error::new(ErrorKind::Other, err)).into(),
-        }
-    }
 }

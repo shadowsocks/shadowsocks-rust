@@ -1,27 +1,24 @@
 //! Shadowsocks Local Server
 
 use std::{
-    future::Future,
     io::{self, ErrorKind},
-    pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
     time::Duration,
 };
 
-use futures::{future, ready};
+use futures::future;
 use log::trace;
 use shadowsocks::{
     config::Mode,
     net::{AcceptOpts, ConnectOpts},
 };
-use tokio::task::JoinHandle;
 
 #[cfg(feature = "local-flow-stat")]
 use crate::{config::LocalFlowStatAddress, net::FlowStat};
 use crate::{
     config::{Config, ConfigType, ProtocolType},
     dns::build_dns_resolver,
+    utils::ServerHandle,
 };
 
 use self::{
@@ -69,27 +66,6 @@ pub mod utils;
 ///
 /// This is borrowed from Go's `net` library's default setting
 pub(crate) const LOCAL_DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(15);
-
-struct ServerHandle(JoinHandle<io::Result<()>>);
-
-impl Drop for ServerHandle {
-    #[inline]
-    fn drop(&mut self) {
-        self.0.abort();
-    }
-}
-
-impl Future for ServerHandle {
-    type Output = io::Result<()>;
-
-    #[inline]
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match ready!(Pin::new(&mut self.0).poll(cx)) {
-            Ok(res) => res.into(),
-            Err(err) => Err(io::Error::new(ErrorKind::Other, err)).into(),
-        }
-    }
-}
 
 /// Local Server instance
 pub struct Server {
