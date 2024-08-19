@@ -1457,7 +1457,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "rustls 0.23.12",
- "rustls-native-certs 0.7.1",
+ "rustls-native-certs 0.7.2",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls 0.26.0",
@@ -2729,7 +2729,7 @@ dependencies = [
  "pin-project-lite",
  "quinn 0.11.2",
  "rustls 0.23.12",
- "rustls-native-certs 0.7.1",
+ "rustls-native-certs 0.7.2",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
  "serde",
@@ -2916,9 +2916,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-native-certs"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a88d6d420651b496bdd98684116959239430022a115c1240e6c3993be0b15fba"
+checksum = "04182dffc9091a404e0fc069ea5cd60e5b866c3adf881eff99a32d048242dffa"
 dependencies = [
  "openssl-probe",
  "rustls-pemfile 2.1.2",
@@ -3300,7 +3300,7 @@ dependencies = [
  "pin-project",
  "rand",
  "regex",
- "rustls-native-certs 0.7.1",
+ "rustls-native-certs 0.7.2",
  "serde",
  "shadowsocks",
  "sled",
