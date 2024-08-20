@@ -2974,6 +2974,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustversion"
+version = "1.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
+
+[[package]]
 name = "ryu"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3871,9 +3877,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tun2"
-version = "2.0.5"
+version = "2.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50ff242bea1c5ceb9b6aa4918cf340a6c157e1328a2389c5353cf91049d8cf17"
+checksum = "5254ad58e460ff4d17b593d32f1be9ab28c80e96eec143e6e8237018b13bcae1"
 dependencies = [
  "bytes",
  "cfg-if",
@@ -3883,10 +3889,11 @@ dependencies = [
  "libloading",
  "log",
  "nix",
+ "rustversion",
  "thiserror",
  "tokio",
  "tokio-util",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
  "wintun",
 ]
 
