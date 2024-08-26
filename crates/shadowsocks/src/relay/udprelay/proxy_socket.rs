@@ -27,6 +27,9 @@ use super::crypto_io::{
     ProtocolResult,
 };
 
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, RawFd};
+
 static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
 static DEFAULT_SOCKET_CONTROL: Lazy<UdpSocketControlData> = Lazy::new(UdpSocketControlData::default);
 
@@ -593,5 +596,13 @@ impl ProxySocket {
     /// Set `recv` timeout, `None` will clear timeout
     pub fn set_recv_timeout(&mut self, t: Option<Duration>) {
         self.recv_timeout = t;
+    }
+}
+
+#[cfg(unix)]
+impl AsRawFd for ProxySocket {
+    /// Retrieve raw fd of the outbound socket
+    fn as_raw_fd(&self) -> RawFd {
+        self.socket.as_raw_fd()
     }
 }
