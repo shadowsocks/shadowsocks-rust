@@ -3902,9 +3902,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tun2"
-version = "2.0.6"
+version = "2.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5254ad58e460ff4d17b593d32f1be9ab28c80e96eec143e6e8237018b13bcae1"
+checksum = "c1576993bcdccd110d21278396df090cb29219d296a8b8daa697442efdaab0c6"
 dependencies = [
  "bytes",
  "cfg-if",
@@ -3919,7 +3919,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "windows-sys 0.59.0",
- "wintun",
+ "wintun-bindings",
 ]
 
 [[package]]
@@ -4421,16 +4421,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "wintun"
-version = "0.5.0"
+name = "wintun-bindings"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b196f9328341b035820c54beebca487823e2e20a5977f284f2af2a0ee8f04400"
+checksum = "79260cdfee91a3de3a0fe0f04b81b695e69c68b170cd6a643746904a8c14da63"
 dependencies = [
  "c2rust-bitfields",
  "libloading",
  "log",
  "thiserror",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
