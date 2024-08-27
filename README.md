@@ -425,16 +425,16 @@ ip tuntap add mode tun tun0
 ifconfig tun0 inet 10.255.0.1 netmask 255.255.255.0 up
 ```
 
-Start `sslocal` with `--protocol tun` and binds to `tun0`
+Start `sslocal` with `--protocol tunnel` and binds to `tun0`
 
 ```bash
-sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface lo0 --tun-interface-name tun0
+sslocal --protocol tunnel -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface lo0 --tun-interface-name tun0
 ```
 
 #### macOS
 
 ```bash
-sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface lo0 --tun-interface-address 10.255.0.1/24
+sslocal --protocol tunnel -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface lo0 --tun-interface-address 10.255.0.1/24
 ```
 
 It will create a Tun interface with address `10.255.0.1` and netmask `255.255.255.0`.
@@ -444,7 +444,7 @@ It will create a Tun interface with address `10.255.0.1` and netmask `255.255.25
 Download `wintun.dll` from [Wintun](https://www.wintun.net/), and place it in the folder with shadowsocks' runnable binaries, or in the system PATH.
 
 ```powershell
-sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface "Ethernet 0" --tun-interface-name "shadowsocks"
+sslocal --protocol tunnel -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface "Ethernet 0" --tun-interface-name "shadowsocks"
 ```
 
 ### Local client for Windows Service
