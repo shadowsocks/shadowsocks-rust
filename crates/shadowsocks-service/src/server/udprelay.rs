@@ -26,6 +26,7 @@ use shadowsocks::{
 };
 use tokio::{runtime::Handle, sync::mpsc, task::JoinHandle, time};
 #[cfg(windows)]
+#[allow(unused_imports)]
 use windows_sys::Win32::Networking::WinSock::WSAEAFNOSUPPORT;
 
 use crate::net::{

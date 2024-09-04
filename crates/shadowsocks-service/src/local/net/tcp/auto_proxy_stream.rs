@@ -4,7 +4,7 @@ use std::{
     io::{self, ErrorKind, IoSlice},
     net::SocketAddr,
     pin::Pin,
-    sync::{Arc, LazyLock},
+    sync::Arc,
     task::{self, Poll},
 };
 
@@ -12,7 +12,6 @@ use bytes::{BufMut, BytesMut};
 use httparse::{Response, Status};
 use log::warn;
 use pin_project::pin_project;
-use rustls::pki_types::ServerName;
 use shadowsocks::{
     net::{ConnectOpts, TcpStream},
     relay::{socks5::Address, tcprelay::proxy_stream::ProxyClientStream},
@@ -44,7 +43,7 @@ pub struct HttpTunnelStream {
     auth: String,
 }
 // #[cfg(feature = "https-tunnel")]
-// static CONNECTOR: LazyLock<tokio_rustls::TlsConnector> = LazyLock::new(|| {
+// static CONNECTOR: LazyLock<tokio_rustls::TlsConnector> = std::sync::LazyLock::new(|| {
 //     use log::warn;
 //     use once_cell::sync::Lazy;
 //     use std::sync::Arc;
@@ -170,15 +169,6 @@ impl AutoProxyClientStream {
         )
         .await?;
 
-        let host = match ServerName::try_from(server.server_config().addr().host()) {
-            Ok(n) => n,
-            Err(_) => {
-                return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("invalid dnsname \"{}\"", server.server_config().addr().host()),
-                ));
-            }
-        };
         use log::warn;
         use once_cell::sync::Lazy;
         use std::sync::Arc;
@@ -212,6 +202,15 @@ impl AutoProxyClientStream {
         });
 
         let connector = TlsConnector::from(TLS_CONFIG.clone());
+        let host = match ServerName::try_from(server.server_config().addr().host()) {
+            Ok(n) => n,
+            Err(_) => {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("invalid dnsname \"{}\"", server.server_config().addr().host()),
+                ));
+            }
+        };
         let tls_stream = connector.connect(host.to_owned(), stream).await?;
 
         Ok(AutoProxyClientStream::HttpTunnel(HttpTunnelStream {
