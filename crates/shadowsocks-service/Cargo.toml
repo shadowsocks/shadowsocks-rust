@@ -161,7 +161,7 @@ tokio-rustls = { version = "0.26", optional = true, default-features = false, fe
     "tls12",
     "ring",
 ] }
-rustls-native-certs = { version = "0.7", optional = true }
+rustls-native-certs = { version = "0.8", optional = true }
 async-trait = "0.1"
 
 socket2 = { version = "0.5", features = ["all"] }
