@@ -67,7 +67,7 @@ where
         }
     }
     #[cfg(feature = "https-tunnel")]
-    let result = tcprelay::utils::copy_bidirectional(shadow, plain).await;
+    let result = copy_bidirectional(shadow, plain).await;
     #[cfg(not(feature = "https-tunnel"))]
     let result = tcprelay::utils::copy_encrypted_bidirectional(svr_cfg.method(), shadow, plain).await;
     match result {
