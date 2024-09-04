@@ -49,7 +49,7 @@ use {
 #[pin_project]
 pub struct HttpTunnelStream {
     #[pin]
-    stream: tokio_rustls::client::TlsStream<shadowsocks::net::TcpStream>,
+    stream: tokio_rustls::client::TlsStream<MonProxyStream<shadowsocks::net::TcpStream>>,
     addr: Address,
     auth: String,
 }
@@ -172,7 +172,6 @@ impl AutoProxyClientStream {
     where
         A: Into<Address>,
     {
-        let _flow_stat = context.flow_stat();
         let stream = TcpStream::connect_server_with_opts(
             context.context_ref(),
             server.server_config().tcp_external_addr(),
@@ -214,7 +213,10 @@ impl AutoProxyClientStream {
                 ));
             }
         };
-        let tls_stream = connector.connect(host.to_owned(), stream).await?;
+        let flow_stat = context.flow_stat();
+        let tls_stream = connector
+            .connect(host.to_owned(), MonProxyStream::from_stream(stream, flow_stat))
+            .await?;
         use base64::Engine;
         let base64 = base64::engine::general_purpose::STANDARD.encode(server.server_config().password());
         Ok(AutoProxyClientStream::HttpTunnel(HttpTunnelStream {
@@ -305,7 +307,7 @@ impl AutoProxyClientStream {
             AutoProxyClientStream::Proxied(ref s) => s.get_ref().get_ref().local_addr(),
             AutoProxyClientStream::Bypassed(ref s) => s.local_addr(),
             #[cfg(feature = "https-tunnel")]
-            AutoProxyClientStream::HttpTunnel(ref s) => s.stream.get_ref().0.local_addr(),
+            AutoProxyClientStream::HttpTunnel(ref s) => s.stream.get_ref().0.get_ref().local_addr(),
         }
     }
 
@@ -314,14 +316,14 @@ impl AutoProxyClientStream {
             AutoProxyClientStream::Proxied(ref s) => s.get_ref().get_ref().set_nodelay(nodelay),
             AutoProxyClientStream::Bypassed(ref s) => s.set_nodelay(nodelay),
             #[cfg(feature = "https-tunnel")]
-            AutoProxyClientStream::HttpTunnel(ref s) => s.stream.get_ref().0.set_nodelay(nodelay),
+            AutoProxyClientStream::HttpTunnel(ref s) => s.stream.get_ref().0.get_ref().set_nodelay(nodelay),
         }
     }
 }
 #[cfg(feature = "https-tunnel")]
 async fn connect_tunnel(
     addr: Address,
-    tls_stream: &mut tokio_rustls::client::TlsStream<TcpStream>,
+    tls_stream: &mut tokio_rustls::client::TlsStream<MonProxyStream<TcpStream>>,
     auth: &str,
 ) -> Result<(), io::Error> {
     let connect_string = match addr {
@@ -348,7 +350,7 @@ async fn connect_tunnel(
     Ok(())
 }
 #[cfg(feature = "https-tunnel")]
-async fn wait_response(tls_stream: &mut tokio_rustls::client::TlsStream<TcpStream>) -> io::Result<()> {
+async fn wait_response(tls_stream: &mut tokio_rustls::client::TlsStream<MonProxyStream<TcpStream>>) -> io::Result<()> {
     let mut buffer = BytesMut::with_capacity(4096); // 初始化BytesMut缓冲区
     let mut buf = [0; 4096]; // 临时缓冲区
     loop {
