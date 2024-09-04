@@ -92,6 +92,7 @@ https-tunnel = [
     "webpki-roots",
     "rustls-native-certs",
     "httparse",
+    "base64",
 ]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
@@ -169,6 +170,7 @@ tokio-rustls = { version = "0.26", optional = true, default-features = false, fe
     "tls12",
     "ring",
 ] }
+base64 = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
 async-trait = "0.1"
 rustls = { version = "0", default-features = false, features = [

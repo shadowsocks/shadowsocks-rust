@@ -3297,6 +3297,7 @@ version = "1.20.4"
 dependencies = [
  "arc-swap",
  "async-trait",
+ "base64 0.22.1",
  "brotli",
  "bson",
  "byte_string",

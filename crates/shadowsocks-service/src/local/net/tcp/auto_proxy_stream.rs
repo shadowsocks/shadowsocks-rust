@@ -215,11 +215,12 @@ impl AutoProxyClientStream {
             }
         };
         let tls_stream = connector.connect(host.to_owned(), stream).await?;
-
+        use base64::Engine;
+        let base64 = base64::engine::general_purpose::STANDARD.encode(server.server_config().password());
         Ok(AutoProxyClientStream::HttpTunnel(HttpTunnelStream {
             stream: tls_stream,
             addr: addr.into(),
-            auth: "Basic ".to_owned() + server.server_config().password(),
+            auth: "Basic ".to_owned() + base64.as_str(),
         }))
     }
 

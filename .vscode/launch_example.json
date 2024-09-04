@@ -13,7 +13,7 @@
                 "--local-addr",
                 "0.0.0.0:2080",
                 "-k",
-                "base64_password",
+                "username:password",
                 "-v",
                 "-m",
                 "aes-256-gcm", // reversed for compatibility
