@@ -68,7 +68,7 @@ default = [
     "local-socks4",
     "multi-threaded",
     "aead-cipher-2022",
-    "https-tunnel",
+    # "https-tunnel",
 ]
 
 # Basic Features
