@@ -36,8 +36,14 @@ pub enum AutoProxyClientStream {
 use {
     bytes::{BufMut, BytesMut},
     httparse::{Response, Status},
+    log::warn,
+    once_cell::sync::Lazy,
     std::io::ErrorKind,
     tokio::io::{AsyncReadExt, AsyncWriteExt},
+    tokio_rustls::{
+        rustls::{pki_types::ServerName, ClientConfig, RootCertStore},
+        TlsConnector,
+    },
 };
 #[cfg(feature = "https-tunnel")]
 #[pin_project]
@@ -173,14 +179,6 @@ impl AutoProxyClientStream {
             context.connect_opts_ref(),
         )
         .await?;
-
-        use log::warn;
-        use once_cell::sync::Lazy;
-        use std::sync::Arc;
-        use tokio_rustls::{
-            rustls::{pki_types::ServerName, ClientConfig, RootCertStore},
-            TlsConnector,
-        };
 
         static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
             let mut config = ClientConfig::builder()
