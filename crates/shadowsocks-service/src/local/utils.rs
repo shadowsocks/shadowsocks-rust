@@ -39,6 +39,7 @@ where
     // Protocols like FTP, clients will wait for servers to send Welcome Message without sending anything.
     //
     // Wait at most 500ms, and then sends handshake packet to remote servers.
+    #[cfg(not(feature = "https-tunnel"))]
     {
         let mut buffer = [0u8; 8192];
         match time::timeout(Duration::from_millis(500), plain.read(&mut buffer)).await {
