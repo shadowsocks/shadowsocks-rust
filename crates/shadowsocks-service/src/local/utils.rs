@@ -5,7 +5,7 @@ use std::{io, net::SocketAddr, time::Duration};
 use log::{debug, trace};
 use shadowsocks::{
     config::ServerConfig,
-    relay::{socks5::Address, tcprelay::utils::copy_encrypted_bidirectional},
+    relay::{socks5::Address, tcprelay},
 };
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
@@ -66,8 +66,11 @@ where
             }
         }
     }
-
-    match copy_encrypted_bidirectional(svr_cfg.method(), shadow, plain).await {
+    #[cfg(feature = "https-tunnel")]
+    let result = tcprelay::utils::copy_bidirectional(shadow, plain).await;
+    #[cfg(not(feature = "https-tunnel"))]
+    let result = tcprelay::utils::copy_encrypted_bidirectional(svr_cfg.method(), shadow, plain).await;
+    match result {
         Ok((wn, rn)) => {
             trace!(
                 "tcp tunnel {} <-> {} (proxied) closed, L2R {} bytes, R2L {} bytes",
