@@ -1,7 +1,7 @@
 //! A `ProxyStream` that bypasses or proxies data through proxy server automatically
 
 use std::{
-    io::{self, ErrorKind, IoSlice},
+    io::{self, IoSlice},
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
@@ -13,7 +13,7 @@ use shadowsocks::{
     net::{ConnectOpts, TcpStream},
     relay::{socks5::Address, tcprelay::proxy_stream::ProxyClientStream},
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     local::{context::ServiceContext, loadbalancing::ServerIdent},
@@ -31,10 +31,14 @@ pub enum AutoProxyClientStream {
     HttpTunnel(#[pin] HttpTunnelStream),
     Bypassed(#[pin] TcpStream),
 }
+
 #[cfg(feature = "https-tunnel")]
-use bytes::{BufMut, BytesMut};
-#[cfg(feature = "https-tunnel")]
-use httparse::{Response, Status};
+use {
+    bytes::{BufMut, BytesMut},
+    httparse::{Response, Status},
+    std::io::ErrorKind,
+    tokio::io::{AsyncReadExt, AsyncWriteExt},
+};
 #[cfg(feature = "https-tunnel")]
 #[pin_project]
 pub struct HttpTunnelStream {
