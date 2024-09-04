@@ -8,9 +8,6 @@ use std::{
     task::{self, Poll},
 };
 
-use bytes::{BufMut, BytesMut};
-use httparse::{Response, Status};
-use log::warn;
 use pin_project::pin_project;
 use shadowsocks::{
     net::{ConnectOpts, TcpStream},
@@ -34,6 +31,10 @@ pub enum AutoProxyClientStream {
     HttpTunnel(#[pin] HttpTunnelStream),
     Bypassed(#[pin] TcpStream),
 }
+#[cfg(feature = "https-tunnel")]
+use bytes::{BufMut, BytesMut};
+#[cfg(feature = "https-tunnel")]
+use httparse::{Response, Status};
 #[cfg(feature = "https-tunnel")]
 #[pin_project]
 pub struct HttpTunnelStream {
