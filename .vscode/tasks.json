@@ -10,7 +10,7 @@
 				"--bin",
 				"sslocal",
 				"--features",
-				"local-http-rustls"
+				"https-tunnel"
 			],
 			"problemMatcher": [
 				"$rustc"

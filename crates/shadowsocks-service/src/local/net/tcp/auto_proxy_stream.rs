@@ -18,7 +18,6 @@ use shadowsocks::{
     relay::{socks5::Address, tcprelay::proxy_stream::ProxyClientStream},
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use tokio_rustls::TlsConnector;
 
 use crate::{
     local::{context::ServiceContext, loadbalancing::ServerIdent},
@@ -32,9 +31,11 @@ use super::auto_proxy_io::AutoProxyIo;
 #[pin_project(project = AutoProxyClientStreamProj)]
 pub enum AutoProxyClientStream {
     Proxied(#[pin] ProxyClientStream<MonProxyStream<TcpStream>>),
+    #[cfg(feature = "https-tunnel")]
     HttpTunnel(#[pin] HttpTunnelStream),
     Bypassed(#[pin] TcpStream),
 }
+#[cfg(feature = "https-tunnel")]
 #[pin_project]
 pub struct HttpTunnelStream {
     #[pin]
@@ -42,49 +43,49 @@ pub struct HttpTunnelStream {
     addr: Address,
     auth: String,
 }
+// #[cfg(feature = "https-tunnel")]
+// static CONNECTOR: LazyLock<tokio_rustls::TlsConnector> = LazyLock::new(|| {
+//     use log::warn;
+//     use once_cell::sync::Lazy;
+//     use std::sync::Arc;
+//     use tokio_rustls::{
+//         rustls::{ClientConfig, RootCertStore},
+//         TlsConnector,
+//     };
 
-static CONNECTOR: LazyLock<TlsConnector> = LazyLock::new(|| {
-    use log::warn;
-    use once_cell::sync::Lazy;
-    use std::sync::Arc;
-    use tokio_rustls::{
-        rustls::{ClientConfig, RootCertStore},
-        TlsConnector,
-    };
+//     static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
+//         let mut config = ClientConfig::builder()
+//             .with_root_certificates(match rustls_native_certs::load_native_certs() {
+//                 Ok(certs) => {
+//                     let mut store = RootCertStore::empty();
 
-    static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
-        let mut config = ClientConfig::builder()
-            .with_root_certificates(match rustls_native_certs::load_native_certs() {
-                Ok(certs) => {
-                    let mut store = RootCertStore::empty();
+//                     for cert in certs {
+//                         if let Err(err) = store.add(cert) {
+//                             warn!("failed to add cert (native), error: {}", err);
+//                         }
+//                     }
 
-                    for cert in certs {
-                        if let Err(err) = store.add(cert) {
-                            warn!("failed to add cert (native), error: {}", err);
-                        }
-                    }
+//                     store
+//                 }
+//                 Err(err) => {
+//                     warn!("failed to load native certs, {}, going to load from webpki-roots", err);
 
-                    store
-                }
-                Err(err) => {
-                    warn!("failed to load native certs, {}, going to load from webpki-roots", err);
+//                     let mut store = RootCertStore::empty();
+//                     store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-                    let mut store = RootCertStore::empty();
-                    store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+//                     store
+//                 }
+//             })
+//             .with_no_client_auth();
 
-                    store
-                }
-            })
-            .with_no_client_auth();
+//         // Try to negotiate HTTP/2
+//         config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+//         Arc::new(config)
+//     });
 
-        // Try to negotiate HTTP/2
-        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-        Arc::new(config)
-    });
-
-    TlsConnector::from(TLS_CONFIG.clone())
-});
-
+//     TlsConnector::from(TLS_CONFIG.clone())
+// });
+#[cfg(feature = "https-tunnel")]
 impl HttpTunnelStream {
     pub async fn handshake(&mut self) -> io::Result<()> {
         let addr = self.addr.clone();
@@ -100,6 +101,7 @@ impl AutoProxyClientStream {
     pub async fn handshake_tunnel(&mut self) -> io::Result<()> {
         match self {
             AutoProxyClientStream::Proxied(_) => Ok(()),
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStream::HttpTunnel(tunnel_stream) => {
                 tunnel_stream.handshake().await?;
                 Ok(())
@@ -110,6 +112,7 @@ impl AutoProxyClientStream {
     pub fn auth(&self) -> Option<BasicAuth> {
         match self {
             AutoProxyClientStream::Proxied(_) => None,
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStream::HttpTunnel(tunnel_stream) => Some(BasicAuth(tunnel_stream.auth.clone())),
             AutoProxyClientStream::Bypassed(_) => None,
         }
@@ -137,19 +140,19 @@ impl AutoProxyClientStream {
         A: Into<Address>,
     {
         let addr = addr.into();
-        let use_http_tunnel = server.server_config().use_http_tunnel();
         if context.check_target_bypassed(&addr).await {
             AutoProxyClientStream::connect_bypassed_with_opts(context, addr, opts).await
         } else {
-            if use_http_tunnel {
-                // todo!("http tunnel is not implemented yet");
+            #[cfg(feature = "https-tunnel")]
+            {
                 AutoProxyClientStream::connect_http_tunnel(context, server, addr).await
-            } else {
-                AutoProxyClientStream::connect_proxied_with_opts(context, server, addr, opts).await
             }
+            #[cfg(not(feature = "https-tunnel"))]
+            AutoProxyClientStream::connect_proxied_with_opts(context, server, addr, opts).await
         }
     }
 
+    #[cfg(feature = "https-tunnel")]
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
     pub async fn connect_http_tunnel<A>(
         context: Arc<ServiceContext>,
@@ -176,7 +179,40 @@ impl AutoProxyClientStream {
                 ));
             }
         };
-        let tls_stream = CONNECTOR.connect(host.to_owned(), stream).await?;
+        use log::warn;
+        use once_cell::sync::Lazy;
+        use std::sync::Arc;
+        use tokio_rustls::{
+            rustls::{pki_types::ServerName, ClientConfig, RootCertStore},
+            TlsConnector,
+        };
+
+        static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
+            let mut config = ClientConfig::builder()
+                .with_root_certificates({
+                    // Load WebPKI roots (Mozilla's root certificates)
+                    let mut store = RootCertStore::empty();
+                    store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+                    if let Ok(certs) = rustls_native_certs::load_native_certs() {
+                        for cert in certs {
+                            if let Err(err) = store.add(cert) {
+                                warn!("failed to add cert (native), error: {}", err);
+                            }
+                        }
+                    }
+
+                    store
+                })
+                .with_no_client_auth();
+
+            // Try to negotiate HTTP/2
+            config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+            Arc::new(config)
+        });
+
+        let connector = TlsConnector::from(TLS_CONFIG.clone());
+        let tls_stream = connector.connect(host.to_owned(), stream).await?;
 
         Ok(AutoProxyClientStream::HttpTunnel(HttpTunnelStream {
             stream: tls_stream,
@@ -265,6 +301,7 @@ impl AutoProxyClientStream {
         match *self {
             AutoProxyClientStream::Proxied(ref s) => s.get_ref().get_ref().local_addr(),
             AutoProxyClientStream::Bypassed(ref s) => s.local_addr(),
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStream::HttpTunnel(ref s) => s.stream.get_ref().0.local_addr(),
         }
     }
@@ -273,11 +310,12 @@ impl AutoProxyClientStream {
         match *self {
             AutoProxyClientStream::Proxied(ref s) => s.get_ref().get_ref().set_nodelay(nodelay),
             AutoProxyClientStream::Bypassed(ref s) => s.set_nodelay(nodelay),
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStream::HttpTunnel(ref s) => s.stream.get_ref().0.set_nodelay(nodelay),
         }
     }
 }
-
+#[cfg(feature = "https-tunnel")]
 async fn connect_tunnel(
     addr: Address,
     tls_stream: &mut tokio_rustls::client::TlsStream<TcpStream>,
@@ -306,6 +344,7 @@ async fn connect_tunnel(
 
     Ok(())
 }
+#[cfg(feature = "https-tunnel")]
 async fn wait_response(tls_stream: &mut tokio_rustls::client::TlsStream<TcpStream>) -> io::Result<()> {
     let mut buffer = BytesMut::with_capacity(4096); // 初始化BytesMut缓冲区
     let mut buf = [0; 4096]; // 临时缓冲区
@@ -375,6 +414,7 @@ impl AsyncRead for AutoProxyClientStream {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_read(cx, buf),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_read(cx, buf),
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStreamProj::HttpTunnel(s) => s.project().stream.poll_read(cx, buf),
         }
     }
@@ -385,6 +425,7 @@ impl AsyncWrite for AutoProxyClientStream {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_write(cx, buf),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_write(cx, buf),
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStreamProj::HttpTunnel(s) => s.project().stream.poll_write(cx, buf),
         }
     }
@@ -393,6 +434,7 @@ impl AsyncWrite for AutoProxyClientStream {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_flush(cx),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_flush(cx),
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStreamProj::HttpTunnel(s) => s.project().stream.poll_flush(cx),
         }
     }
@@ -401,6 +443,7 @@ impl AsyncWrite for AutoProxyClientStream {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_shutdown(cx),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_shutdown(cx),
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStreamProj::HttpTunnel(s) => s.project().stream.poll_shutdown(cx),
         }
     }
@@ -413,6 +456,7 @@ impl AsyncWrite for AutoProxyClientStream {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_write_vectored(cx, bufs),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_write_vectored(cx, bufs),
+            #[cfg(feature = "https-tunnel")]
             AutoProxyClientStreamProj::HttpTunnel(s) => s.project().stream.poll_write_vectored(cx, bufs),
         }
     }

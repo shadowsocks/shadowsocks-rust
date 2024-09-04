@@ -352,7 +352,6 @@ pub struct ServerConfig {
 
     /// Source
     source: ServerSource,
-    use_http_tunnel: bool,
 }
 
 #[cfg(feature = "aead-cipher-2022")]
@@ -474,16 +473,7 @@ impl ServerConfig {
             mode: Mode::TcpAndUdp, // Server serves TCP & UDP by default
             weight: ServerWeight::new(),
             source: ServerSource::Default,
-            use_http_tunnel: false,
         }
-    }
-
-    pub fn set_use_http_tunnel(&mut self, use_http_tunnel: bool) {
-        self.use_http_tunnel = use_http_tunnel;
-    }
-
-    pub fn use_http_tunnel(&self) -> bool {
-        self.use_http_tunnel
     }
 
     /// Set encryption method

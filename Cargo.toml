@@ -68,7 +68,7 @@ default = [
     "local-socks4",
     "multi-threaded",
     "aead-cipher-2022",
-    "local-http-rustls",
+    "https-tunnel",
 ]
 
 # Basic Features
@@ -152,6 +152,7 @@ local-http-native-tls-vendored = [
     "shadowsocks-service/local-http-native-tls-vendored",
 ]
 local-http-rustls = ["local-http", "shadowsocks-service/local-http-rustls"]
+https-tunnel = ["shadowsocks-service/https-tunnel"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
 local-redir = ["local", "shadowsocks-service/local-redir"]
