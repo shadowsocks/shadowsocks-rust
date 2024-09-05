@@ -62,6 +62,7 @@ impl ProxyHttpStream {
     pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
         use log::warn;
         use once_cell::sync::Lazy;
+        use rustls_native_certs::CertificateResult;
         use std::sync::Arc;
         use tokio_rustls::{
             rustls::{pki_types::ServerName, ClientConfig, RootCertStore},
@@ -75,11 +76,16 @@ impl ProxyHttpStream {
                     let mut store = RootCertStore::empty();
                     store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-                    if let Ok(certs) = rustls_native_certs::load_native_certs() {
-                        for cert in certs {
-                            if let Err(err) = store.add(cert) {
-                                warn!("failed to add cert (native), error: {}", err);
-                            }
+                    let CertificateResult { certs, errors, .. } = rustls_native_certs::load_native_certs();
+                    if !errors.is_empty() {
+                        for error in errors {
+                            warn!("failed to load cert (native), error: {}", error);
+                        }
+                    }
+
+                    for cert in certs {
+                        if let Err(err) = store.add(cert) {
+                            warn!("failed to add cert (native), error: {}", err);
                         }
                     }
 
