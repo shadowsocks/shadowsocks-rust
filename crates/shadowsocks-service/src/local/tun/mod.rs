@@ -128,11 +128,7 @@ impl TunBuilder {
             self.udp_capacity,
         );
 
-        let tcp = TcpTun::new(
-            self.context,
-            self.balancer,
-            device.as_ref().mtu().unwrap_or(1500) as u32,
-        );
+        let tcp = TcpTun::new(self.context, self.balancer, device.mtu().unwrap_or(1500) as u32);
 
         Ok(Tun {
             device,
@@ -160,15 +156,11 @@ impl Tun {
     pub async fn run(mut self) -> io::Result<()> {
         info!(
             "shadowsocks tun device {}, mode {}",
-            self.device
-                .as_ref()
-                .tun_name()
-                .or_else(|r| Ok::<_, ()>(r.to_string()))
-                .unwrap(),
+            self.device.tun_name().or_else(|r| Ok::<_, ()>(r.to_string())).unwrap(),
             self.mode,
         );
 
-        let address = match self.device.as_ref().address() {
+        let address = match self.device.address() {
             Ok(a) => a,
             Err(err) => {
                 error!("[TUN] failed to get device address, error: {}", err);
@@ -176,7 +168,7 @@ impl Tun {
             }
         };
 
-        let netmask = match self.device.as_ref().netmask() {
+        let netmask = match self.device.netmask() {
             Ok(n) => n,
             Err(err) => {
                 error!("[TUN] failed to get device netmask, error: {}", err);

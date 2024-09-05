@@ -3,6 +3,7 @@
 use std::{
     io::{self, Read, Write},
     net::IpAddr,
+    ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -114,6 +115,20 @@ impl AsRef<FakeDevice> for AsyncDevice {
 
 impl AsMut<FakeDevice> for AsyncDevice {
     fn as_mut(&mut self) -> &mut FakeDevice {
+        &mut self.0
+    }
+}
+
+impl Deref for AsyncDevice {
+    type Target = FakeDevice;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for AsyncDevice {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
