@@ -356,11 +356,12 @@ async fn wait_response(tls_stream: &mut tokio_rustls::client::TlsStream<MonProxy
     loop {
         // 从流中读取数据
         match tls_stream.read(&mut buf).await {
+            Ok(0) => {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected EOF"));
+            }
             Ok(n) => {
-                if n != 0 {
-                    // 将读取到的数据追加到动态缓冲区
-                    buffer.put(&buf[0..n]);
-                }
+                // 将读取到的数据追加到动态缓冲区
+                buffer.put(&buf[0..n]);
 
                 // 尝试解析累积的数据
                 let mut headers = [httparse::EMPTY_HEADER; 400];
