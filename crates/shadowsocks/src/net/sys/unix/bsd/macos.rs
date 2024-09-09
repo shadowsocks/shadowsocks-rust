@@ -54,6 +54,10 @@ impl TcpStream {
 
         let socket = unsafe {
             let fd = libc::socket(AF_MULTIPATH, libc::SOCK_STREAM, libc::IPPROTO_TCP);
+            if fd < 0 {
+                let err = io::Error::last_os_error();
+                return Err(err);
+            }
             let socket = Socket::from_raw_fd(fd);
             socket.set_nonblocking(true)?;
             TcpSocket::from_raw_fd(socket.into_raw_fd())

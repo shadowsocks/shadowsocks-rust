@@ -213,12 +213,18 @@ pub fn set_tcp_fastopen<S: AsRawFd>(socket: &S) -> io::Result<()> {
 }
 
 fn create_mptcp_socket(bind_addr: &SocketAddr) -> io::Result<TcpSocket> {
+    // https://www.kernel.org/doc/html/next/networking/mptcp.html
+
     unsafe {
         let family = match bind_addr {
             SocketAddr::V4(..) => libc::AF_INET,
             SocketAddr::V6(..) => libc::AF_INET6,
         };
         let fd = libc::socket(family, libc::SOCK_STREAM, libc::IPPROTO_MPTCP);
+        if fd < 0 {
+            let err = io::Error::last_os_error();
+            return Err(err);
+        }
         let socket = Socket::from_raw_fd(fd);
         socket.set_nonblocking(true)?;
         Ok(TcpSocket::from_raw_fd(socket.into_raw_fd()))
