@@ -10,9 +10,13 @@ use std::{
 
 use byte_string::ByteStr;
 use bytes::{Bytes, BytesMut};
-use log::{info, trace, warn};
+use futures::{
+    stream::{SplitSink, SplitStream},
+    Sink, SinkExt, Stream, StreamExt,
+};
+use log::{info, trace};
 use once_cell::sync::Lazy;
-use tokio::{io::ReadBuf, net::ToSocketAddrs, time};
+use tokio::{io::ReadBuf, time};
 
 use crate::{
     config::{ServerAddr, ServerConfig, ServerUserManager},
@@ -68,10 +72,37 @@ impl From<ProxySocketError> for io::Error {
 /// `ProxySocket` result type
 pub type ProxySocketResult<T> = Result<T, ProxySocketError>;
 
+pub struct UdpPacket {
+    pub data: Bytes,
+    /// only available for recv
+    pub src: Option<SocketAddr>,
+    /// only used for send. None for bound socket
+    pub dst: Option<SocketAddr>,
+}
+
+pub trait OutboundDatagram<Item>:
+    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + 'static
+{
+}
+
+impl<T, Item> OutboundDatagram<Item> for T where
+    T: Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + 'static
+{
+}
+
+pub type UdpIo = Box<dyn OutboundDatagram<UdpPacket>>;
+
 /// UDP client for communicating with ShadowSocks' server
+/// Thread safety: users of `ProxySocket` should not share it across threads
+// TODO: unless a proper spinlock on `.socket` is implemented
 pub struct ProxySocket {
     socket_type: UdpSocketType,
-    socket: ShadowUdpSocket,
+    socket_w: tokio::sync::Mutex<SplitSink<UdpIo, UdpPacket>>,
+    socket_r: tokio::sync::Mutex<SplitStream<UdpIo>>,
+    // only used for server type socket to listen on
+    local_addr: Option<SocketAddr>,
+    #[cfg(unix)]
+    fd: Option<RawFd>,
     method: CipherKind,
     key: Box<[u8]>,
     send_timeout: Option<Duration>,
@@ -129,9 +160,56 @@ impl ProxySocket {
 
         // NOTE: svr_cfg.timeout() is not for this socket, but for associations.
 
+        let socket: ShadowUdpSocket = socket.into();
+        let local_addr = socket.local_addr().ok();
+        #[cfg(unix)]
+        let fd = socket.as_raw_fd();
+        let io: UdpIo = Box::new(socket);
+        let (socket_w, socket_r) = io.split();
         ProxySocket {
             socket_type,
-            socket: socket.into(),
+            socket_w: socket_w.into(),
+            socket_r: socket_r.into(),
+            local_addr,
+            #[cfg(unix)]
+            fd: Some(fd),
+            method,
+            key,
+            send_timeout: None,
+            recv_timeout: None,
+            context,
+            identity_keys: match socket_type {
+                UdpSocketType::Client => svr_cfg.clone_identity_keys(),
+                UdpSocketType::Server => Arc::new(Vec::new()),
+            },
+            user_manager: match socket_type {
+                UdpSocketType::Client => None,
+                UdpSocketType::Server => svr_cfg.clone_user_manager(),
+            },
+        }
+    }
+
+    pub fn from_io(
+        socket_type: UdpSocketType,
+        context: SharedContext,
+        svr_cfg: &ServerConfig,
+        io: UdpIo,
+        local_addr: Option<SocketAddr>,
+        #[cfg(unix)] fd: Option<RawFd>,
+    ) -> ProxySocket {
+        let key = svr_cfg.key().to_vec().into_boxed_slice();
+        let method = svr_cfg.method();
+
+        // NOTE: svr_cfg.timeout() is not for this socket, but for associations.
+
+        let (socket_w, socket_r) = io.split();
+        ProxySocket {
+            socket_type,
+            socket_w: socket_w.into(),
+            socket_r: socket_r.into(),
+            local_addr,
+            #[cfg(unix)]
+            fd,
             method,
             key,
             send_timeout: None,
@@ -239,24 +317,29 @@ impl ProxySocket {
             send_buf.len()
         );
 
-        let send_len = match self.send_timeout {
-            None => self.socket.send(&send_buf).await?,
-            Some(d) => match time::timeout(d, self.socket.send(&send_buf)).await {
+        let n_sent = payload.len();
+
+        let send_fn = || async {
+            let mut socket = self.socket_w.lock().await;
+            socket
+                .send(UdpPacket {
+                    data: send_buf.freeze(),
+                    src: None,
+                    dst: None,
+                })
+                .await
+        };
+
+        match self.send_timeout {
+            None => send_fn().await?,
+            Some(d) => match time::timeout(d, send_fn()).await {
                 Ok(Ok(l)) => l,
                 Ok(Err(err)) => return Err(err.into()),
                 Err(..) => return Err(io::Error::from(ErrorKind::TimedOut).into()),
             },
         };
 
-        if send_buf.len() != send_len {
-            warn!(
-                "UDP server client send {} bytes, but actually sent {} bytes",
-                send_buf.len(),
-                send_len
-            );
-        }
-
-        Ok(send_len)
+        Ok(n_sent)
     }
 
     /// poll family functions
@@ -292,18 +375,21 @@ impl ProxySocket {
             send_buf.len()
         );
 
-        let n_send_buf = send_buf.len();
+        let n_sent = payload.len();
 
-        match self.socket.poll_send(cx, &send_buf).map_err(|x| x.into()) {
-            Poll::Ready(Ok(l)) => {
-                if l == n_send_buf {
-                    Poll::Ready(Ok(payload.len()))
-                } else {
-                    Poll::Ready(Err(io::Error::from(ErrorKind::WriteZero).into()))
-                }
-            }
-            x => x,
-        }
+        let mut io = self
+            .socket_w
+            .try_lock()
+            .expect("no one else should be holding the lock");
+        ready!(io.poll_ready_unpin(cx)?);
+        io.start_send_unpin(UdpPacket {
+            data: send_buf.freeze(),
+            src: None,
+            dst: None,
+        })?;
+        ready!(io.poll_flush_unpin(cx)?);
+
+        Poll::Ready(Ok(n_sent))
     }
 
     /// poll family functions
@@ -339,48 +425,49 @@ impl ProxySocket {
         self.encrypt_send_buffer(addr, control, &self.identity_keys, payload, &mut send_buf)?;
 
         info!(
-            "UDP server client send to {}, payload length {} bytes, packet length {} bytes",
+            "UDP server client poll_send_to to {}, payload length {} bytes, packet length {} bytes",
             target,
             payload.len(),
             send_buf.len()
         );
 
-        let n_send_buf = send_buf.len();
-        match self.socket.poll_send_to(cx, &send_buf, target).map_err(|x| x.into()) {
-            Poll::Ready(Ok(l)) => {
-                if l == n_send_buf {
-                    Poll::Ready(Ok(payload.len()))
-                } else {
-                    Poll::Ready(Err(io::Error::from(ErrorKind::WriteZero).into()))
-                }
-            }
-            x => x,
-        }
+        let n_sent = payload.len();
+        let mut io = self
+            .socket_w
+            .try_lock()
+            .expect("no one else should be holding the lock");
+        ready!(io.poll_ready_unpin(cx)?);
+        io.start_send_unpin(UdpPacket {
+            data: send_buf.freeze(),
+            src: None,
+            dst: Some(target),
+        })?;
+        ready!(io.poll_flush_unpin(cx)?);
+        Poll::Ready(Ok(n_sent))
     }
 
     /// poll family functions
     ///
     /// Check if socket is ready to `send`, or writable.
     pub fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<ProxySocketResult<()>> {
-        self.socket.poll_send_ready(cx).map_err(|x| x.into())
+        self.socket_w
+            .try_lock()
+            .expect("no one else should be holding the lock")
+            .poll_ready_unpin(cx)
+            .map_err(|x| x.into())
     }
 
     /// Send a UDP packet to target through proxy `target`
-    pub async fn send_to<A: ToSocketAddrs>(
-        &self,
-        target: A,
-        addr: &Address,
-        payload: &[u8],
-    ) -> ProxySocketResult<usize> {
+    pub async fn send_to(&self, target: SocketAddr, addr: &Address, payload: &[u8]) -> ProxySocketResult<usize> {
         self.send_to_with_ctrl(target, addr, &DEFAULT_SOCKET_CONTROL, payload)
             .await
             .map_err(Into::into)
     }
 
     /// Send a UDP packet to target through proxy `target`
-    pub async fn send_to_with_ctrl<A: ToSocketAddrs>(
+    pub async fn send_to_with_ctrl(
         &self,
-        target: A,
+        target: SocketAddr,
         addr: &Address,
         control: &UdpSocketControlData,
         payload: &[u8],
@@ -389,31 +476,37 @@ impl ProxySocket {
         self.encrypt_send_buffer(addr, control, &self.identity_keys, payload, &mut send_buf)?;
 
         trace!(
-            "UDP server client send to, addr {}, control: {:?}, payload length {} bytes, packet length {} bytes",
+            "UDP server client send_to to, addr {}, control: {:?}, payload length {} bytes, packet length {} bytes",
             addr,
             control,
             payload.len(),
             send_buf.len()
         );
 
-        let send_len = match self.send_timeout {
-            None => self.socket.send_to(&send_buf, target).await?,
-            Some(d) => match time::timeout(d, self.socket.send_to(&send_buf, target)).await {
+        // we should not use `send_buf.len()` here, because `send_buf` may contain more data than `payload`
+        let n_sent = payload.len();
+
+        let send_fn = || async {
+            let mut socket = self.socket_w.lock().await;
+            socket
+                .send(UdpPacket {
+                    data: send_buf.freeze(),
+                    src: None,
+                    dst: target.into(),
+                })
+                .await
+        };
+
+        match self.send_timeout {
+            None => send_fn().await?,
+            Some(d) => match time::timeout(d, send_fn()).await {
                 Ok(Ok(l)) => l,
                 Ok(Err(err)) => return Err(err.into()),
                 Err(..) => return Err(io::Error::from(ErrorKind::TimedOut).into()),
             },
         };
 
-        if send_buf.len() != send_len {
-            warn!(
-                "UDP server client send {} bytes, but actually sent {} bytes",
-                send_buf.len(),
-                send_len
-            );
-        }
-
-        Ok(send_len)
+        Ok(n_sent)
     }
 
     fn decrypt_recv_buffer(
@@ -448,29 +541,33 @@ impl ProxySocket {
         recv_buf: &mut [u8],
     ) -> ProxySocketResult<(usize, Address, usize, Option<UdpSocketControlData>)> {
         // Waiting for response from server SERVER -> CLIENT
-        let recv_n = match self.recv_timeout {
-            None => self.socket.recv(recv_buf).await?,
-            Some(d) => match time::timeout(d, self.socket.recv(recv_buf)).await {
-                Ok(Ok(l)) => l,
-                Ok(Err(err)) => return Err(err.into()),
+        let pkt = match self.recv_timeout {
+            None => self.socket_r.lock().await.next().await,
+            Some(d) => match time::timeout(d, self.socket_r.lock().await.next()).await {
+                Ok(l) => l,
                 Err(..) => return Err(io::Error::from(ErrorKind::TimedOut).into()),
             },
-        };
+        }
+        .ok_or(io::Error::from(ErrorKind::UnexpectedEof))?;
 
-        let (n, addr, control) = match self.decrypt_recv_buffer(&mut recv_buf[..recv_n], self.user_manager.as_deref()) {
-            Ok(x) => x,
-            Err(err) => return Err(ProxySocketError::ProtocolError(err)),
-        };
+        // Copy data to recv_buf to decrypt and keep the original data touched
+        recv_buf[..pkt.data.len()].copy_from_slice(&pkt.data);
+
+        let (n, addr, control) =
+            match self.decrypt_recv_buffer(&mut recv_buf[..pkt.data.len()], self.user_manager.as_deref()) {
+                Ok(x) => x,
+                Err(err) => return Err(ProxySocketError::ProtocolError(err)),
+            };
 
         trace!(
             "UDP server client receive from {}, control: {:?}, packet length {} bytes, payload length {} bytes",
             addr,
             control,
-            recv_n,
+            pkt.data.len(),
             n
         );
 
-        Ok((n, addr, recv_n, control))
+        Ok((n, addr, pkt.data.len(), control))
     }
 
     /// Receive packet from Shadowsocks' UDP server
@@ -496,14 +593,20 @@ impl ProxySocket {
         recv_buf: &mut [u8],
     ) -> ProxySocketResult<(usize, SocketAddr, Address, usize, Option<UdpSocketControlData>)> {
         // Waiting for response from server SERVER -> CLIENT
-        let (recv_n, target_addr) = match self.recv_timeout {
-            None => self.socket.recv_from(recv_buf).await?,
-            Some(d) => match time::timeout(d, self.socket.recv_from(recv_buf)).await {
-                Ok(Ok(l)) => l,
-                Ok(Err(err)) => return Err(err.into()),
+        let pkt = match self.recv_timeout {
+            None => self.socket_r.lock().await.next().await,
+            Some(d) => match time::timeout(d, self.socket_r.lock().await.next()).await {
+                Ok(l) => l,
                 Err(..) => return Err(io::Error::from(ErrorKind::TimedOut).into()),
             },
-        };
+        }
+        .ok_or(io::Error::from(ErrorKind::UnexpectedEof))?;
+
+        let recv_n = pkt.data.len();
+        // Copy data to recv_buf to decrypt and keep the original data touched
+        recv_buf[..recv_n].copy_from_slice(&pkt.data);
+
+        let target_addr = pkt.src.expect("src should be present");
 
         let (n, addr, control) = match self.decrypt_recv_buffer(&mut recv_buf[..recv_n], self.user_manager.as_deref()) {
             Ok(x) => x,
@@ -541,7 +644,14 @@ impl ProxySocket {
         cx: &mut Context<'_>,
         recv_buf: &mut ReadBuf,
     ) -> Poll<ProxySocketResult<(usize, Address, usize, Option<UdpSocketControlData>)>> {
-        ready!(self.socket.poll_recv(cx, recv_buf))?;
+        let data = ready!(self
+            .socket_r
+            .try_lock()
+            .expect("no one else should be holding the lock")
+            .poll_next_unpin(cx))
+        .ok_or(io::Error::from(ErrorKind::UnexpectedEof))?;
+
+        recv_buf.put_slice(&data.data);
 
         let n_recv = recv_buf.filled().len();
 
@@ -569,7 +679,14 @@ impl ProxySocket {
         cx: &mut Context<'_>,
         recv_buf: &mut ReadBuf,
     ) -> Poll<ProxySocketResult<(usize, SocketAddr, Address, usize, Option<UdpSocketControlData>)>> {
-        let src = ready!(self.socket.poll_recv_from(cx, recv_buf))?;
+        let data = ready!(self
+            .socket_r
+            .try_lock()
+            .expect("no one else should be holding the lock")
+            .poll_next_unpin(cx))
+        .ok_or(io::Error::from(ErrorKind::UnexpectedEof))?;
+        let src = data.src.expect("src should be present");
+        recv_buf.put_slice(&data.data);
 
         let n_recv = recv_buf.filled().len();
         match self.decrypt_recv_buffer(recv_buf.filled_mut(), self.user_manager.as_deref()) {
@@ -579,13 +696,14 @@ impl ProxySocket {
     }
 
     /// poll family functions
-    pub fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<ProxySocketResult<()>> {
-        self.socket.poll_recv_ready(cx).map_err(|x| x.into())
+    pub fn poll_recv_ready(&self, _: &mut Context<'_>) -> Poll<ProxySocketResult<()>> {
+        Poll::Ready(Ok(()))
     }
 
     /// Get local addr of socket
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.socket.local_addr()
+        self.local_addr
+            .ok_or_else(|| io::Error::new(ErrorKind::Other, "local addr not available"))
     }
 
     /// Set `send` timeout, `None` will clear timeout
@@ -603,6 +721,9 @@ impl ProxySocket {
 impl AsRawFd for ProxySocket {
     /// Retrieve raw fd of the outbound socket
     fn as_raw_fd(&self) -> RawFd {
-        self.socket.as_raw_fd()
+        self.fd.unwrap_or_else(|| {
+            log::warn!("the proxy socket is an abstract socket, raw fd is not available");
+            -1
+        })
     }
 }

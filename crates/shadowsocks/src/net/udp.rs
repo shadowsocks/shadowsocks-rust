@@ -23,8 +23,9 @@ use std::{
     target_os = "freebsd"
 ))]
 use futures::future;
-use futures::ready;
-use pin_project::pin_project;
+use futures::{ready, Sink, Stream};
+
+use log::warn;
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -35,7 +36,11 @@ use pin_project::pin_project;
 use tokio::io::Interest;
 use tokio::{io::ReadBuf, net::ToSocketAddrs};
 
-use crate::{context::Context, relay::socks5::Address, ServerAddr};
+use crate::{
+    context::Context,
+    relay::{socks5::Address, udprelay::proxy_socket::UdpPacket},
+    ServerAddr,
+};
 
 use super::{
     sys::{bind_outbound_udp_socket, create_inbound_udp_socket, create_outbound_udp_socket},
@@ -85,14 +90,26 @@ fn make_mtu_error(packet_size: usize, mtu: usize) -> io::Error {
 }
 
 /// Wrappers for outbound `UdpSocket`
-#[pin_project]
 pub struct UdpSocket {
-    #[pin]
     socket: tokio::net::UdpSocket,
     mtu: Option<usize>,
+
+    send_buf: Option<UdpPacket>,
+    read_buf: Vec<u8>,
+    flushed: bool,
 }
 
 impl UdpSocket {
+    fn new(socket: tokio::net::UdpSocket, mtu: Option<usize>) -> UdpSocket {
+        UdpSocket {
+            socket,
+            mtu,
+            send_buf: None,
+            read_buf: vec![0u8; 65535],
+            flushed: true,
+        }
+    }
+
     /// Connects to shadowsocks server
     pub async fn connect_server_with_opts(
         context: &Context,
@@ -114,10 +131,7 @@ impl UdpSocket {
             }
         };
 
-        Ok(UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        Ok(UdpSocket::new(socket, opts.udp.mtu))
     }
 
     /// Connects to proxy target
@@ -141,38 +155,28 @@ impl UdpSocket {
             }
         };
 
-        Ok(UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        Ok(UdpSocket::new(socket, opts.udp.mtu))
     }
 
     /// Connects to shadowsocks server
     pub async fn connect_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
         let socket = create_outbound_udp_socket(From::from(addr), opts).await?;
         socket.connect(addr).await?;
-        Ok(UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        Ok(UdpSocket::new(socket, opts.udp.mtu))
     }
 
     /// Binds to a specific address with opts
     pub async fn connect_any_with_opts<AF: Into<AddrFamily>>(af: AF, opts: &ConnectOpts) -> io::Result<UdpSocket> {
         create_outbound_udp_socket(af.into(), opts)
             .await
-            .map(|socket| UdpSocket {
-                socket,
-                mtu: opts.udp.mtu,
-            })
+            .map(|socket| UdpSocket::new(socket, opts.udp.mtu))
     }
 
     /// Binds to a specific address with opts as an outbound socket
     pub async fn bind_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
-        bind_outbound_udp_socket(addr, opts).await.map(|socket| UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        bind_outbound_udp_socket(addr, opts)
+            .await
+            .map(|socket| UdpSocket::new(socket, opts.udp.mtu))
     }
 
     /// Binds to a specific address (inbound)
@@ -184,10 +188,7 @@ impl UdpSocket {
     /// Binds to a specific address (inbound)
     pub async fn listen_with_opts(addr: &SocketAddr, opts: AcceptOpts) -> io::Result<UdpSocket> {
         let socket = create_inbound_udp_socket(addr, opts.ipv6_only).await?;
-        Ok(UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        Ok(UdpSocket::new(socket, opts.udp.mtu))
     }
 
     /// Wrapper of `UdpSocket::poll_send`
@@ -395,12 +396,97 @@ impl DerefMut for UdpSocket {
 
 impl From<tokio::net::UdpSocket> for UdpSocket {
     fn from(socket: tokio::net::UdpSocket) -> Self {
-        UdpSocket { socket, mtu: None }
+        UdpSocket::new(socket, None)
     }
 }
 
 impl From<UdpSocket> for tokio::net::UdpSocket {
     fn from(s: UdpSocket) -> tokio::net::UdpSocket {
         s.socket
+    }
+}
+
+impl Sink<UdpPacket> for UdpSocket {
+    type Error = io::Error;
+
+    fn poll_ready(self: std::pin::Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
+        let pin = self.get_mut();
+        pin.poll_send_ready(cx)
+    }
+
+    fn start_send(self: std::pin::Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
+        let pin = self.get_mut();
+        pin.send_buf = Some(item);
+        pin.flushed = false;
+        Ok(())
+    }
+
+    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
+        if self.flushed {
+            return Poll::Ready(Ok(()));
+        }
+
+        let Self {
+            ref mut socket,
+            send_buf: ref mut buff,
+            ref mut flushed,
+            ..
+        } = *self;
+
+        if let Some(ref pkt) = buff {
+            match pkt.dst {
+                Some(addr) => socket.poll_send_to(cx, &pkt.data, addr).map_ok(|_| {
+                    *flushed = true;
+                    *buff = None;
+                }),
+                None => socket.poll_send(cx, &pkt.data).map_ok(|_| {
+                    *flushed = true;
+                    *buff = None;
+                }),
+            }
+        } else {
+            warn!("UdpSocket::poll_flush called before start_send");
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
+        ready!(self.poll_flush(cx))?;
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl Stream for UdpSocket {
+    type Item = UdpPacket;
+
+    fn poll_next(mut self: std::pin::Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Option<Self::Item>> {
+        let Self {
+            ref mut read_buf,
+            ref socket,
+            ..
+        } = *self;
+
+        match socket.poll_recv_ready(cx) {
+            Poll::Ready(_) => {}
+            Poll::Pending => return Poll::Pending,
+        }
+
+        let mut buf = ReadBuf::new(read_buf);
+
+        socket.poll_recv_from(cx, &mut buf).map(|res| {
+            res.map(|src| UdpPacket {
+                data: buf.filled().to_vec().into(),
+                src: Some(src),
+                dst: None,
+            })
+            .ok()
+        })
+    }
+}
+
+#[cfg(unix)]
+impl std::os::fd::AsRawFd for UdpSocket {
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        self.socket.as_raw_fd()
     }
 }
