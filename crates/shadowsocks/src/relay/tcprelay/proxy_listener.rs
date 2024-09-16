@@ -17,6 +17,7 @@ use crate::{
 };
 
 /// A TCP listener for accepting shadowsocks' client connection
+#[derive(Debug)]
 pub struct ProxyListener {
     listener: TcpListener,
     method: CipherKind,

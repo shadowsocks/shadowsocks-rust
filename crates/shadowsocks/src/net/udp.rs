@@ -85,6 +85,7 @@ fn make_mtu_error(packet_size: usize, mtu: usize) -> io::Error {
 }
 
 /// Wrappers for outbound `UdpSocket`
+#[derive(Debug)]
 #[pin_project]
 pub struct UdpSocket {
     #[pin]

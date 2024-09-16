@@ -80,6 +80,7 @@ impl From<ProtocolError> for io::Error {
     }
 }
 
+#[derive(Debug)]
 enum DecryptReadState {
     WaitSalt { key: Bytes },
     ReadLength,
@@ -320,6 +321,7 @@ impl DecryptedReader {
     }
 }
 
+#[derive(Debug)]
 enum EncryptWriteState {
     AssemblePacket,
     Writing { pos: usize },

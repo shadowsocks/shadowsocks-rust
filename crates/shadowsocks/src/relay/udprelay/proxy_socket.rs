@@ -69,6 +69,7 @@ impl From<ProxySocketError> for io::Error {
 pub type ProxySocketResult<T> = Result<T, ProxySocketError>;
 
 /// UDP client for communicating with ShadowSocks' server
+#[derive(Debug)]
 pub struct ProxySocket {
     socket_type: UdpSocketType,
     socket: ShadowUdpSocket,

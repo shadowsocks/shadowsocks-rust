@@ -66,6 +66,7 @@ impl Aead2022TcpRequestHeader {
     }
 }
 
+#[derive(Debug)]
 pub struct Aead2022TcpRequestHeaderRef<'a> {
     pub addr: &'a Address,
     pub padding_size: u16,

@@ -18,6 +18,7 @@ pub mod v1;
 #[cfg(feature = "aead-cipher-2022")]
 pub mod v2;
 
+#[derive(Debug)]
 pub enum TcpRequestHeader {
     Stream(StreamTcpRequestHeader),
     #[cfg(feature = "aead-cipher-2022")]
@@ -74,6 +75,7 @@ impl TcpRequestHeader {
     }
 }
 
+#[derive(Debug)]
 pub enum TcpRequestHeaderRef<'a> {
     Stream(StreamTcpRequestHeaderRef<'a>),
     #[cfg(feature = "aead-cipher-2022")]
