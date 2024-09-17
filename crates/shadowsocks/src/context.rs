@@ -13,6 +13,7 @@ use crate::{
 };
 
 /// Service context
+#[derive(Debug)]
 pub struct Context {
     // Protector against replay attack
     // The actual replay detection behavior is implemented in ReplayProtector

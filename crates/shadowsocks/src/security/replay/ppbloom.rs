@@ -27,6 +27,7 @@ const BF_ERROR_RATE_FOR_CLIENT: f64 = 1e-15;
 //
 // It contains 2 bloom filters and each one holds 1/2 entries.
 // Use them as a ring buffer.
+#[derive(Debug)]
 pub struct PingPongBloom {
     blooms: [Bloom<[u8]>; 2],
     bloom_count: [usize; 2],

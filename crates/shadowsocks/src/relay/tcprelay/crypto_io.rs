@@ -1,7 +1,7 @@
 //! IO facilities for TCP relay
 
 use std::{
-    io,
+    fmt, io,
     marker::Unpin,
     pin::Pin,
     sync::Arc,
@@ -311,6 +311,15 @@ pub struct CryptoStream<S> {
     enc: EncryptedWriter,
     method: CipherKind,
     has_handshaked: bool,
+}
+
+impl<S> fmt::Debug for CryptoStream<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CryptoStream")
+            .field("method", &self.method)
+            .field("has_handshaked", &self.has_handshaked)
+            .finish()
+    }
 }
 
 impl<S> CryptoStream<S> {

@@ -121,6 +121,7 @@ impl AsyncWrite for TcpStream {
 }
 
 /// `TcpListener` for accepting inbound connections
+#[derive(Debug)]
 pub struct TcpListener {
     inner: TokioTcpListener,
     accept_opts: AcceptOpts,
