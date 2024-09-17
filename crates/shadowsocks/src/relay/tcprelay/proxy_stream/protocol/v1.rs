@@ -7,6 +7,7 @@ use tokio::io::AsyncRead;
 
 use crate::relay::socks5::Address;
 
+#[derive(Debug)]
 pub struct StreamTcpRequestHeader {
     pub addr: Address,
 }
@@ -27,6 +28,7 @@ impl StreamTcpRequestHeader {
     }
 }
 
+#[derive(Debug)]
 pub struct StreamTcpRequestHeaderRef<'a> {
     pub addr: &'a Address,
 }

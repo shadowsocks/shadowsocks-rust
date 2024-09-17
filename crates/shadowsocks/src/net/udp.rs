@@ -90,6 +90,7 @@ fn make_mtu_error(packet_size: usize, mtu: usize) -> io::Error {
 }
 
 /// Wrappers for outbound `UdpSocket`
+#[derive(Debug)]
 pub struct UdpSocket {
     socket: tokio::net::UdpSocket,
     mtu: Option<usize>,

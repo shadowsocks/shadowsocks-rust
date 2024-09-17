@@ -399,9 +399,9 @@ dependencies = [
 
 [[package]]
 name = "bson"
-version = "2.11.0"
+version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8a88e82b9106923b5c4d6edfca9e7db958d4e98a478ec115022e81b9b38e2c8"
+checksum = "80cf6f7806607bd58ad490bab34bf60e25455ea4aaf995f897a13324d41ea580"
 dependencies = [
  "ahash",
  "base64 0.13.1",
@@ -457,18 +457,18 @@ checksum = "8318a53db07bb3f8dca91a600466bdb3f2eaadeedfdbcf02e1accbad9271ba50"
 
 [[package]]
 name = "c2rust-bitfields"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b43c3f07ab0ef604fa6f595aa46ec2f8a22172c975e186f6f5bf9829a3b72c41"
+checksum = "367e5d1b30f28be590b6b3868da1578361d29d9bfac516d22f497d28ed7c9055"
 dependencies = [
  "c2rust-bitfields-derive",
 ]
 
 [[package]]
 name = "c2rust-bitfields-derive"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3cbc102e2597c9744c8bd8c15915d554300601c91a079430d309816b0912545"
+checksum = "a279db9c50c4024eeca1a763b6e0f033848ce74e83e47454bcf8a8a98f7b0b56"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4001,9 +4001,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tun2"
-version = "3.1.2"
+version = "3.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2104af96dec2277bc9727a05846b0566b5f94c00005e701c3e861cebc45e095c"
+checksum = "af810bc5d0c82f056aabd0d7448ba3ccb8bb586f2d5cb95692111ee67ccbccda"
 dependencies = [
  "bytes",
  "cfg-if",
@@ -4011,7 +4011,6 @@ dependencies = [
  "futures-core",
  "ipnet",
  "libc",
- "libloading",
  "log",
  "nix",
  "thiserror",
@@ -4522,9 +4521,9 @@ dependencies = [
 
 [[package]]
 name = "wintun-bindings"
-version = "0.7.5"
+version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "783cff3c8f19b31b6ba858e474c2ff34f4fa19e86d30fd98b8385abd7b45c6d1"
+checksum = "a6f572ad34e725f31baeea033439ef52837fdc544099958775fd6299dadb27c7"
 dependencies = [
  "blocking",
  "c2rust-bitfields",

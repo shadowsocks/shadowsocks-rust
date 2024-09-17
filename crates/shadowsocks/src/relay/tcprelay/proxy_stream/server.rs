@@ -25,6 +25,7 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 enum ProxyServerStreamWriteState {
     #[cfg(feature = "aead-cipher-2022")]
     PrepareHeader(Option<std::task::Waker>),
@@ -32,6 +33,7 @@ enum ProxyServerStreamWriteState {
 }
 
 /// A stream for communicating with shadowsocks' proxy client
+#[derive(Debug)]
 #[pin_project]
 pub struct ProxyServerStream<S> {
     #[pin]

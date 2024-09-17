@@ -30,12 +30,14 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 enum ProxyClientStreamWriteState {
     Connect(Address),
     Connecting(BytesMut),
     Connected,
 }
 
+#[derive(Debug)]
 enum ProxyClientStreamReadState {
     #[cfg(feature = "aead-cipher-2022")]
     CheckRequestNonce,
@@ -43,6 +45,7 @@ enum ProxyClientStreamReadState {
 }
 
 /// A stream for sending / receiving data stream from remote server via shadowsocks' proxy server
+#[derive(Debug)]
 #[pin_project]
 pub struct ProxyClientStream<S> {
     #[pin]

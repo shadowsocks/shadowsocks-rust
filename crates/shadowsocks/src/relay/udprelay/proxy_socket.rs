@@ -95,6 +95,7 @@ pub type UdpIo = Box<dyn OutboundDatagram<UdpPacket>>;
 /// UDP client for communicating with ShadowSocks' server
 /// Thread safety: users of `ProxySocket` should not share it across threads
 // TODO: unless a proper spinlock on `.socket` is implemented
+#[derive(Debug)]
 pub struct ProxySocket {
     socket_type: UdpSocketType,
     socket_w: tokio::sync::Mutex<SplitSink<UdpIo, UdpPacket>>,
