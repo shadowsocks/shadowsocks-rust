@@ -20,5 +20,10 @@ cfg_if! {
         #[allow(dead_code, non_upper_case_globals, non_snake_case, non_camel_case_types)]
         #[allow(clippy::useless_transmute, clippy::too_many_arguments, clippy::unnecessary_cast)]
         mod pfvar;
+    } else if #[cfg(target_os = "openbsd")] {
+        #[path = "pfvar_bindgen_openbsd.rs"]
+        #[allow(dead_code, non_upper_case_globals, non_snake_case, non_camel_case_types)]
+        #[allow(clippy::useless_transmute, clippy::too_many_arguments, clippy::unnecessary_cast)]
+        mod pfvar;
     }
 }

@@ -8,8 +8,11 @@ cfg_if! {
         mod macos;
         pub use self::macos::*;
     } else if #[cfg(any(target_os = "freebsd"))] {
-        mod bsd;
-        pub use self::bsd::*;
+        mod freebsd;
+        pub use self::freebsd::*;
+    } else if #[cfg(target_os = "openbsd")] {
+        mod openbsd;
+        pub use self::openbsd::*;
     } else {
         mod not_supported;
         pub use self::not_supported::*;

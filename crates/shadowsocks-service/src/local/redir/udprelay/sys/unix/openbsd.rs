@@ -20,6 +20,8 @@ use crate::{
         sys::set_ipv6_only,
     },
 };
+const IP_RECVDSTPORT: i32 = 33; //Temporary workaround until libc supports this
+const IPV6_RECVDSTPORT: i32 = 64; //Temporary workaround until libc supports this
 
 pub struct UdpRedirSocket {
     io: AsyncFd<UdpSocket>,
@@ -159,24 +161,17 @@ impl UdpSocketRedir for UdpRedirSocket {
     }
 }
 
-#[cfg(target_os = "freebsd")]
-fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
+fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
     let fd = socket.as_raw_fd();
 
     let enable: libc::c_int = 1;
 
-    // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
-    let opt = match level {
-        libc::IPPROTO_IP => libc::IP_BINDANY,
-        libc::IPPROTO_IPV6 => libc::IPV6_BINDANY,
-        _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
-    };
-
+    // https://man.openbsd.org/getsockopt.2
     unsafe {
         let ret = libc::setsockopt(
             fd,
-            level,
-            opt,
+            libc::SOL_SOCKET,
+            libc::SO_BINDANY,
             &enable as *const _ as *const _,
             mem::size_of_val(&enable) as libc::socklen_t,
         );
@@ -187,40 +182,16 @@ fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
 
     Ok(())
 }
-
-// #[cfg(target_os = "openbsd")]
-// fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
-//     let fd = socket.as_raw_fd();
-//
-//     let enable: libc::c_int = 1;
-//
-//     // https://man.openbsd.org/getsockopt.2
-//     unsafe {
-//         let ret = libc::setsockopt(
-//             fd,
-//             libc::SOL_SOCKET,
-//             libc::SO_BINDANY,
-//             &enable as *const _ as *const _,
-//             mem::size_of_val(&enable) as libc::socklen_t,
-//         );
-//         if ret != 0 {
-//             return Err(Error::last_os_error());
-//         }
-//     }
-//
-//     Ok(())
-// }
 
 fn set_ip_origdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
-    // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
-
+    // https://man.openbsd.org/pf.conf
     let fd = socket.as_raw_fd();
 
     let enable: libc::c_int = 1;
 
     let opt = match level {
-        libc::IPPROTO_IP => libc::IP_RECVORIGDSTADDR,
-        libc::IPPROTO_IPV6 => libc::IPV6_RECVORIGDSTADDR,
+        libc::IPPROTO_IP => libc::IP_RECVDSTADDR,
+        libc::IPPROTO_IPV6 => libc::IPV6_RECVPKTINFO,
         _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
     };
 
@@ -237,40 +208,23 @@ fn set_ip_origdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
         }
     }
 
-    Ok(())
-}
-
-fn set_disable_ip_fragmentation(level: libc::c_int, socket: &Socket) -> io::Result<()> {
-    // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
-
-    // sys/netinet/in.h
-    // const IP_DONTFRAG: libc::c_int = 67; // don't fragment packet
-    //
-    // sys/netinet6/in6.h
-    // const IPV6_DONTFRAG: libc::c_int = 62; // bool; disable IPv6 fragmentation
-
-    let enable: libc::c_int = 1;
-
-    let opt = match level {
-        libc::IPPROTO_IP => libc::IP_DONTFRAG,
-        libc::IPPROTO_IPV6 => libc::IPV6_DONTFRAG,
+    let opt2 = match level {
+        libc::IPPROTO_IP => IP_RECVDSTPORT,
+        libc::IPPROTO_IPV6 => IPV6_RECVDSTPORT,
         _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
     };
-
     unsafe {
         let ret = libc::setsockopt(
-            socket.as_raw_fd(),
+            fd,
             level,
-            opt,
+            opt2,
             &enable as *const _ as *const _,
             mem::size_of_val(&enable) as libc::socklen_t,
         );
-
-        if ret < 0 {
-            return Err(io::Error::last_os_error());
+        if ret != 0 {
+            return Err(Error::last_os_error());
         }
     }
-
     Ok(())
 }
 
@@ -287,48 +241,77 @@ fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> 
     // 2. set ORIGDSTADDR for retrieving original destination address
     set_ip_origdstaddr(level, socket)?;
 
-    // 3. disable IP fragmentation
-    set_disable_ip_fragmentation(level, socket)?;
-
     Ok(())
 }
 
 fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
-    // https://www.freebsd.org/cgi/man.cgi?ip(4)
-    //
-    // Called `recvmsg` with `IP_ORIGDSTADDR` set
-
     unsafe {
         let (_, addr) = SockAddr::try_init(|dst_addr, dst_addr_len| {
             let mut cmsg: *mut libc::cmsghdr = libc::CMSG_FIRSTHDR(msg);
+            let mut addr_or_port_received = false; //The address should come first and then the port, but we use a flag just in case. https://github.com/openbsd/src/blob/3d310523b415eeee9db46a5b67eecf8f9fdd5c8f/sys/netinet/udp_usrreq.c#L662-L687
             while !cmsg.is_null() {
                 let rcmsg = &*cmsg;
                 match (rcmsg.cmsg_level, rcmsg.cmsg_type) {
-                    (libc::IPPROTO_IP, libc::IP_ORIGDSTADDR) => {
+                    (libc::IPPROTO_IP, libc::IP_RECVDSTADDR) => {
+                        let toaddr_in = &mut *(dst_addr as *mut libc::sockaddr_in);
                         ptr::copy_nonoverlapping(
                             libc::CMSG_DATA(cmsg),
-                            dst_addr as *mut _,
-                            mem::size_of::<libc::sockaddr_in>(),
+                            &(*toaddr_in).sin_addr as *const _ as *mut _,
+                            mem::size_of::<libc::in_addr>(),
                         );
+                        toaddr_in.sin_family = libc::AF_INET as u8;
                         *dst_addr_len = mem::size_of::<libc::sockaddr_in>() as libc::socklen_t;
-
-                        return Ok(());
+                        if addr_or_port_received {
+                            return Ok(());
+                        } else {
+                            addr_or_port_received = true
+                        }
                     }
-                    (libc::IPPROTO_IPV6, libc::IPV6_ORIGDSTADDR) => {
+                    (libc::IPPROTO_IP, IP_RECVDSTPORT) => {
+                        let toaddr_in = &mut *(dst_addr as *mut libc::sockaddr_in);
                         ptr::copy_nonoverlapping(
                             libc::CMSG_DATA(cmsg),
-                            dst_addr as *mut _,
-                            mem::size_of::<libc::sockaddr_in6>(),
+                            &(*toaddr_in).sin_port as *const _ as *mut _,
+                            mem::size_of::<libc::in_port_t>(),
                         );
+                        if addr_or_port_received {
+                            return Ok(());
+                        } else {
+                            addr_or_port_received = true
+                        }
+                    }
+                    (libc::IPPROTO_IPV6, libc::IPV6_PKTINFO) => {
+                        let toaddr_in = &mut *(dst_addr as *mut libc::sockaddr_in6);
+                        ptr::copy_nonoverlapping(
+                            libc::CMSG_DATA(cmsg),
+                            &(*toaddr_in).sin6_addr as *const _ as *mut _,
+                            mem::size_of::<libc::in6_addr>(),
+                        );
+                        toaddr_in.sin6_family = libc::AF_INET6 as u8;
                         *dst_addr_len = mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t;
-
-                        return Ok(());
+                        if addr_or_port_received {
+                            return Ok(());
+                        } else {
+                            addr_or_port_received = true
+                        }
+                    }
+                    (libc::IPPROTO_IPV6, IPV6_RECVDSTPORT) => {
+                        let toaddr_in = &mut *(dst_addr as *mut libc::sockaddr_in6);
+                        ptr::copy_nonoverlapping(
+                            libc::CMSG_DATA(cmsg),
+                            &(*toaddr_in).sin6_port as *const _ as *mut _,
+                            mem::size_of::<libc::in_port_t>(),
+                        );
+                        if addr_or_port_received {
+                            return Ok(());
+                        } else {
+                            addr_or_port_received = true
+                        }
                     }
                     _ => {}
                 }
                 cmsg = libc::CMSG_NXTHDR(msg, cmsg);
             }
-
             let err = Error::new(ErrorKind::InvalidData, "missing destination address in msghdr");
             Err(err)
         })?;

@@ -6,7 +6,8 @@ cfg_if! {
         pub use self::linux::*;
     } else if #[cfg(any(target_os = "macos",
                         target_os = "ios",
-                        target_os = "freebsd"))] {
+                        target_os = "freebsd",
+                        target_os = "openbsd"))] {
         mod bsd;
         pub use self::bsd::*;
     }
