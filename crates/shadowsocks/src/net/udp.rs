@@ -23,9 +23,8 @@ use std::{
     target_os = "freebsd"
 ))]
 use futures::future;
-use futures::{ready, Sink, Stream};
+use futures::ready;
 
-use log::warn;
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -36,11 +35,7 @@ use log::warn;
 use tokio::io::Interest;
 use tokio::{io::ReadBuf, net::ToSocketAddrs};
 
-use crate::{
-    context::Context,
-    relay::{socks5::Address, udprelay::proxy_socket::UdpPacket},
-    ServerAddr,
-};
+use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
 use super::{
     sys::{bind_outbound_udp_socket, create_inbound_udp_socket, create_outbound_udp_socket},
@@ -94,21 +89,11 @@ fn make_mtu_error(packet_size: usize, mtu: usize) -> io::Error {
 pub struct UdpSocket {
     socket: tokio::net::UdpSocket,
     mtu: Option<usize>,
-
-    send_buf: Option<UdpPacket>,
-    read_buf: Vec<u8>,
-    flushed: bool,
 }
 
 impl UdpSocket {
     fn new(socket: tokio::net::UdpSocket, mtu: Option<usize>) -> UdpSocket {
-        UdpSocket {
-            socket,
-            mtu,
-            send_buf: None,
-            read_buf: vec![0u8; 65535],
-            flushed: true,
-        }
+        UdpSocket { socket, mtu }
     }
 
     /// Connects to shadowsocks server
@@ -229,6 +214,10 @@ impl UdpSocket {
         self.socket.poll_send_to(cx, buf, target)
     }
 
+    pub fn poll_send_ready(&self, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
+        self.socket.poll_send_ready(cx)
+    }
+
     /// Wrapper of `UdpSocket::send_to`
     #[inline]
     pub async fn send_to<A: ToSocketAddrs>(&self, buf: &[u8], target: A) -> io::Result<usize> {
@@ -282,6 +271,11 @@ impl UdpSocket {
         }
 
         Ok(addr).into()
+    }
+
+    #[inline]
+    pub fn poll_recv_ready(&self, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
+        self.socket.poll_recv_ready(cx)
     }
 
     /// Wrapper of `UdpSocket::recv`
@@ -404,84 +398,6 @@ impl From<tokio::net::UdpSocket> for UdpSocket {
 impl From<UdpSocket> for tokio::net::UdpSocket {
     fn from(s: UdpSocket) -> tokio::net::UdpSocket {
         s.socket
-    }
-}
-
-impl Sink<UdpPacket> for UdpSocket {
-    type Error = io::Error;
-
-    fn poll_ready(self: std::pin::Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
-        let pin = self.get_mut();
-        pin.poll_send_ready(cx)
-    }
-
-    fn start_send(self: std::pin::Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
-        let pin = self.get_mut();
-        pin.send_buf = Some(item);
-        pin.flushed = false;
-        Ok(())
-    }
-
-    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
-        if self.flushed {
-            return Poll::Ready(Ok(()));
-        }
-
-        let Self {
-            ref mut socket,
-            send_buf: ref mut buff,
-            ref mut flushed,
-            ..
-        } = *self;
-
-        if let Some(ref pkt) = buff {
-            match pkt.dst {
-                Some(addr) => socket.poll_send_to(cx, &pkt.data, addr).map_ok(|_| {
-                    *flushed = true;
-                    *buff = None;
-                }),
-                None => socket.poll_send(cx, &pkt.data).map_ok(|_| {
-                    *flushed = true;
-                    *buff = None;
-                }),
-            }
-        } else {
-            warn!("UdpSocket::poll_flush called before start_send");
-            Poll::Ready(Ok(()))
-        }
-    }
-
-    fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
-        ready!(self.poll_flush(cx))?;
-        Poll::Ready(Ok(()))
-    }
-}
-
-impl Stream for UdpSocket {
-    type Item = UdpPacket;
-
-    fn poll_next(mut self: std::pin::Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Option<Self::Item>> {
-        let Self {
-            ref mut read_buf,
-            ref socket,
-            ..
-        } = *self;
-
-        match socket.poll_recv_ready(cx) {
-            Poll::Ready(_) => {}
-            Poll::Pending => return Poll::Pending,
-        }
-
-        let mut buf = ReadBuf::new(read_buf);
-
-        socket.poll_recv_from(cx, &mut buf).map(|res| {
-            res.map(|src| UdpPacket {
-                data: buf.filled().to_vec().into(),
-                src: Some(src),
-                dst: None,
-            })
-            .ok()
-        })
     }
 }
 
