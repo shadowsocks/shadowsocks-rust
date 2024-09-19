@@ -1,7 +1,6 @@
 //! UDP socket for communicating with shadowsocks' proxy server
 
 use std::{
-    fmt::Debug,
     io::{self, ErrorKind},
     net::SocketAddr,
     sync::Arc,
@@ -79,10 +78,6 @@ pub type ProxySocketResult<T> = Result<T, ProxySocketError>;
 pub struct ProxySocket {
     socket_type: UdpSocketType,
     io: Box<dyn DatagramTransport>,
-    // only used for server type socket to listen on
-    local_addr: Option<SocketAddr>,
-    #[cfg(unix)]
-    fd: Option<RawFd>,
     method: CipherKind,
     key: Box<[u8]>,
     send_timeout: Option<Duration>,
@@ -139,18 +134,9 @@ impl ProxySocket {
         let method = svr_cfg.method();
 
         // NOTE: svr_cfg.timeout() is not for this socket, but for associations.
-
-        let socket: ShadowUdpSocket = socket.into();
-        let local_addr = socket.local_addr().ok();
-        #[cfg(unix)]
-        let fd = socket.as_raw_fd();
-
         ProxySocket {
             socket_type,
-            io: Box::new(socket),
-            local_addr,
-            #[cfg(unix)]
-            fd: Some(fd),
+            io: Box::new(socket.into()),
             method,
             key,
             send_timeout: None,
@@ -171,9 +157,7 @@ impl ProxySocket {
         socket_type: UdpSocketType,
         context: SharedContext,
         svr_cfg: &ServerConfig,
-        io: impl DatagramTransport + 'static,
-        local_addr: Option<SocketAddr>,
-        #[cfg(unix)] fd: Option<RawFd>,
+        io: Box<dyn DatagramTransport>,
     ) -> ProxySocket {
         let key = svr_cfg.key().to_vec().into_boxed_slice();
         let method = svr_cfg.method();
@@ -182,10 +166,7 @@ impl ProxySocket {
 
         ProxySocket {
             socket_type,
-            io: Box::new(io),
-            local_addr,
-            #[cfg(unix)]
-            fd,
+            io,
             method,
             key,
             send_timeout: None,
@@ -293,11 +274,9 @@ impl ProxySocket {
             send_buf.len()
         );
 
-        let send_fn = || async { self.io.send(&send_buf).await };
-
         let send_len = match self.send_timeout {
-            None => send_fn().await?,
-            Some(d) => match time::timeout(d, send_fn()).await {
+            None => self.io.send(&send_buf).await?,
+            Some(d) => match time::timeout(d, self.io.send(&send_buf)).await {
                 Ok(Ok(l)) => l,
                 Ok(Err(err)) => return Err(err.into()),
                 Err(..) => return Err(io::Error::from(ErrorKind::TimedOut).into()),
@@ -348,11 +327,11 @@ impl ProxySocket {
             send_buf.len()
         );
 
-        let n_sent_buf = send_buf.len();
+        let n_send_buf = send_buf.len();
 
         match self.io.poll_send(cx, &send_buf).map_err(|x| x.into()) {
             Poll::Ready(Ok(l)) => {
-                if l == n_sent_buf {
+                if l == n_send_buf {
                     Poll::Ready(Ok(payload.len()))
                 } else {
                     Poll::Ready(Err(io::Error::from(ErrorKind::WriteZero).into()))
@@ -447,11 +426,9 @@ impl ProxySocket {
             send_buf.len()
         );
 
-        let send_fn = || async { self.io.send_to(&send_buf, target).await };
-
         let send_len = match self.send_timeout {
-            None => send_fn().await?,
-            Some(d) => match time::timeout(d, send_fn()).await {
+            None => self.io.send_to(&send_buf, target).await?,
+            Some(d) => match time::timeout(d, self.io.send_to(&send_buf, target)).await {
                 Ok(Ok(l)) => l,
                 Ok(Err(err)) => return Err(err.into()),
                 Err(..) => return Err(io::Error::from(ErrorKind::TimedOut).into()),
@@ -551,7 +528,7 @@ impl ProxySocket {
         let (recv_n, target_addr) = match self.recv_timeout {
             None => self.io.recv_from(recv_buf).await?,
             Some(d) => match time::timeout(d, self.io.recv_from(recv_buf)).await {
-                Ok(Ok((l, sa))) => (l, sa),
+                Ok(Ok(l)) => l,
                 Ok(Err(err)) => return Err(err.into()),
                 Err(..) => return Err(io::Error::from(ErrorKind::TimedOut).into()),
             },
@@ -637,8 +614,7 @@ impl ProxySocket {
 
     /// Get local addr of socket
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.local_addr
-            .ok_or_else(|| io::Error::new(ErrorKind::Other, "local addr not available"))
+        self.io.local_addr()
     }
 
     /// Set `send` timeout, `None` will clear timeout
@@ -656,9 +632,6 @@ impl ProxySocket {
 impl AsRawFd for ProxySocket {
     /// Retrieve raw fd of the outbound socket
     fn as_raw_fd(&self) -> RawFd {
-        self.fd.unwrap_or_else(|| {
-            log::warn!("the proxy socket is an abstract socket, raw fd is not available");
-            -1
-        })
+        self.io.as_raw_fd()
     }
 }

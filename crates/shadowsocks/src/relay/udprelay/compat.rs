@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use std::{
     io::Result,
     net::SocketAddr,
+    ops::Deref,
     task::{Context, Poll},
 };
 use tokio::io::ReadBuf;
@@ -24,6 +25,11 @@ pub trait DatagramTransport: Send + Sync + std::fmt::Debug {
     fn poll_send(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>>;
     fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<Result<usize>>;
     fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<Result<()>>;
+
+    fn local_addr(&self) -> Result<SocketAddr>;
+
+    #[cfg(unix)]
+    fn as_raw_fd(&self) -> std::os::fd::RawFd;
 }
 
 #[async_trait]
@@ -53,7 +59,7 @@ impl DatagramTransport for UdpSocket {
     }
 
     fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<Result<()>> {
-        UdpSocket::poll_recv_ready(self, cx)
+        self.deref().poll_recv_ready(cx)
     }
 
     fn poll_send(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>> {
@@ -65,6 +71,18 @@ impl DatagramTransport for UdpSocket {
     }
 
     fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<Result<()>> {
-        UdpSocket::poll_send_ready(self, cx)
+        self.deref().poll_send_ready(cx)
+    }
+
+    fn local_addr(&self) -> Result<SocketAddr> {
+        self.deref().local_addr()
+    }
+
+    #[cfg(unix)]
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        use std::ops::Deref;
+        use std::os::fd::AsRawFd;
+
+        self.deref().as_raw_fd()
     }
 }
