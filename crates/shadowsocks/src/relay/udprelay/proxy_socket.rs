@@ -72,8 +72,6 @@ impl From<ProxySocketError> for io::Error {
 pub type ProxySocketResult<T> = Result<T, ProxySocketError>;
 
 /// UDP client for communicating with ShadowSocks' server
-/// Thread safety: users of `ProxySocket` should not share it across threads
-// TODO: unless a proper spinlock on `.socket` is implemented
 #[derive(Debug)]
 pub struct ProxySocket {
     socket_type: UdpSocketType,
