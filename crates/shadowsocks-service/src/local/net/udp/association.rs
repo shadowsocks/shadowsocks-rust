@@ -217,7 +217,7 @@ where
     peer_addr: SocketAddr,
     bypassed_ipv4_socket: Option<ShadowUdpSocket>,
     bypassed_ipv6_socket: Option<ShadowUdpSocket>,
-    proxied_socket: Option<MonProxySocket>,
+    proxied_socket: Option<MonProxySocket<ShadowUdpSocket>>,
     keepalive_tx: mpsc::Sender<SocketAddr>,
     keepalive_flag: bool,
     balancer: PingBalancer,
@@ -409,7 +409,7 @@ where
 
         #[inline]
         async fn receive_from_proxied_opt(
-            socket: &Option<MonProxySocket>,
+            socket: &Option<MonProxySocket<ShadowUdpSocket>>,
             buf: &mut Vec<u8>,
         ) -> io::Result<(usize, Address, Option<UdpSocketControlData>)> {
             match *socket {

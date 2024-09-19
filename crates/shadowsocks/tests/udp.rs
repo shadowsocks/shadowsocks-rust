@@ -8,6 +8,7 @@ use shadowsocks::{
     config::{ServerConfig, ServerType},
     context::{Context, SharedContext},
     crypto::CipherKind,
+    net::UdpSocket as ShadowUdpSocket,
     relay::{socks5::Address, udprelay::ProxySocket},
 };
 
@@ -15,7 +16,7 @@ async fn handle_udp_server_client(
     peer_addr: SocketAddr,
     remote_addr: Address,
     payload: &[u8],
-    socket: &ProxySocket,
+    socket: &ProxySocket<ShadowUdpSocket>,
 ) -> io::Result<()> {
     let remote_socket = UdpSocket::bind("0.0.0.0:0").await?;
 

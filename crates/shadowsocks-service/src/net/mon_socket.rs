@@ -3,24 +3,44 @@
 use std::{io, net::SocketAddr, sync::Arc};
 
 use shadowsocks::{
-    relay::{socks5::Address, udprelay::options::UdpSocketControlData},
+    relay::{
+        socks5::Address,
+        udprelay::{options::UdpSocketControlData, DatagramTransport},
+    },
     ProxySocket,
 };
 
 use super::flow::FlowStat;
 
 /// Monitored `ProxySocket`
-pub struct MonProxySocket {
-    socket: ProxySocket,
+pub struct MonProxySocket<S> {
+    socket: ProxySocket<S>,
     flow_stat: Arc<FlowStat>,
 }
 
-impl MonProxySocket {
+impl<S> MonProxySocket<S> {
     /// Create a new socket with flow monitor
-    pub fn from_socket(socket: ProxySocket, flow_stat: Arc<FlowStat>) -> MonProxySocket {
+    pub fn from_socket(socket: ProxySocket<S>, flow_stat: Arc<FlowStat>) -> MonProxySocket<S> {
         MonProxySocket { socket, flow_stat }
     }
 
+    /// Get the underlying `ProxySocket<S>` immutable reference
+    #[inline]
+    pub fn get_ref(&self) -> &ProxySocket<S> {
+        &self.socket
+    }
+
+    /// Get the flow statistic data
+    #[inline]
+    pub fn flow_stat(&self) -> &FlowStat {
+        &self.flow_stat
+    }
+}
+
+impl<S> MonProxySocket<S>
+where
+    S: DatagramTransport,
+{
     /// Send a UDP packet to addr through proxy
     #[inline]
     pub async fn send(&self, addr: &Address, payload: &[u8]) -> io::Result<()> {
@@ -124,15 +144,5 @@ impl MonProxySocket {
         self.flow_stat.incr_rx(recv_n as u64);
 
         Ok((n, peer_addr, addr, control))
-    }
-
-    #[inline]
-    pub fn get_ref(&self) -> &ProxySocket {
-        &self.socket
-    }
-
-    #[inline]
-    pub fn flow_stat(&self) -> &FlowStat {
-        &self.flow_stat
     }
 }

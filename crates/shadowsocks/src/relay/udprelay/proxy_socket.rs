@@ -23,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    compat::DatagramTransport,
+    compat::{DatagramTransport, DatagramTransportExt},
     crypto_io::{
         decrypt_client_payload, decrypt_server_payload, encrypt_client_payload, encrypt_server_payload, ProtocolError,
         ProtocolResult,
@@ -73,9 +73,9 @@ pub type ProxySocketResult<T> = Result<T, ProxySocketError>;
 
 /// UDP client for communicating with ShadowSocks' server
 #[derive(Debug)]
-pub struct ProxySocket {
+pub struct ProxySocket<S> {
     socket_type: UdpSocketType,
-    io: Box<dyn DatagramTransport>,
+    io: S,
     method: CipherKind,
     key: Box<[u8]>,
     send_timeout: Option<Duration>,
@@ -85,9 +85,12 @@ pub struct ProxySocket {
     user_manager: Option<Arc<ServerUserManager>>,
 }
 
-impl ProxySocket {
+impl ProxySocket<ShadowUdpSocket> {
     /// Create a client to communicate with Shadowsocks' UDP server (outbound)
-    pub async fn connect(context: SharedContext, svr_cfg: &ServerConfig) -> ProxySocketResult<ProxySocket> {
+    pub async fn connect(
+        context: SharedContext,
+        svr_cfg: &ServerConfig,
+    ) -> ProxySocketResult<ProxySocket<ShadowUdpSocket>> {
         ProxySocket::connect_with_opts(context, svr_cfg, &DEFAULT_CONNECT_OPTS)
             .await
             .map_err(Into::into)
@@ -98,7 +101,7 @@ impl ProxySocket {
         context: SharedContext,
         svr_cfg: &ServerConfig,
         opts: &ConnectOpts,
-    ) -> ProxySocketResult<ProxySocket> {
+    ) -> ProxySocketResult<ProxySocket<ShadowUdpSocket>> {
         // Note: Plugins doesn't support UDP relay
 
         let socket = ShadowUdpSocket::connect_server_with_opts(&context, svr_cfg.udp_external_addr(), opts).await?;
@@ -118,71 +121,11 @@ impl ProxySocket {
         ))
     }
 
-    /// Create a `ProxySocket` from a `UdpSocket`
-    pub fn from_socket<S>(
-        socket_type: UdpSocketType,
-        context: SharedContext,
-        svr_cfg: &ServerConfig,
-        socket: S,
-    ) -> ProxySocket
-    where
-        S: Into<ShadowUdpSocket>,
-    {
-        let key = svr_cfg.key().to_vec().into_boxed_slice();
-        let method = svr_cfg.method();
-
-        // NOTE: svr_cfg.timeout() is not for this socket, but for associations.
-        ProxySocket {
-            socket_type,
-            io: Box::new(socket.into()),
-            method,
-            key,
-            send_timeout: None,
-            recv_timeout: None,
-            context,
-            identity_keys: match socket_type {
-                UdpSocketType::Client => svr_cfg.clone_identity_keys(),
-                UdpSocketType::Server => Arc::new(Vec::new()),
-            },
-            user_manager: match socket_type {
-                UdpSocketType::Client => None,
-                UdpSocketType::Server => svr_cfg.clone_user_manager(),
-            },
-        }
-    }
-
-    pub fn from_io(
-        socket_type: UdpSocketType,
-        context: SharedContext,
-        svr_cfg: &ServerConfig,
-        io: Box<dyn DatagramTransport>,
-    ) -> ProxySocket {
-        let key = svr_cfg.key().to_vec().into_boxed_slice();
-        let method = svr_cfg.method();
-
-        // NOTE: svr_cfg.timeout() is not for this socket, but for associations.
-
-        ProxySocket {
-            socket_type,
-            io,
-            method,
-            key,
-            send_timeout: None,
-            recv_timeout: None,
-            context,
-            identity_keys: match socket_type {
-                UdpSocketType::Client => svr_cfg.clone_identity_keys(),
-                UdpSocketType::Server => Arc::new(Vec::new()),
-            },
-            user_manager: match socket_type {
-                UdpSocketType::Client => None,
-                UdpSocketType::Server => svr_cfg.clone_user_manager(),
-            },
-        }
-    }
-
     /// Create a `ProxySocket` binding to a specific address (inbound)
-    pub async fn bind(context: SharedContext, svr_cfg: &ServerConfig) -> ProxySocketResult<ProxySocket> {
+    pub async fn bind(
+        context: SharedContext,
+        svr_cfg: &ServerConfig,
+    ) -> ProxySocketResult<ProxySocket<ShadowUdpSocket>> {
         ProxySocket::bind_with_opts(context, svr_cfg, AcceptOpts::default())
             .await
             .map_err(Into::into)
@@ -193,7 +136,7 @@ impl ProxySocket {
         context: SharedContext,
         svr_cfg: &ServerConfig,
         opts: AcceptOpts,
-    ) -> ProxySocketResult<ProxySocket> {
+    ) -> ProxySocketResult<ProxySocket<ShadowUdpSocket>> {
         // Plugins doesn't support UDP
         let socket = match svr_cfg.udp_external_addr() {
             ServerAddr::SocketAddr(sa) => ShadowUdpSocket::listen_with_opts(sa, opts).await?,
@@ -210,6 +153,41 @@ impl ProxySocket {
             svr_cfg,
             socket,
         ))
+    }
+}
+
+impl<S> ProxySocket<S>
+where
+    S: DatagramTransport,
+{
+    /// Create a `ProxySocket` from a I/O object that impls `DatagramTransport`
+    pub fn from_socket(
+        socket_type: UdpSocketType,
+        context: SharedContext,
+        svr_cfg: &ServerConfig,
+        socket: S,
+    ) -> ProxySocket<S> {
+        let key = svr_cfg.key().to_vec().into_boxed_slice();
+        let method = svr_cfg.method();
+
+        // NOTE: svr_cfg.timeout() is not for this socket, but for associations.
+        ProxySocket {
+            socket_type,
+            io: socket,
+            method,
+            key,
+            send_timeout: None,
+            recv_timeout: None,
+            context,
+            identity_keys: match socket_type {
+                UdpSocketType::Client => svr_cfg.clone_identity_keys(),
+                UdpSocketType::Server => Arc::new(Vec::new()),
+            },
+            user_manager: match socket_type {
+                UdpSocketType::Client => None,
+                UdpSocketType::Server => svr_cfg.clone_user_manager(),
+            },
+        }
     }
 
     fn encrypt_send_buffer(
@@ -627,7 +605,10 @@ impl ProxySocket {
 }
 
 #[cfg(unix)]
-impl AsRawFd for ProxySocket {
+impl<S> AsRawFd for ProxySocket<S>
+where
+    S: AsRawFd,
+{
     /// Retrieve raw fd of the outbound socket
     fn as_raw_fd(&self) -> RawFd {
         self.io.as_raw_fd()

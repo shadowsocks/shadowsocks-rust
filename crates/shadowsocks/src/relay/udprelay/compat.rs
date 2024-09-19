@@ -1,88 +1,194 @@
-use async_trait::async_trait;
 use std::{
-    io::Result,
+    future::Future,
+    io,
     net::SocketAddr,
     ops::Deref,
+    pin::Pin,
     task::{Context, Poll},
 };
+
+use futures::ready;
+use pin_project::pin_project;
 use tokio::io::ReadBuf;
 
 use crate::net::UdpSocket;
 
 /// a trait for datagram transport that wraps around a tokio `UdpSocket`
-#[async_trait]
-pub trait DatagramTransport: Send + Sync + std::fmt::Debug {
-    async fn recv(&self, buf: &mut [u8]) -> Result<usize>;
-    async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr)>;
+pub trait DatagramTransport {
+    /// Local binded address
+    fn local_addr(&self) -> io::Result<SocketAddr>;
 
-    async fn send(&self, buf: &[u8]) -> Result<usize>;
-    async fn send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize>;
+    /// `recv` data into `buf`
+    fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>>;
+    /// `recv` data into `buf` with source address
+    fn poll_recv_from(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<SocketAddr>>;
+    /// Check if the underlying I/O object is ready for `recv`
+    fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>>;
 
-    fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<Result<()>>;
-    fn poll_recv_from(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<Result<SocketAddr>>;
-    fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<Result<()>>;
-
-    fn poll_send(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>>;
-    fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<Result<usize>>;
-    fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<Result<()>>;
-
-    fn local_addr(&self) -> Result<SocketAddr>;
-
-    #[cfg(unix)]
-    fn as_raw_fd(&self) -> std::os::fd::RawFd;
+    /// `send` data with `buf`, returning the sent bytes
+    fn poll_send(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>>;
+    /// `send` data with `buf` to `target`, returning the sent bytes
+    fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<io::Result<usize>>;
+    /// Check if the underlying I/O object is ready for `send`
+    fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>>;
 }
 
-#[async_trait]
 impl DatagramTransport for UdpSocket {
-    async fn recv(&self, buf: &mut [u8]) -> Result<usize> {
-        UdpSocket::recv(self, buf).await
-    }
-
-    async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr)> {
-        UdpSocket::recv_from(self, buf).await
-    }
-
-    async fn send(&self, buf: &[u8]) -> Result<usize> {
-        UdpSocket::send(self, buf).await
-    }
-
-    async fn send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize> {
-        UdpSocket::send_to(self, buf, target).await
-    }
-
-    fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<Result<()>> {
+    fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         UdpSocket::poll_recv(self, cx, buf)
     }
 
-    fn poll_recv_from(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<Result<SocketAddr>> {
+    fn poll_recv_from(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<SocketAddr>> {
         UdpSocket::poll_recv_from(self, cx, buf)
     }
 
-    fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<Result<()>> {
+    fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.deref().poll_recv_ready(cx)
     }
 
-    fn poll_send(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>> {
+    fn poll_send(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         UdpSocket::poll_send(self, cx, buf)
     }
 
-    fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<Result<usize>> {
+    fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<io::Result<usize>> {
         UdpSocket::poll_send_to(self, cx, buf, target)
     }
 
-    fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<Result<()>> {
+    fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.deref().poll_send_ready(cx)
     }
 
-    fn local_addr(&self) -> Result<SocketAddr> {
+    fn local_addr(&self) -> io::Result<SocketAddr> {
         self.deref().local_addr()
     }
+}
 
-    #[cfg(unix)]
-    fn as_raw_fd(&self) -> std::os::fd::RawFd {
-        use std::ops::Deref;
-        use std::os::fd::AsRawFd;
+/// Future for `recv`
+#[pin_project]
+pub struct RecvFut<'a, S: DatagramTransport + ?Sized> {
+    #[pin]
+    io: &'a S,
+    buf: &'a mut [u8],
+}
 
-        self.deref().as_raw_fd()
+impl<'a, S: DatagramTransport + ?Sized> Future for RecvFut<'a, S> {
+    type Output = io::Result<usize>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        let mut read_buf = ReadBuf::new(this.buf);
+        ready!(this.io.poll_recv(cx, &mut read_buf))?;
+        Ok(read_buf.filled().len()).into()
     }
 }
+
+/// Future for `recv_from`
+#[pin_project]
+pub struct RecvFromFut<'a, S: DatagramTransport + ?Sized> {
+    #[pin]
+    io: &'a S,
+    buf: &'a mut [u8],
+}
+
+impl<'a, S: DatagramTransport + ?Sized> Future for RecvFromFut<'a, S> {
+    type Output = io::Result<(usize, SocketAddr)>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        let mut read_buf = ReadBuf::new(this.buf);
+        let src_addr = ready!(this.io.poll_recv_from(cx, &mut read_buf))?;
+        Ok((read_buf.filled().len(), src_addr)).into()
+    }
+}
+
+/// Future for `recv_ready`
+pub struct RecvReadyFut<'a, S: DatagramTransport + ?Sized> {
+    io: &'a S,
+}
+
+impl<'a, S: DatagramTransport + ?Sized> Future for RecvReadyFut<'a, S> {
+    type Output = io::Result<()>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.io.poll_recv_ready(cx)
+    }
+}
+
+/// Future for `send`
+pub struct SendFut<'a, S: DatagramTransport + ?Sized> {
+    io: &'a S,
+    buf: &'a [u8],
+}
+
+impl<'a, S: DatagramTransport + ?Sized> Future for SendFut<'a, S> {
+    type Output = io::Result<usize>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.io.poll_send(cx, self.buf)
+    }
+}
+
+/// Future for `send_to`
+pub struct SendToFut<'a, S: DatagramTransport + ?Sized> {
+    io: &'a S,
+    target: SocketAddr,
+    buf: &'a [u8],
+}
+
+impl<'a, S: DatagramTransport + ?Sized> Future for SendToFut<'a, S> {
+    type Output = io::Result<usize>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.io.poll_send_to(cx, self.buf, self.target)
+    }
+}
+
+/// Future for `recv_ready`
+pub struct SendReadyFut<'a, S: DatagramTransport + ?Sized> {
+    io: &'a S,
+}
+
+impl<'a, S: DatagramTransport + ?Sized> Future for SendReadyFut<'a, S> {
+    type Output = io::Result<()>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.io.poll_recv_ready(cx)
+    }
+}
+
+/// Extension methods for `DatagramTransport`
+pub trait DatagramTransportExt: DatagramTransport {
+    /// Async method for `poll_recv`
+    fn recv<'a, 'b>(&'a self, buf: &'a mut [u8]) -> RecvFut<'a, Self> {
+        RecvFut { io: self, buf }
+    }
+
+    /// Async method for `poll_recv_from`
+    fn recv_from<'a, 'b>(&'a self, buf: &'a mut [u8]) -> RecvFromFut<'a, Self> {
+        RecvFromFut { io: self, buf }
+    }
+
+    /// Async method for `poll_recv_ready`
+    fn recv_ready<'a>(&'a self) -> RecvReadyFut<'a, Self> {
+        RecvReadyFut { io: self }
+    }
+
+    /// Async method for `poll_send`
+    fn send<'a>(&'a self, buf: &'a [u8]) -> SendFut<'a, Self> {
+        SendFut { io: self, buf }
+    }
+
+    /// Async method for `poll_send_to`
+    fn send_to<'a>(&'a self, buf: &'a [u8], target: SocketAddr) -> SendToFut<'a, Self> {
+        SendToFut { io: self, target, buf }
+    }
+
+    /// Async method for `poll_send_ready`
+    fn send_ready<'a>(&'a self) -> SendReadyFut<'a, Self> {
+        SendReadyFut { io: self }
+    }
+}
+
+impl<S: DatagramTransport> DatagramTransportExt for S {}

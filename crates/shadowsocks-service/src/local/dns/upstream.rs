@@ -61,7 +61,7 @@ pub enum DnsClient {
         stream: ProxyClientStream<MonProxyStream<ShadowTcpStream>>,
     },
     UdpRemote {
-        socket: MonProxySocket,
+        socket: MonProxySocket<ShadowUdpSocket>,
         ns: Address,
         control: UdpSocketControlData,
         server_windows: LruCache<u64, PacketWindowFilter>,
