@@ -6,7 +6,6 @@ use shadowsocks::{
     relay::{socks5::Address, udprelay::options::UdpSocketControlData},
     ProxySocket,
 };
-use tokio::net::ToSocketAddrs;
 
 use super::flow::FlowStat;
 
@@ -47,7 +46,7 @@ impl MonProxySocket {
 
     /// Send a UDP packet to target from proxy
     #[inline]
-    pub async fn send_to<A: ToSocketAddrs>(&self, target: A, addr: &Address, payload: &[u8]) -> io::Result<()> {
+    pub async fn send_to(&self, target: SocketAddr, addr: &Address, payload: &[u8]) -> io::Result<()> {
         let n = self.socket.send_to(target, addr, payload).await?;
         self.flow_stat.incr_tx(n as u64);
 
@@ -56,9 +55,9 @@ impl MonProxySocket {
 
     /// Send a UDP packet to target from proxy
     #[inline]
-    pub async fn send_to_with_ctrl<A: ToSocketAddrs>(
+    pub async fn send_to_with_ctrl(
         &self,
-        target: A,
+        target: SocketAddr,
         addr: &Address,
         control: &UdpSocketControlData,
         payload: &[u8],

@@ -24,7 +24,7 @@ use std::{
 ))]
 use futures::future;
 use futures::ready;
-use pin_project::pin_project;
+
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -86,9 +86,7 @@ fn make_mtu_error(packet_size: usize, mtu: usize) -> io::Error {
 
 /// Wrappers for outbound `UdpSocket`
 #[derive(Debug)]
-#[pin_project]
 pub struct UdpSocket {
-    #[pin]
     socket: tokio::net::UdpSocket,
     mtu: Option<usize>,
 }
