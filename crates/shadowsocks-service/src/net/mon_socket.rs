@@ -5,7 +5,7 @@ use std::{io, net::SocketAddr, sync::Arc};
 use shadowsocks::{
     relay::{
         socks5::Address,
-        udprelay::{options::UdpSocketControlData, DatagramTransport},
+        udprelay::{options::UdpSocketControlData, DatagramReceive, DatagramSend},
     },
     ProxySocket,
 };
@@ -39,7 +39,7 @@ impl<S> MonProxySocket<S> {
 
 impl<S> MonProxySocket<S>
 where
-    S: DatagramTransport,
+    S: DatagramSend,
 {
     /// Send a UDP packet to addr through proxy
     #[inline]
@@ -87,7 +87,12 @@ where
 
         Ok(())
     }
+}
 
+impl<S> MonProxySocket<S>
+where
+    S: DatagramReceive,
+{
     /// Receive packet from Shadowsocks' UDP server
     ///
     /// This function will use `recv_buf` to store intermediate data, so it has to be big enough to store the whole shadowsocks' packet

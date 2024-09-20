@@ -23,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    compat::{DatagramTransport, DatagramTransportExt},
+    compat::{DatagramReceive, DatagramReceiveExt, DatagramSend, DatagramSendExt, DatagramSocket},
     crypto_io::{
         decrypt_client_payload, decrypt_server_payload, encrypt_client_payload, encrypt_server_payload, ProtocolError,
         ProtocolResult,
@@ -156,10 +156,7 @@ impl ProxySocket<ShadowUdpSocket> {
     }
 }
 
-impl<S> ProxySocket<S>
-where
-    S: DatagramTransport,
-{
+impl<S> ProxySocket<S> {
     /// Create a `ProxySocket` from a I/O object that impls `DatagramTransport`
     pub fn from_socket(
         socket_type: UdpSocketType,
@@ -190,6 +187,21 @@ where
         }
     }
 
+    /// Set `send` timeout, `None` will clear timeout
+    pub fn set_send_timeout(&mut self, t: Option<Duration>) {
+        self.send_timeout = t;
+    }
+
+    /// Set `recv` timeout, `None` will clear timeout
+    pub fn set_recv_timeout(&mut self, t: Option<Duration>) {
+        self.recv_timeout = t;
+    }
+}
+
+impl<S> ProxySocket<S>
+where
+    S: DatagramSend,
+{
     fn encrypt_send_buffer(
         &self,
         addr: &Address,
@@ -421,7 +433,12 @@ where
 
         Ok(send_len)
     }
+}
 
+impl<S> ProxySocket<S>
+where
+    S: DatagramReceive,
+{
     fn decrypt_recv_buffer(
         &self,
         recv_buf: &mut [u8],
@@ -587,20 +604,15 @@ where
     pub fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<ProxySocketResult<()>> {
         self.io.poll_recv_ready(cx).map_err(|x| x.into())
     }
+}
 
+impl<S> ProxySocket<S>
+where
+    S: DatagramSocket,
+{
     /// Get local addr of socket
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.io.local_addr()
-    }
-
-    /// Set `send` timeout, `None` will clear timeout
-    pub fn set_send_timeout(&mut self, t: Option<Duration>) {
-        self.send_timeout = t;
-    }
-
-    /// Set `recv` timeout, `None` will clear timeout
-    pub fn set_recv_timeout(&mut self, t: Option<Duration>) {
-        self.recv_timeout = t;
     }
 }
 
