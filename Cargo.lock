@@ -1540,7 +1540,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tower-service",
- "webpki-roots 0.26.5",
+ "webpki-roots 0.26.6",
 ]
 
 [[package]]
@@ -2847,7 +2847,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 0.26.5",
+ "webpki-roots 0.26.6",
  "windows-registry",
 ]
 
@@ -3432,7 +3432,7 @@ dependencies = [
  "tokio-native-tls",
  "tokio-rustls 0.26.0",
  "tun2",
- "webpki-roots 0.26.5",
+ "webpki-roots 0.26.6",
  "windows-sys 0.59.0",
  "zstd",
 ]
@@ -4267,9 +4267,9 @@ checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"
-version = "0.26.5"
+version = "0.26.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bd24728e5af82c6c4ec1b66ac4844bdf8156257fccda846ec58b42cd0cdbe6a"
+checksum = "841c67bff177718f1d4dfefde8d8f0e78f9b6589319ba88312f567fc5841a958"
 dependencies = [
  "rustls-pki-types",
 ]
