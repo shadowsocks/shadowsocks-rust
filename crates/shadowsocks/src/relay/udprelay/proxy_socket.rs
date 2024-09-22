@@ -1,5 +1,9 @@
 //! UDP socket for communicating with shadowsocks' proxy server
 
+#[cfg(unix)]
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, RawFd};
+#[cfg(windows)]
+use std::os::windows::io::{AsRawSocket, AsSocket, BorrowedSocket, IntoRawSocket, RawSocket};
 use std::{
     io::{self, ErrorKind},
     net::SocketAddr,
@@ -29,9 +33,6 @@ use super::{
         ProtocolResult,
     },
 };
-
-#[cfg(unix)]
-use std::os::fd::{AsRawFd, RawFd};
 
 static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
 static DEFAULT_SOCKET_CONTROL: Lazy<UdpSocketControlData> = Lazy::new(UdpSocketControlData::default);
@@ -624,5 +625,55 @@ where
     /// Retrieve raw fd of the outbound socket
     fn as_raw_fd(&self) -> RawFd {
         self.io.as_raw_fd()
+    }
+}
+
+#[cfg(unix)]
+impl<S> AsFd for ProxySocket<S>
+where
+    S: AsFd,
+{
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.io.as_fd()
+    }
+}
+
+#[cfg(unix)]
+impl<S> IntoRawFd for ProxySocket<S>
+where
+    S: IntoRawFd,
+{
+    fn into_raw_fd(self) -> RawFd {
+        self.io.into_raw_fd()
+    }
+}
+
+#[cfg(windows)]
+impl<S> AsRawSocket for ProxySocket<S>
+where
+    S: AsRawSocket,
+{
+    fn as_raw_socket(&self) -> RawSocket {
+        self.io.as_raw_socket()
+    }
+}
+
+#[cfg(windows)]
+impl<S> AsSocket for ProxySocket<S>
+where
+    S: AsSocket,
+{
+    fn as_socket(&self) -> BorrowedSocket<'_> {
+        self.io.as_socket()
+    }
+}
+
+#[cfg(windows)]
+impl<S> IntoRawSocket for ProxySocket<S>
+where
+    S: IntoRawSocket,
+{
+    fn into_raw_socket(self) -> RawSocket {
+        self.io.into_raw_socket()
     }
 }
