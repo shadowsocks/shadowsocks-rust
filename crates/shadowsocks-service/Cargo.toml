@@ -165,7 +165,7 @@ rustls-native-certs = { version = "0.8", optional = true }
 async-trait = "0.1"
 
 socket2 = { version = "0.5", features = ["all"] }
-libc = "0.2.159"
+libc = "~0.2.141"
 
 hyper = { version = "1.4", optional = true, features = ["full"] }
 http-body-util = { version = "0.1", optional = true }
