@@ -179,7 +179,7 @@ hickory-resolver = { version = "0.24", optional = true, features = [
 idna = "1.0"
 ipnet = "2.10"
 iprange = "0.6"
-regex = "1.4"
+regex = "1.11"
 
 mime = { version = "0.3", optional = true }
 flate2 = { version = "1.0", optional = true }
