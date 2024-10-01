@@ -19,5 +19,6 @@
   },
 	"automergeType": "pr-comment",
 	"automergeComment": "bors: r+",
+  "automergeStrategy": "squash",
 	"prConcurrentLimit": 0
 }
