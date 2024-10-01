@@ -53,7 +53,7 @@ impl ServerScore {
     pub async fn push_score_fetch_statistic(&self, score: Score) -> (u32, ServerStatData) {
         let (updated_score, data) = {
             let mut stat = self.stat_data.lock().await;
-            (stat.push_score(score), stat.data().clone())
+            (stat.push_score(score), *stat.data())
         };
         self.score.store(updated_score, Ordering::Release);
         (updated_score, data)
@@ -66,7 +66,7 @@ impl ServerScore {
 
     /// Get statistic data
     pub async fn stat_data(&self) -> ServerStatData {
-        self.stat_data.lock().await.data().clone()
+        *self.stat_data.lock().await.data()
     }
 }
 

@@ -125,7 +125,7 @@ async fn udp_tunnel_echo(
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
     socket.connect(local_addr).await?;
 
-    static SEND_PAYLOAD: &[u8] = b"HELLO WORLD. \012345";
+    static SEND_PAYLOAD: &[u8] = b"HELLO WORLD. \x0012345";
     socket.send(SEND_PAYLOAD).await?;
 
     let mut buffer = [0u8; 65536];

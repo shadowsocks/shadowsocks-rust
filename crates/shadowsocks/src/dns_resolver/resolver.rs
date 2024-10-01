@@ -286,7 +286,6 @@ impl DnsResolver {
     }
 
     /// Resolve address into `SocketAddr`s
-    #[allow(clippy::needless_lifetimes)]
     pub async fn resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
         struct ResolverLogger<'x, 'y> {
             resolver: &'x DnsResolver,
