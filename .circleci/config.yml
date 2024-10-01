@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-    windows: circleci/windows@2.4.1
+    windows: circleci/windows@5.0.0
 
 jobs:
     build-linux:
