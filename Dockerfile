@@ -46,7 +46,7 @@ COPY --from=builder /root/shadowsocks-rust/docker/docker-entrypoint.sh /usr/bin/
 ENTRYPOINT [ "docker-entrypoint.sh" ]
 CMD [ "sslocal", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
 
-FROM alpine:3.17 AS ssserver
+FROM alpine:3.20 AS ssserver
 
 COPY --from=builder /root/shadowsocks-rust/target/release/ssserver /usr/bin/
 COPY --from=builder /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
