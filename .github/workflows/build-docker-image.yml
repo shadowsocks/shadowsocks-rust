@@ -25,7 +25,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker metadata
         id: metadata
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.bin }}-rust
       - name: Build and release Docker images
