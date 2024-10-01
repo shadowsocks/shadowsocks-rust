@@ -875,10 +875,8 @@ impl PingChecker {
         let mut headers = [httparse::EMPTY_HEADER; 1];
         let mut response = httparse::Response::new(&mut headers);
 
-        if let Ok(..) = response.parse(&buf) {
-            if matches!(response.code, Some(204)) {
-                return Ok(());
-            }
+        if response.parse(&buf).is_ok() && matches!(response.code, Some(204)) {
+            return Ok(());
         }
 
         Err(Error::new(
@@ -916,10 +914,8 @@ impl PingChecker {
         let mut headers = [httparse::EMPTY_HEADER; 1];
         let mut response = httparse::Response::new(&mut headers);
 
-        if let Ok(..) = response.parse(&buf) {
-            if matches!(response.code, Some(200) | Some(204)) {
-                return Ok(());
-            }
+        if response.parse(&buf).is_ok() && matches!(response.code, Some(200) | Some(204)) {
+            return Ok(());
         }
 
         Err(Error::new(

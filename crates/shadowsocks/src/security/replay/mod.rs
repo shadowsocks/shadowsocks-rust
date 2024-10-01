@@ -17,7 +17,7 @@ use self::ppbloom::PingPongBloom;
 #[cfg(feature = "security-replay-attack-detect")]
 mod ppbloom;
 
-/// A Bloom Filter based protector against replay attach
+/// A Bloom Filter based protector against replay attack
 pub struct ReplayProtector {
     // Check for duplicated IV/Nonce, for prevent replay attack
     // https://github.com/shadowsocks/shadowsocks-org/issues/44

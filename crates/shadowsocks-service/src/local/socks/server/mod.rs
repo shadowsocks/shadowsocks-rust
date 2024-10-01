@@ -114,8 +114,8 @@ impl SocksBuilder {
         let udp_associate_addr: ServerAddr = self
             .udp_associate_addr
             .as_ref()
-            .or_else(|| self.udp_bind_addr.as_ref())
-            .unwrap_or_else(|| &self.client_config)
+            .or(self.udp_bind_addr.as_ref())
+            .unwrap_or(&self.client_config)
             .clone();
 
         let mut udp_server = None;

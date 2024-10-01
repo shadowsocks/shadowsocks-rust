@@ -169,7 +169,7 @@ impl AsyncRead for TcpConnection {
             return Poll::Pending;
         }
 
-        let recv_buf = unsafe { mem::transmute::<_, &mut [u8]>(buf.unfilled_mut()) };
+        let recv_buf = unsafe { mem::transmute::<&mut [mem::MaybeUninit<u8>], &mut [u8]>(buf.unfilled_mut()) };
         let n = control.recv_buffer.dequeue_slice(recv_buf);
         buf.advance(n);
 

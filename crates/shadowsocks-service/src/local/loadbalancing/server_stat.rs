@@ -188,7 +188,7 @@ impl ServerStat {
                 // MAD
                 let mut vlat_abs_diff: Vec<u32> = vlat
                     .iter()
-                    .map(|s| (*s as i32 - self.data.latency_median as i32).abs() as u32)
+                    .map(|s| (*s as i32 - self.data.latency_median as i32).unsigned_abs())
                     .collect();
                 vlat_abs_diff.sort_unstable();
 
