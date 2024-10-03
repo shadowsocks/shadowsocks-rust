@@ -1921,7 +1921,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3982,9 +3982,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tun2"
-version = "3.1.5"
+version = "3.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65414b3733383dcd25fa2f4dafac78dad8154cdc41d99c68152b834b1cf66c6b"
+checksum = "c131f1a66eab9362e16acf067533a41a31285d560b4339dfe236e59f504548d1"
 dependencies = [
  "bytes",
  "cfg-if",
