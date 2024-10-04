@@ -21,20 +21,17 @@ pathfind() {
 case "$1" in
 	configure|reconfigure)
 		pathfind setcap && setcap \
-            cap_net_bind_service+ep /usr/bin/ssservice \
+			cap_net_bind_service+ep /usr/bin/ssservice \
 			cap_net_bind_service+ep /usr/bin/sslocal \
 			cap_net_bind_service+ep /usr/bin/ssserver
 		if [ ! -f /etc/shadowsocks-rust/config.json ]; then
 			set +e
-			pathfind apg
-			if [ $? -eq 0 ]; then
-				passwd=$(apg -n 1 -M ncl)
-			else
-				passwd=$(pwgen 12 1)
-			fi
+			passwd=$(/usr/bin/ssservice genkey -m "chacha20-ietf-poly1305")
+			passwd="${passwd//+/\\+}"
+			passwd="${passwd//\//\\/}"
 			set -e
 			mkdir -p /etc/shadowsocks-rust
-			sed "s/barfoo!/$passwd/" /usr/share/shadowsocks-rust/config.json \
+			sed "s/barfoo/$passwd/" /usr/share/shadowsocks-rust/config.json \
 				> /etc/shadowsocks-rust/config.json
 		fi
 		;;
