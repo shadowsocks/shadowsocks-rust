@@ -5,20 +5,25 @@
   ],
   "packageRules": [
     {
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
       "automerge": true
     },
     {
-      "matchDepTypes": ["devDependencies"],
+      "matchDepTypes": [
+        "devDependencies"
+      ],
       "automerge": true
     }
   ],
-	"automerge": true,
+  "automerge": true,
   "major": {
     "automerge": false
   },
-	"automergeType": "pr-comment",
-	"automergeComment": "bors: r+",
   "automergeStrategy": "squash",
-	"prConcurrentLimit": 0
+  "prConcurrentLimit": 0
 }
