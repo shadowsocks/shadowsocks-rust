@@ -181,8 +181,7 @@ pub trait DatagramReceiveExt: DatagramReceive {
     }
 
     /// Async method for `poll_recv_ready`
-    #[allow(clippy::needless_lifetimes)]
-    fn recv_ready<'a>(&'a self) -> RecvReadyFut<'a, Self> {
+    fn recv_ready(&self) -> RecvReadyFut<'_, Self> {
         RecvReadyFut { io: self }
     }
 }
@@ -202,8 +201,7 @@ pub trait DatagramSendExt: DatagramSend {
     }
 
     /// Async method for `poll_send_ready`
-    #[allow(clippy::needless_lifetimes)]
-    fn send_ready<'a>(&'a self) -> SendReadyFut<'a, Self> {
+    fn send_ready(&self) -> SendReadyFut<'_, Self> {
         SendReadyFut { io: self }
     }
 }
