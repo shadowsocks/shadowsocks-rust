@@ -21,7 +21,7 @@ where
     let fd = socket.as_raw_fd();
     let sock = unsafe { Socket::from_raw_fd(fd) };
     let result = sock.set_only_v6(ipv6_only);
-    sock.into_raw_fd();
+    let _ = sock.into_raw_fd();
     result
 }
 
