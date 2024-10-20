@@ -27,8 +27,7 @@ case "$1" in
 		if [ ! -f /etc/shadowsocks-rust/config.json ]; then
 			set +e
 			passwd=$(/usr/bin/ssservice genkey -m "chacha20-ietf-poly1305")
-			passwd="${passwd//+/\\+}"
-			passwd="${passwd//\//\\/}"
+			passwd=$(echo $passwd | sed "s/+/\\\\+/g" | sed "s/\\//\\\\\\//g")
 			set -e
 			mkdir -p /etc/shadowsocks-rust
 			sed "s/barfoo/$passwd/" /usr/share/shadowsocks-rust/config.json \
