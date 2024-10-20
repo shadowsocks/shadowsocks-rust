@@ -13,6 +13,7 @@ After=network.target
 Type=simple
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_BIND_SERVICE
+DynamicUser=yes
 ExecStart=/usr/bin/ssservice server --log-without-time -c /etc/shadowsocks-rust/%i.json
 
 [Install]
