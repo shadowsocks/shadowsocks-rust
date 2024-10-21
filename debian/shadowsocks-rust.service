@@ -11,8 +11,7 @@ After=network.target
 [Service]
 Type=simple
 EnvironmentFile=/etc/default/shadowsocks-rust
-User=nobody
-Group=nogroup
+DynamicUser=yes
 LimitNOFILE=32768
 ExecStart=/usr/bin/ssservice server -c ${CONFFILE} ${DAEMON_ARGS}
 
