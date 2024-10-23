@@ -158,6 +158,10 @@ impl HttpService {
                 error!("failed to make request to host: {}, error: {}", host, err);
                 return make_internal_server_error();
             }
+            Err(HttpClientError::Http(err)) => {
+                error!("failed to make request to host: {}, error: {}", host, err);
+                return make_bad_request();
+            }
         };
 
         trace!("received {} <- {} {:?}", self.peer_addr, host, res);

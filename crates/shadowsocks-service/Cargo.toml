@@ -72,7 +72,7 @@ local-dns-relay = ["local-dns"]
 # Currently is only used in Android
 local-flow-stat = ["local"]
 # Enable HTTP protocol for sslocal
-local-http = ["local", "hyper", "http-body-util"]
+local-http = ["local", "hyper", "http", "http-body-util"]
 local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
 local-http-native-tls-vendored = [
     "local-http-native-tls",

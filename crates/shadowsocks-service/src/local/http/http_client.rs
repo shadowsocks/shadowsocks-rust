@@ -11,6 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use http::Uri;
 use hyper::{
     body::{self, Body},
     client::conn::{http1, http2},
@@ -43,6 +44,9 @@ pub enum HttpClientError {
     /// std::io::Error
     #[error("{0}")]
     Io(#[from] io::Error),
+    /// Errors from http
+    #[error("{0}")]
+    Http(#[from] http::Error),
 }
 
 #[derive(Clone, Debug)]
@@ -195,8 +199,19 @@ where
         &self,
         host: Address,
         mut c: HttpConnection<B>,
-        req: Request<B>,
-    ) -> hyper::Result<Response<body::Incoming>> {
+        mut req: Request<B>,
+    ) -> Result<Response<body::Incoming>, HttpClientError> {
+        // Remove Scheme, Host part from URI
+        if req.uri().scheme().is_some() || req.uri().authority().is_some() {
+            let mut builder = Uri::builder();
+            if let Some(path_and_query) = req.uri().path_and_query() {
+                builder = builder.path_and_query(path_and_query.as_str());
+            } else {
+                builder = builder.path_and_query("/");
+            }
+            *(req.uri_mut()) = builder.build()?;
+        }
+
         trace!("HTTP making request to host: {}, request: {:?}", host, req);
         let response = c.send_request(req).await?;
         trace!("HTTP received response from host: {}, response: {:?}", host, response);
