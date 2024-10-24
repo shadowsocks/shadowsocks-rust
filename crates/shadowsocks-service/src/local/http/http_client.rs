@@ -1,6 +1,7 @@
 //! HTTP Client
 
 use std::{
+    borrow::Cow,
     collections::VecDeque,
     fmt::Debug,
     future::Future,
@@ -11,7 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use http::Uri;
+use bson::doc;
+use http::{header::InvalidHeaderValue, HeaderValue, Method as HttpMethod, Uri, Version as HttpVersion};
 use hyper::{
     body::{self, Body},
     client::conn::{http1, http2},
@@ -47,6 +49,9 @@ pub enum HttpClientError {
     /// Errors from http
     #[error("{0}")]
     Http(#[from] http::Error),
+    /// Errors from http header
+    #[error("{0}")]
+    InvalidHeaderValue(#[from] InvalidHeaderValue),
 }
 
 #[derive(Clone, Debug)]
@@ -137,7 +142,7 @@ where
     pub async fn send_request(
         &self,
         context: Arc<ServiceContext>,
-        req: Request<B>,
+        mut req: Request<B>,
         balancer: Option<&PingBalancer>,
     ) -> Result<Response<body::Incoming>, HttpClientError> {
         let host = match host_addr(req.uri()) {
@@ -145,12 +150,24 @@ where
             None => panic!("URI missing host: {}", req.uri()),
         };
 
+        // Set Host header if it was missing in the Request
+        {
+            let headers = req.headers_mut();
+            if !headers.contains_key("Host") {
+                let host_value = match host {
+                    Address::DomainNameAddress(ref domain, _) => HeaderValue::from_str(domain)?,
+                    Address::SocketAddress(ref saddr) => HeaderValue::from_str(saddr.ip().to_string().as_str())?,
+                };
+                headers.insert("Host", host_value);
+            }
+        }
+
         // 1. Check if there is an available client
         //
         // FIXME: If the cached connection is closed unexpectedly, this request will fail immediately.
         if let Some(c) = self.get_cached_connection(&host).await {
             trace!("HTTP client for host: {} taken from cache", host);
-            return self.send_request_conn(host, c, req).await
+            return self.send_request_conn(host, c, req).await;
         }
 
         // 2. If no. Make a new connection
@@ -159,13 +176,12 @@ where
             None => &Scheme::HTTP,
         };
 
-        let domain = req
-            .uri()
-            .host()
-            .unwrap()
-            .trim_start_matches('[')
-            .trim_start_matches(']');
-        let c = match HttpConnection::connect(context.clone(), scheme, host.clone(), domain, balancer).await {
+        let domain = match host {
+            Address::DomainNameAddress(ref domain, _) => Cow::Borrowed(domain.as_str()),
+            Address::SocketAddress(ref saddr) => Cow::Owned(saddr.ip().to_string()),
+        };
+
+        let c = match HttpConnection::connect(context.clone(), scheme, host.clone(), &domain, balancer).await {
             Ok(c) => c,
             Err(err) => {
                 error!("failed to connect to host: {}, error: {}", host, err);
@@ -196,19 +212,8 @@ where
         &self,
         host: Address,
         mut c: HttpConnection<B>,
-        mut req: Request<B>,
+        req: Request<B>,
     ) -> Result<Response<body::Incoming>, HttpClientError> {
-        // Remove Scheme, Host part from URI
-        if req.uri().scheme().is_some() || req.uri().authority().is_some() {
-            let mut builder = Uri::builder();
-            if let Some(path_and_query) = req.uri().path_and_query() {
-                builder = builder.path_and_query(path_and_query.as_str());
-            } else {
-                builder = builder.path_and_query("/");
-            }
-            *(req.uri_mut()) = builder.build()?;
-        }
-
         trace!("HTTP making request to host: {}, request: {:?}", host, req);
         let response = c.send_request(req).await?;
         trace!("HTTP received response from host: {}, response: {:?}", host, response);
@@ -351,10 +356,45 @@ where
     }
 
     #[inline]
-    pub async fn send_request(&mut self, req: Request<B>) -> hyper::Result<Response<body::Incoming>> {
+    pub async fn send_request(&mut self, mut req: Request<B>) -> Result<Response<body::Incoming>, HttpClientError> {
         match self {
-            HttpConnection::Http1(r) => r.send_request(req).await,
-            HttpConnection::Http2(r) => r.send_request(req).await,
+            HttpConnection::Http1(r) => {
+                if !matches!(
+                    req.version(),
+                    HttpVersion::HTTP_09 | HttpVersion::HTTP_10 | HttpVersion::HTTP_11
+                ) {
+                    trace!(
+                        "HTTP client changed Request.version to HTTP/1.1 from {:?}",
+                        req.version()
+                    );
+
+                    *req.version_mut() = HttpVersion::HTTP_11;
+                }
+
+                // Remove Scheme, Host part from URI
+                if req.method() != HttpMethod::CONNECT
+                    && (req.uri().scheme().is_some() || req.uri().authority().is_some())
+                {
+                    let mut builder = Uri::builder();
+                    if let Some(path_and_query) = req.uri().path_and_query() {
+                        builder = builder.path_and_query(path_and_query.as_str());
+                    } else {
+                        builder = builder.path_and_query("/");
+                    }
+                    *(req.uri_mut()) = builder.build()?;
+                }
+
+                r.send_request(req).await.map_err(Into::into)
+            }
+            HttpConnection::Http2(r) => {
+                if !matches!(req.version(), HttpVersion::HTTP_2) {
+                    trace!("HTTP client changed Request.version to HTTP/2 from {:?}", req.version());
+
+                    *req.version_mut() = HttpVersion::HTTP_2;
+                }
+
+                r.send_request(req).await.map_err(Into::into)
+            }
         }
     }
 
