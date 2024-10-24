@@ -12,7 +12,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bson::doc;
 use http::{header::InvalidHeaderValue, HeaderValue, Method as HttpMethod, Uri, Version as HttpVersion};
 use hyper::{
     body::{self, Body},
