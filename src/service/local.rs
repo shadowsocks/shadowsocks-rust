@@ -1,11 +1,12 @@
 //! Local server launchers
 
+#[cfg(unix)]
+use std::sync::Arc;
 use std::{
     future::Future,
     net::IpAddr,
     path::PathBuf,
     process::ExitCode,
-    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -1065,7 +1066,7 @@ struct ServerReloader {
 }
 
 impl ServerReloader {
-    #[cfg_attr(not(any(unix, feature = "local-online-config")), allow(dead_code))]
+    #[cfg_attr(not(unix), allow(dead_code))]
     async fn run_once(&self) -> Result<(), Box<dyn std::error::Error>> {
         let start_time = Instant::now();
 

@@ -28,8 +28,6 @@ use shadowsocks::{
     ServerConfig,
 };
 use tokio::{runtime::Handle, sync::mpsc, task::JoinHandle, time};
-#[cfg(windows)]
-use windows_sys::Win32::Networking::WinSock::WSAEAFNOSUPPORT;
 
 use crate::net::{
     packet_window::PacketWindowFilter, utils::to_ipv4_mapped, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,

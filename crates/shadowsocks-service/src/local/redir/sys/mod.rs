@@ -36,6 +36,6 @@ where
     let handle = socket.as_raw_socket();
     let sock = unsafe { Socket::from_raw_socket(handle) };
     let result = sock.set_only_v6(ipv6_only);
-    sock.into_raw_socket();
+    let _ = sock.into_raw_socket();
     result
 }
