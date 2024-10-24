@@ -1,3 +1,13 @@
+shadowsocks-rust (1.21.1) unstable; urgency=medium
+
+  ## Bug Fixes
+
+  - #1730 `local-http`: The URI field in HTTP Request sent from `sslocal` should only contain path and query.
+
+  ## Miscellaneous
+
+  - #1702 Debian package build removes dependency of `pwgen`
+
 shadowsocks-rust (1.21.0) unstable; urgency=medium
 
   ## Features
