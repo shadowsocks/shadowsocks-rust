@@ -147,13 +147,10 @@ where
 
         // 1. Check if there is an available client
         //
-        // FIXME: If the cached connection is closed unexpectly, this request will fail immediately.
+        // FIXME: If the cached connection is closed unexpectedly, this request will fail immediately.
         if let Some(c) = self.get_cached_connection(&host).await {
             trace!("HTTP client for host: {} taken from cache", host);
-            match self.send_request_conn(host, c, req).await {
-                Ok(o) => return Ok(o),
-                Err(err) => return Err(err.into()),
-            }
+            return self.send_request_conn(host, c, req).await
         }
 
         // 2. If no. Make a new connection
@@ -176,7 +173,7 @@ where
             }
         };
 
-        self.send_request_conn(host, c, req).await.map_err(Into::into)
+        self.send_request_conn(host, c, req).await
     }
 
     async fn get_cached_connection(&self, host: &Address) -> Option<HttpConnection<B>> {
@@ -313,7 +310,7 @@ where
         let stream = ProxyHttpStream::connect_https(stream, domain).await?;
 
         if stream.negotiated_http2() {
-            // H2 connnection
+            // H2 connection
             let (send_request, connection) = match http2::Builder::new(TokioExecutor)
                 .timer(TokioTimer)
                 .keep_alive_interval(Duration::from_secs(15))
