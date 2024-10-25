@@ -141,7 +141,7 @@ where
     pub async fn send_request(
         &self,
         context: Arc<ServiceContext>,
-        mut req: Request<B>,
+        req: Request<B>,
         balancer: Option<&PingBalancer>,
     ) -> Result<Response<body::Incoming>, HttpClientError> {
         let host = match host_addr(req.uri()) {
@@ -150,16 +150,24 @@ where
         };
 
         // Set Host header if it was missing in the Request
-        {
-            let headers = req.headers_mut();
+        let (mut req_parts, req_body) = req.into_parts();
+        if let Some(authority) = req_parts.uri.authority() {
+            let headers = &mut req_parts.headers;
             if !headers.contains_key("Host") {
-                let host_value = match host {
-                    Address::DomainNameAddress(ref domain, _) => HeaderValue::from_str(domain)?,
-                    Address::SocketAddress(ref saddr) => HeaderValue::from_str(saddr.ip().to_string().as_str())?,
+                let uri = &req_parts.uri;
+                let host_value = if (uri.scheme_str() == Some("http")
+                    && matches!(authority.port_u16(), None | Some(80)))
+                    || (uri.scheme_str() == Some("https") && matches!(authority.port_u16(), None | Some(443)))
+                {
+                    HeaderValue::from_str(authority.host())?
+                } else {
+                    HeaderValue::from_str(authority.as_str())?
                 };
+
                 headers.insert("Host", host_value);
             }
         }
+        let req = Request::from_parts(req_parts, req_body);
 
         // 1. Check if there is an available client
         //
