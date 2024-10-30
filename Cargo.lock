@@ -3221,7 +3221,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.21.0"
+version = "1.21.1"
 dependencies = [
  "aes",
  "arc-swap",
