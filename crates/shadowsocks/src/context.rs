@@ -67,7 +67,7 @@ impl Context {
 
         #[cfg(any(feature = "stream-cipher", feature = "aead-cipher", feature = "aead-cipher-2022"))]
         loop {
-            use crate::crypto::v1::random_iv_or_salt;
+            use crate::crypto::utils::random_iv_or_salt;
 
             random_iv_or_salt(nonce);
 

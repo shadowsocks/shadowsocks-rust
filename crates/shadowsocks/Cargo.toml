@@ -93,12 +93,12 @@ aes = { version = "0.8", optional = true }
 blake3 = "1.5"
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-shadowsocks-crypto = { version = "0.5.4", default-features = false, features = [
+shadowsocks-crypto = { version = "0.5.8", default-features = false, features = [
     "ring",
 ] }
 
 [target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-shadowsocks-crypto = { version = "0.5.4", default-features = false, features = [
+shadowsocks-crypto = { version = "0.5.8", default-features = false, features = [
 ] }
 
 [target.'cfg(any(windows, target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "macos", target_os = "ios", target_os = "watchos", target_os = "tvos"))'.dependencies]
