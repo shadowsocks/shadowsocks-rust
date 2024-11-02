@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.21.2"
+version = "1.21.3"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -67,11 +67,19 @@ default = [
     "local-tunnel",
     "local-socks4",
     "multi-threaded",
+    "aead-cipher",
     "aead-cipher-2022",
 ]
 
 # Basic Features
-basic = ["logging", "hickory-dns", "local", "server", "multi-threaded"]
+basic = [
+    "logging",
+    "hickory-dns",
+    "local",
+    "server",
+    "multi-threaded",
+    "aead-cipher",
+]
 
 # All Suggested Features
 full = [
@@ -95,6 +103,7 @@ full = [
     "local-online-config",
     "multi-threaded",
     "stream-cipher",
+    "aead-cipher",
     "aead-cipher-2022",
 ]
 
@@ -190,9 +199,12 @@ multi-threaded = ["tokio/rt-multi-thread"]
 # Users should always avoid using these ciphers in practice
 stream-cipher = ["shadowsocks-service/stream-cipher"]
 
+# Enable AEAD ciphers
+aead-cipher = ["shadowsocks-service/aead-cipher"]
+
 # Enable extra AEAD ciphers
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
-aead-cipher-extra = ["shadowsocks-service/aead-cipher-extra"]
+aead-cipher-extra = ["aead-cipher", "shadowsocks-service/aead-cipher-extra"]
 
 # Enable AEAD 2022
 aead-cipher-2022 = ["shadowsocks-service/aead-cipher-2022"]
@@ -248,7 +260,7 @@ jemallocator = { version = "0.5", optional = true }
 snmalloc-rs = { version = "0.3", optional = true }
 rpmalloc = { version = "0.2", optional = true }
 
-shadowsocks-service = { version = "1.21.2", path = "./crates/shadowsocks-service" }
+shadowsocks-service = { version = "1.21.3", path = "./crates/shadowsocks-service" }
 
 windows-service = { version = "0.7", optional = true }
 

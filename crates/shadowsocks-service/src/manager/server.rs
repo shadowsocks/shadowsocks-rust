@@ -473,7 +473,10 @@ impl Manager {
                     return Ok(AddResponse(err));
                 }
             },
+            #[cfg(feature = "aead-cipher")]
             None => self.svr_cfg.method.unwrap_or(CipherKind::CHACHA20_POLY1305),
+            #[cfg(not(feature = "aead-cipher"))]
+            None => return Ok(AddResponse("method is required")),
         };
 
         let mut svr_cfg = ServerConfig::new(addr, req.password.clone(), method);

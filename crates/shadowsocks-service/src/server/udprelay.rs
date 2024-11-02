@@ -113,9 +113,9 @@ impl UdpServer {
         }
 
         let assoc_map = match svr_cfg.method().category() {
-            CipherCategory::None | CipherCategory::Aead => {
-                NatMap::Association(create_assoc_map(time_to_live, capacity))
-            }
+            CipherCategory::None => NatMap::Association(create_assoc_map(time_to_live, capacity)),
+            #[cfg(feature = "aead-cipher")]
+            CipherCategory::Aead => NatMap::Association(create_assoc_map(time_to_live, capacity)),
             #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => NatMap::Association(create_assoc_map(time_to_live, capacity)),
             #[cfg(feature = "aead-cipher-2022")]
