@@ -15,40 +15,35 @@ rust-version = "1.74"
 maintenance = { status = "passively-maintained" }
 
 [features]
-default = ["hickory-dns"]
+default = ["hickory-dns", "aead-cipher"]
 
 # Uses Hickory-DNS instead of tokio's builtin DNS resolver
 hickory-dns = ["hickory-resolver", "arc-swap", "notify"]
 # Hickory-DNS was renamed from Trust-DNS, keep compatibility.
 trust-dns = ["hickory-dns"]
 
-# Enable cryptography features.
-crypto = ["shadowsocks-crypto"]
-
 # Enable Stream Cipher Protocol
 # WARN: Stream Cipher Protocol is proved to be insecure
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
-stream-cipher = ["crypto", "shadowsocks-crypto/v1-stream"]
+stream-cipher = ["shadowsocks-crypto/v1-stream"]
+
+# Enable AEAD ciphers
+aead-cipher = ["shadowsocks-crypto/v1-aead"]
 
 # Enable extra AEAD ciphers
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
-aead-cipher-extra = ["crypto", "shadowsocks-crypto/v1-aead-extra"]
+aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
 # Enable AEAD 2022
 aead-cipher-2022 = [
-    "crypto",
     "shadowsocks-crypto/v2",
     "rand/small_rng",
     "aes",
     "lru_time_cache",
 ]
 # Enable AEAD 2022 with extra ciphers
-aead-cipher-2022-extra = [
-    "crypto",
-    "aead-cipher-2022",
-    "shadowsocks-crypto/v2-extra",
-]
+aead-cipher-2022-extra = ["aead-cipher-2022", "shadowsocks-crypto/v2-extra"]
 
 # Enable detection against replay attack
 security-replay-attack-detect = ["bloomfilter"]
@@ -98,10 +93,13 @@ aes = { version = "0.8", optional = true }
 blake3 = "1.5"
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-shadowsocks-crypto = { version = "0.5.4", features = ["ring"], optional = true }
+shadowsocks-crypto = { version = "0.5.4", default-features = false, features = [
+    "ring",
+] }
 
 [target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-shadowsocks-crypto = { version = "0.5.4", features = [], optional = true }
+shadowsocks-crypto = { version = "0.5.4", default-features = false, features = [
+] }
 
 [target.'cfg(any(windows, target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "macos", target_os = "ios", target_os = "watchos", target_os = "tvos"))'.dependencies]
 tokio-tfo = "0.3"

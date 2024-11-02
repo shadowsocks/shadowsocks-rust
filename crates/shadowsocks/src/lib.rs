@@ -11,7 +11,6 @@ pub use self::{
     },
 };
 
-#[cfg(feature = "crypto")]
 pub use shadowsocks_crypto as crypto;
 
 pub mod config;
