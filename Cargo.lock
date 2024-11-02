@@ -1895,7 +1895,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -3260,9 +3260,9 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-crypto"
-version = "0.5.6"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e4c5a437e27929c991daa2073b130fd94731ebdc2ba771be95aed5029defcae"
+checksum = "2fde8b3f3f4d9404ba27b95e2f286a3944074c2d7c01cfe43c89804cf1469e04"
 dependencies = [
  "aead",
  "aes",
