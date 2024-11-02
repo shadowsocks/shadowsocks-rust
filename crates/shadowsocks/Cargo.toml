@@ -26,23 +26,22 @@ trust-dns = ["hickory-dns"]
 # WARN: Stream Cipher Protocol is proved to be insecure
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
-stream-cipher = ["shadowsocks-crypto", "shadowsocks-crypto/v1-stream"]
+stream-cipher = ["shadowsocks-crypto/v1-stream", "shadowsocks-crypto/ring"]
 
 # Enable AEAD ciphers
-aead-cipher = ["shadowsocks-crypto", "shadowsocks-crypto/v1-aead"]
+aead-cipher = ["shadowsocks-crypto/v1-aead", "shadowsocks-crypto/ring"]
 
 # Enable extra AEAD ciphers
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
 aead-cipher-extra = ["aead-cipher", "shadowsocks-crypto/v1-aead-extra"]
 
-# Enable AEAD 2022
 aead-cipher-2022 = [
-    "shadowsocks-crypto",
     "shadowsocks-crypto/v2",
+    "shadowsocks-crypto/ring",
     "rand/small_rng",
     "aes",
     "lru_time_cache",
-]
+] # Enable AEAD 2022
 # Enable AEAD 2022 with extra ciphers
 aead-cipher-2022-extra = ["aead-cipher-2022", "shadowsocks-crypto/v2-extra"]
 
@@ -92,9 +91,7 @@ notify = { version = "7.0", optional = true }
 
 aes = { version = "0.8", optional = true }
 blake3 = "1.5"
-shadowsocks-crypto = { version = "0.5.8", default-features = false, features = [
-    "ring",
-], optional = true }
+shadowsocks-crypto = { version = "0.5.8", default-features = false }
 
 [target.'cfg(any(windows, target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "macos", target_os = "ios", target_os = "watchos", target_os = "tvos"))'.dependencies]
 tokio-tfo = "0.3"
