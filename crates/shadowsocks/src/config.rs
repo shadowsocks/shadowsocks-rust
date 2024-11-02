@@ -16,7 +16,7 @@ use base64::Engine as _;
 use byte_string::ByteStr;
 use bytes::Bytes;
 use cfg_if::cfg_if;
-use log::error;
+use log::{error, warn};
 use thiserror::Error;
 use url::{self, Url};
 
@@ -482,12 +482,28 @@ where
 {
     let password = password.into();
 
-    #[cfg(feature = "stream-cipher")]
-    if method == CipherKind::SS_TABLE {
-        // TABLE cipher doesn't need key derivation.
-        // Reference implemenation: shadowsocks-libev, shadowsocks (Python)
-        let enc_key = password.clone().into_bytes().into_boxed_slice();
-        return (password, enc_key, Vec::new());
+    match method {
+        CipherKind::NONE => {
+            // NONE method's key length is 0
+            debug_assert_eq!(method.key_len(), 0);
+
+            if !password.is_empty() {
+                warn!("method \"none\" doesn't need a password, which should be set as an empty String, but password.len() = {}", password.len());
+            }
+
+            return (password, Vec::new().into_boxed_slice(), Vec::new());
+        }
+
+        #[cfg(feature = "stream-cipher")]
+        CipherKind::SS_TABLE => {
+            // TABLE cipher doesn't need key derivation.
+            // Reference implemenation: shadowsocks-libev, shadowsocks (Python)
+            let enc_key = password.clone().into_bytes().into_boxed_slice();
+            return (password, enc_key, Vec::new());
+        }
+
+        #[allow(unreachable_patterns)]
+        _ => {}
     }
 
     #[cfg(feature = "aead-cipher-2022")]

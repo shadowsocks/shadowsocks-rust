@@ -181,7 +181,7 @@ async fn tcp_tunnel_none() {
 
     let server_addr = "127.0.0.1:33001".parse::<SocketAddr>().unwrap();
     let local_addr = "127.0.0.1:33101".parse::<SocketAddr>().unwrap();
-    tcp_tunnel_example(server_addr, local_addr, "p$p", CipherKind::NONE)
+    tcp_tunnel_example(server_addr, local_addr, "", CipherKind::NONE)
         .await
         .unwrap();
 }
