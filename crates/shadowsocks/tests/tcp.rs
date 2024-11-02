@@ -151,6 +151,7 @@ async fn tcp_tunnel_example(
     Ok(())
 }
 
+#[cfg(feature = "aead-cipher")]
 #[tokio::test]
 async fn tcp_tunnel_aead() {
     let _ = env_logger::try_init();

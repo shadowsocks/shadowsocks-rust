@@ -136,6 +136,7 @@ async fn udp_tunnel_echo(
     Ok(())
 }
 
+#[cfg(feature = "aead-cipher")]
 #[tokio::test]
 async fn udp_tunnel_aead() {
     let _ = env_logger::try_init();
