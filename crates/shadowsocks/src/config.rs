@@ -20,11 +20,9 @@ use log::error;
 use thiserror::Error;
 use url::{self, Url};
 
-use crate::{
-    crypto::{v1::openssl_bytes_to_key, CipherKind},
-    plugin::PluginConfig,
-    relay::socks5::Address,
-};
+#[cfg(any(feature = "stream-cipher", feature = "aead-cipher"))]
+use crate::crypto::v1::openssl_bytes_to_key;
+use crate::{crypto::CipherKind, plugin::PluginConfig, relay::socks5::Address};
 
 const USER_KEY_BASE64_ENGINE: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
     &base64::alphabet::STANDARD,
@@ -427,9 +425,9 @@ pub struct ServerConfig {
     source: ServerSource,
 }
 
-#[cfg(feature = "aead-cipher-2022")]
 #[inline]
 fn make_derived_key(method: CipherKind, password: &str, enc_key: &mut [u8]) {
+    #[cfg(feature = "aead-cipher-2022")]
     if method.is_aead_2022() {
         // AEAD 2022 password is a base64 form of enc_key
         match AEAD2022_PASSWORD_BASE64_ENGINE.decode(password) {
@@ -449,15 +447,21 @@ fn make_derived_key(method: CipherKind, password: &str, enc_key: &mut [u8]) {
                 panic!("{method} password {password} is not base64 encoded, error: {err}");
             }
         }
-    } else {
-        openssl_bytes_to_key(password.as_bytes(), enc_key);
-    }
-}
 
-#[cfg(not(feature = "aead-cipher-2022"))]
-#[inline]
-fn make_derived_key(_method: CipherKind, password: &str, enc_key: &mut [u8]) {
-    openssl_bytes_to_key(password.as_bytes(), enc_key);
+        return;
+    }
+
+    cfg_if! {
+        if #[cfg(any(feature = "stream-cipher", feature = "aead-cipher"))] {
+            let _ = method;
+            openssl_bytes_to_key(password.as_bytes(), enc_key);
+        } else {
+            // No default implementation.
+            let _ = password;
+            let _ = enc_key;
+            unreachable!("{method} don't know how to make a derived key");
+        }
+    }
 }
 
 /// Check if method supports Extended Identity Header

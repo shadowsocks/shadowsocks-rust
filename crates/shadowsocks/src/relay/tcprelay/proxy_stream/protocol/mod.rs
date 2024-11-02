@@ -28,7 +28,11 @@ pub enum TcpRequestHeader {
 impl TcpRequestHeader {
     pub async fn read_from<R: AsyncRead + Unpin>(method: CipherKind, reader: &mut R) -> io::Result<TcpRequestHeader> {
         match method.category() {
-            CipherCategory::None | CipherCategory::Aead => Ok(TcpRequestHeader::Stream(
+            CipherCategory::None => Ok(TcpRequestHeader::Stream(
+                StreamTcpRequestHeader::read_from(reader).await?,
+            )),
+            #[cfg(feature = "aead-cipher")]
+            CipherCategory::Aead => Ok(TcpRequestHeader::Stream(
                 StreamTcpRequestHeader::read_from(reader).await?,
             )),
             #[cfg(feature = "stream-cipher")]

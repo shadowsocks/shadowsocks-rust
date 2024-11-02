@@ -5,6 +5,7 @@ pub use self::{
     proxy_stream::{ProxyClientStream, ProxyServerStream},
 };
 
+#[cfg(feature = "aead-cipher")]
 mod aead;
 #[cfg(feature = "aead-cipher-2022")]
 mod aead_2022;

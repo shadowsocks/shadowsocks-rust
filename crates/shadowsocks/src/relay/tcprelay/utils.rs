@@ -155,6 +155,7 @@ where
 
 fn plain_read_buffer_size(method: CipherKind) -> usize {
     match method.category() {
+        #[cfg(feature = "aead-cipher")]
         CipherCategory::Aead => super::aead::MAX_PACKET_SIZE,
         #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => 1 << 14,

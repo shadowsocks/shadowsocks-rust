@@ -30,17 +30,16 @@ use crate::{
     relay::socks5::{Address, Error as Socks5Error},
 };
 
+#[cfg(feature = "aead-cipher")]
+use super::aead::{decrypt_payload_aead, encrypt_payload_aead};
 #[cfg(feature = "aead-cipher-2022")]
 use super::aead_2022::{
     decrypt_client_payload_aead_2022, decrypt_server_payload_aead_2022, encrypt_client_payload_aead_2022,
     encrypt_server_payload_aead_2022,
 };
+use super::options::UdpSocketControlData;
 #[cfg(feature = "stream-cipher")]
 use super::stream::{decrypt_payload_stream, encrypt_payload_stream};
-use super::{
-    aead::{decrypt_payload_aead, encrypt_payload_aead},
-    options::UdpSocketControlData,
-};
 
 /// UDP shadowsocks protocol errors
 #[derive(thiserror::Error, Debug)]
@@ -50,6 +49,7 @@ pub enum ProtocolError {
     #[cfg(feature = "stream-cipher")]
     #[error(transparent)]
     StreamError(#[from] super::stream::ProtocolError),
+    #[cfg(feature = "aead-cipher")]
     #[error(transparent)]
     AeadError(#[from] super::aead::ProtocolError),
     #[cfg(feature = "aead-cipher-2022")]
@@ -74,6 +74,8 @@ pub fn encrypt_client_payload(
 ) {
     match method.category() {
         CipherCategory::None => {
+            let _ = context;
+            let _ = key;
             let _ = control;
             let _ = identity_keys;
             dst.reserve(addr.serialized_len() + payload.len());
@@ -86,6 +88,7 @@ pub fn encrypt_client_payload(
             let _ = identity_keys;
             encrypt_payload_stream(context, method, key, addr, payload, dst)
         }
+        #[cfg(feature = "aead-cipher")]
         CipherCategory::Aead => {
             let _ = control;
             let _ = identity_keys;
@@ -110,6 +113,8 @@ pub fn encrypt_server_payload(
 ) {
     match method.category() {
         CipherCategory::None => {
+            let _ = context;
+            let _ = key;
             let _ = control;
             dst.reserve(addr.serialized_len() + payload.len());
             addr.write_to_buf(dst);
@@ -120,6 +125,7 @@ pub fn encrypt_server_payload(
             let _ = control;
             encrypt_payload_stream(context, method, key, addr, payload, dst)
         }
+        #[cfg(feature = "aead-cipher")]
         CipherCategory::Aead => {
             let _ = control;
             encrypt_payload_aead(context, method, key, addr, payload, dst)
@@ -139,6 +145,8 @@ pub fn decrypt_client_payload(
 ) -> ProtocolResult<(usize, Address, Option<UdpSocketControlData>)> {
     match method.category() {
         CipherCategory::None => {
+            let _ = context;
+            let _ = key;
             let _ = user_manager;
             let mut cur = Cursor::new(payload);
             match Address::read_cursor(&mut cur) {
@@ -158,6 +166,7 @@ pub fn decrypt_client_payload(
                 .map(|(n, a)| (n, a, None))
                 .map_err(Into::into)
         }
+        #[cfg(feature = "aead-cipher")]
         CipherCategory::Aead => {
             let _ = user_manager;
             decrypt_payload_aead(context, method, key, payload)
@@ -180,6 +189,9 @@ pub fn decrypt_server_payload(
 ) -> ProtocolResult<(usize, Address, Option<UdpSocketControlData>)> {
     match method.category() {
         CipherCategory::None => {
+            let _ = context;
+            let _ = key;
+
             let mut cur = Cursor::new(payload);
             match Address::read_cursor(&mut cur) {
                 Ok(address) => {
@@ -195,6 +207,7 @@ pub fn decrypt_server_payload(
         CipherCategory::Stream => decrypt_payload_stream(context, method, key, payload)
             .map(|(n, a)| (n, a, None))
             .map_err(Into::into),
+        #[cfg(feature = "aead-cipher")]
         CipherCategory::Aead => decrypt_payload_aead(context, method, key, payload)
             .map(|(n, a)| (n, a, None))
             .map_err(Into::into),
