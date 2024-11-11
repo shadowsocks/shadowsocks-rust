@@ -905,7 +905,13 @@ impl ServerConfig {
             }
         };
 
-        let method = method.parse().expect("method");
+        let method = match method.parse::<CipherKind>() {
+            Ok(m) => m,
+            Err(err) => {
+                error!("failed to parse \"{}\" to CipherKind, err: {:?}", method, err);
+                return Err(UrlParseError::InvalidMethod);
+            }
+        };
         let mut svrconfig = ServerConfig::new(addr, pwd, method);
 
         if let Some(q) = parsed.query() {
@@ -959,6 +965,7 @@ impl ServerConfig {
 pub enum UrlParseError {
     ParseError(url::ParseError),
     InvalidScheme,
+    InvalidMethod,
     InvalidUserInfo,
     MissingHost,
     InvalidAuthInfo,
@@ -977,6 +984,7 @@ impl fmt::Display for UrlParseError {
         match *self {
             UrlParseError::ParseError(ref err) => fmt::Display::fmt(err, f),
             UrlParseError::InvalidScheme => write!(f, "URL must have \"ss://\" scheme"),
+            UrlParseError::InvalidMethod => write!(f, "unknown encryption method"),
             UrlParseError::InvalidUserInfo => write!(f, "invalid user info"),
             UrlParseError::MissingHost => write!(f, "missing host"),
             UrlParseError::InvalidAuthInfo => write!(f, "invalid authentication info"),
@@ -991,6 +999,7 @@ impl error::Error for UrlParseError {
         match *self {
             UrlParseError::ParseError(ref err) => Some(err as &dyn error::Error),
             UrlParseError::InvalidScheme => None,
+            UrlParseError::InvalidMethod => None,
             UrlParseError::InvalidUserInfo => None,
             UrlParseError::MissingHost => None,
             UrlParseError::InvalidAuthInfo => None,
@@ -1403,5 +1412,16 @@ impl FromStr for ReplayAttackPolicy {
             "reject" => Ok(ReplayAttackPolicy::Reject),
             _ => Err(ReplayAttackPolicyError),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_server_config_from_url() {
+        let server_config = ServerConfig::from_url("ss://foo:bar@127.0.0.1:9999");
+        assert!(matches!(server_config, Err(UrlParseError::InvalidMethod)));
     }
 }
