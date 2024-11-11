@@ -357,7 +357,7 @@ impl TcpTun {
                             }
 
                             // SHUT_WR
-                            if matches!(control.send_state, TcpSocketState::Close) {
+                            if matches!(control.send_state, TcpSocketState::Close) && socket.send_queue() == 0 && control.send_buffer.is_empty() {
                                 trace!("closing TCP Write Half, {:?}", socket.state());
 
                                 // Close the socket. Set to FIN state
