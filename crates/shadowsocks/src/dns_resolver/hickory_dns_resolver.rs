@@ -7,20 +7,19 @@ use std::{
     ops::Deref,
     pin::Pin,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use cfg_if::cfg_if;
 use futures::ready;
 use hickory_resolver::{
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
-    error::ResolveResult,
-    name_server::{GenericConnector, RuntimeProvider},
+    name_server::GenericConnector,
     proto::{
-        iocompat::AsyncIoTokioAsStd,
-        udp::{DnsUdpSocket, QuicLocalAddr},
-        TokioTime,
+        runtime::{iocompat::AsyncIoTokioAsStd, RuntimeProvider, TokioHandle, TokioTime},
+        udp::DnsUdpSocket,
     },
-    AsyncResolver, TokioHandle,
+    ResolveError, Resolver,
 };
 use log::trace;
 use tokio::{io::ReadBuf, net::UdpSocket};
@@ -62,12 +61,6 @@ impl DnsUdpSocket for ShadowUdpSocket {
     }
 }
 
-impl QuicLocalAddr for ShadowUdpSocket {
-    fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.deref().local_addr()
-    }
-}
-
 impl RuntimeProvider for ShadowDnsRuntimeProvider {
     type Handle = TokioHandle;
     type Tcp = AsyncIoTokioAsStd<ShadowTcpStream>;
@@ -78,10 +71,31 @@ impl RuntimeProvider for ShadowDnsRuntimeProvider {
         self.handle.clone()
     }
 
-    fn connect_tcp(&self, server_addr: SocketAddr) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Tcp>>>> {
-        let connect_opts = self.connect_opts.clone();
+    fn connect_tcp(
+        &self,
+        server_addr: SocketAddr,
+        bind_addr: Option<SocketAddr>,
+        wait_for: Option<Duration>,
+    ) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Tcp>>>> {
+        let mut connect_opts = self.connect_opts.clone();
+
+        if let Some(bind_addr) = bind_addr {
+            connect_opts.bind_local_addr = Some(bind_addr.ip());
+        }
+
+        let wait_for = wait_for.unwrap_or_else(|| Duration::from_secs(5));
+
         Box::pin(async move {
-            let tcp = ShadowTcpStream::connect_with_opts(&server_addr, &connect_opts).await?;
+            let tcp = match tokio::time::timeout(
+                wait_for,
+                ShadowTcpStream::connect_with_opts(&server_addr, &connect_opts),
+            )
+            .await
+            {
+                Ok(Ok(s)) => s,
+                Ok(Err(err)) => return Err(err),
+                Err(_) => return Err(io::ErrorKind::TimedOut.into()),
+            };
             Ok(AsyncIoTokioAsStd(tcp))
         })
     }
@@ -105,14 +119,14 @@ pub type ShadowDnsConnectionProvider = GenericConnector<ShadowDnsRuntimeProvider
 /// Shadowsocks DNS resolver
 ///
 /// A customized hickory-dns-resolver
-pub type DnsResolver = AsyncResolver<ShadowDnsConnectionProvider>;
+pub type DnsResolver = Resolver<ShadowDnsConnectionProvider>;
 
 /// Create a `hickory-dns` asynchronous DNS resolver
 pub async fn create_resolver(
     dns: Option<ResolverConfig>,
     opts: Option<ResolverOpts>,
     connect_opts: ConnectOpts,
-) -> ResolveResult<DnsResolver> {
+) -> Result<DnsResolver, ResolveError> {
     // Customized dns resolution
     match dns {
         Some(conf) => {
@@ -173,8 +187,6 @@ pub async fn create_resolver(
 
                     Ok(DnsResolver::new(config, opts, ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(connect_opts))))
                 } else {
-                    use hickory_resolver::error::ResolveError;
-
                     Err(ResolveError::from("current platform doesn't support hickory-dns resolver with system configured".to_owned()))
                 }
             }

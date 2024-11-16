@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use hickory_resolver::proto::{error::ProtoError, op::Message};
+use hickory_resolver::proto::{op::Message, ProtoError};
 use log::{debug, trace};
 use tokio::sync::Mutex;
 

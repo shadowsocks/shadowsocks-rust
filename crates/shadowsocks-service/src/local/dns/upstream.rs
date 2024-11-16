@@ -12,10 +12,7 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use hickory_resolver::proto::{
-    error::{ProtoError, ProtoErrorKind},
-    op::Message,
-};
+use hickory_resolver::proto::{op::Message, ProtoError, ProtoErrorKind};
 use log::{error, trace};
 use lru_time_cache::{Entry, LruCache};
 use rand::{thread_rng, Rng};

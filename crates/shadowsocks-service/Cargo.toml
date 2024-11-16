@@ -61,7 +61,6 @@ dns-over-native-tls-vendored = [
 ]
 dns-over-https = [
     "hickory-dns",
-    "hickory-resolver/dns-over-https",
     "hickory-resolver/dns-over-https-rustls",
     "hickory-resolver/webpki-roots",
     "hickory-resolver/native-certs",
@@ -182,8 +181,8 @@ http-body-util = { version = "0.1", optional = true }
 http = { version = "1.1", optional = true }
 httparse = { version = "1.9", optional = true }
 
-hickory-resolver = { version = "0.24", optional = true, features = [
-    "serde-config",
+hickory-resolver = { version = "0.25.0-alpha", optional = true, features = [
+    "serde",
 ] }
 
 idna = "1.0"

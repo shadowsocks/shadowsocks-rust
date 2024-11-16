@@ -649,7 +649,7 @@ fn should_forward_by_response(
             }
             macro_rules! examine_record {
                 ($rec:ident, $is_answer:expr) => {
-                    if let Some(RData::CNAME(name)) = $rec.data() {
+                    if let RData::CNAME(name) = $rec.data() {
                         if $is_answer {
                             if let Some(value) = check_name_in_proxy_list(acl, name) {
                                 return value;
@@ -667,13 +667,13 @@ fn should_forward_by_response(
                         return true;
                     }
                     let forward = match $rec.data() {
-                        Some(RData::A(ip)) => acl.check_ip_in_proxy_list(&IpAddr::V4((*ip).into())),
-                        Some(RData::AAAA(ip)) => acl.check_ip_in_proxy_list(&IpAddr::V6((*ip).into())),
+                        RData::A(ip) => acl.check_ip_in_proxy_list(&IpAddr::V4((*ip).into())),
+                        RData::AAAA(ip) => acl.check_ip_in_proxy_list(&IpAddr::V6((*ip).into())),
                         // MX records cause type A additional section processing for the host specified by EXCHANGE.
-                        Some(RData::MX(mx)) => examine_name!(mx.exchange(), $is_answer),
+                        RData::MX(mx) => examine_name!(mx.exchange(), $is_answer),
                         // NS records cause both the usual additional section processing to locate a type A record...
-                        Some(RData::NS(name)) => examine_name!(name, $is_answer),
-                        Some(RData::PTR(_)) => unreachable!(),
+                        RData::NS(name) => examine_name!(name, $is_answer),
+                        RData::PTR(_) => unreachable!(),
                         _ => acl.is_default_in_proxy_list(),
                     };
                     if !forward {
@@ -752,12 +752,12 @@ impl DnsClient {
                 for rec in result.answers() {
                     trace!("dns answer: {:?}", rec);
                     match rec.data() {
-                        Some(RData::A(ip)) => {
+                        RData::A(ip) => {
                             self.context
                                 .add_to_reverse_lookup_cache(Ipv4Addr::from(*ip).into(), forward)
                                 .await
                         }
-                        Some(RData::AAAA(ip)) => {
+                        RData::AAAA(ip) => {
                             self.context
                                 .add_to_reverse_lookup_cache(Ipv6Addr::from(*ip).into(), forward)
                                 .await
