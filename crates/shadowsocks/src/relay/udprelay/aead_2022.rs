@@ -99,7 +99,7 @@ pub enum ProtocolError {
     InvalidClientUser(Bytes),
     #[error("invalid socket type, expecting {0:#x}, but found {1:#x}")]
     InvalidSocketType(u8, u8),
-    #[error("invalid timestamp {0} - now {1} = {}", *.0 as i64 - *.1 as i64)]
+    #[error("invalid timestamp {0} - now {1} = {ts_diff}", ts_diff = *.0 as i64 - *.1 as i64)]
     InvalidTimestamp(u64, u64),
     #[error(transparent)]
     IoError(#[from] io::Error),
