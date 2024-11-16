@@ -387,6 +387,10 @@ pub enum ServerConfigError {
     #[error("invalid key encoding for {0}, {1}")]
     InvalidKeyEncoding(CipherKind, base64::DecodeError),
 
+    /// Invalid user key encoding
+    #[error("invalid iPSK encoding for {0}, {1}")]
+    InvalidUserKeyEncoding(CipherKind, base64::DecodeError),
+
     /// Key length mismatch
     #[error("invalid key length for {0}, expecting {1} bytes, but found {2} bytes")]
     InvalidKeyLength(CipherKind, usize, usize),
@@ -533,7 +537,7 @@ where
                     identity_keys.push(Bytes::from(v));
                 }
                 Err(err) => {
-                    panic!("iPSK {ipsk} is not base64 encoded, error: {err}");
+                    return Err(ServerConfigError::InvalidUserKeyEncoding(method, err));
                 }
             }
         }
