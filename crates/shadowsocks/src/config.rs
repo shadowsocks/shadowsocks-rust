@@ -487,6 +487,7 @@ pub fn method_support_eih(method: CipherKind) -> bool {
     )
 }
 
+#[allow(clippy::type_complexity)]
 fn password_to_keys<P>(method: CipherKind, password: P) -> Result<(String, Box<[u8]>, Vec<Bytes>), ServerConfigError>
 where
     P: Into<String>,

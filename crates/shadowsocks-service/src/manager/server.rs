@@ -483,7 +483,7 @@ impl Manager {
             Ok(svr_cfg) => svr_cfg,
             Err(err) => {
                 error!("failed to create ServerConfig, error: {}", err);
-                return Ok(AddResponse(format!("invalid server")));
+                return Ok(AddResponse("invalid server".to_string()));
             }
         };
 
