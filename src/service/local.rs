@@ -653,7 +653,12 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
             let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
             let timeout = matches.get_one::<u64>("TIMEOUT").map(|x| Duration::from_secs(*x));
 
-            let mut sc = ServerConfig::new(svr_addr, password, method);
+            let mut sc = match ServerConfig::new(svr_addr, password, method) {
+                Ok(sc) => sc,
+                Err(err) => {
+                    panic!("failed to create ServerConfig, error: {}", err);
+                }
+            };
             sc.set_source(ServerSource::CommandLine);
             if let Some(timeout) = timeout {
                 sc.set_timeout(timeout);

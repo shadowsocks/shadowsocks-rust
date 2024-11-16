@@ -479,7 +479,13 @@ impl Manager {
             None => return Ok(AddResponse("method is required")),
         };
 
-        let mut svr_cfg = ServerConfig::new(addr, req.password.clone(), method);
+        let mut svr_cfg = match ServerConfig::new(addr, req.password.clone(), method) {
+            Ok(svr_cfg) => svr_cfg,
+            Err(err) => {
+                error!("failed to create ServerConfig, error: {}", err);
+                return Ok(AddResponse(format!("invalid server")));
+            }
+        };
 
         if let Some(ref plugin) = req.plugin {
             let p = PluginConfig {

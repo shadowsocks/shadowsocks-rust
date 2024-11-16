@@ -32,7 +32,7 @@ use tokio::{
 async fn tcp_tunnel_tfo() {
     let _ = env_logger::try_init();
 
-    let svr_cfg = ServerConfig::new(("127.0.0.1", 41000), "", CipherKind::NONE);
+    let svr_cfg = ServerConfig::new(("127.0.0.1", 41000), "", CipherKind::NONE).unwrap();
     let svr_cfg_client = svr_cfg.clone();
 
     tokio::spawn(async move {

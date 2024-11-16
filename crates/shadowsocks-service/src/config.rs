@@ -1935,7 +1935,17 @@ impl Config {
                     }
                 };
 
-                let mut nsvr = ServerConfig::new(addr, password, method);
+                let mut nsvr = match ServerConfig::new(addr, password, method) {
+                    Ok(svr) => svr,
+                    Err(serr) => {
+                        let err = Error::new(
+                            ErrorKind::Malformed,
+                            "server config create failed",
+                            Some(format!("{}", serr)),
+                        );
+                        return Err(err);
+                    }
+                };
                 nsvr.set_source(server_source);
                 nsvr.set_mode(global_mode);
 
@@ -2055,7 +2065,17 @@ impl Config {
                     }
                 };
 
-                let mut nsvr = ServerConfig::new(addr, password, method);
+                let mut nsvr = match ServerConfig::new(addr, password, method) {
+                    Ok(svr) => svr,
+                    Err(serr) => {
+                        let err = Error::new(
+                            ErrorKind::Malformed,
+                            "server config create failed",
+                            Some(format!("{}", serr)),
+                        );
+                        return Err(err);
+                    }
+                };
                 nsvr.set_source(server_source);
 
                 // Extensible Identity Header, Users
