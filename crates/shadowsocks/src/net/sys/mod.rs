@@ -1,6 +1,6 @@
 use std::{
     io::{self, ErrorKind},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 use cfg_if::cfg_if;
@@ -23,13 +23,13 @@ cfg_if! {
 
 fn set_common_sockopt_for_connect(addr: SocketAddr, socket: &TcpSocket, opts: &ConnectOpts) -> io::Result<()> {
     // Binds to IP address
-    if let Some(ip) = opts.bind_local_addr {
-        match (ip, addr.ip()) {
-            (IpAddr::V4(..), IpAddr::V4(..)) => {
-                socket.bind(SocketAddr::new(ip, 0))?;
+    if let Some(baddr) = opts.bind_local_addr {
+        match (baddr, addr) {
+            (SocketAddr::V4(..), SocketAddr::V4(..)) => {
+                socket.bind(baddr)?;
             }
-            (IpAddr::V6(..), IpAddr::V6(..)) => {
-                socket.bind(SocketAddr::new(ip, 0))?;
+            (SocketAddr::V6(..), SocketAddr::V6(..)) => {
+                socket.bind(baddr)?;
             }
             _ => {}
         }

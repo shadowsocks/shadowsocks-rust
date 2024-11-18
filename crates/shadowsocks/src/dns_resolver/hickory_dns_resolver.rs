@@ -80,7 +80,7 @@ impl RuntimeProvider for ShadowDnsRuntimeProvider {
         let mut connect_opts = self.connect_opts.clone();
 
         if let Some(bind_addr) = bind_addr {
-            connect_opts.bind_local_addr = Some(bind_addr.ip());
+            connect_opts.bind_local_addr = Some(bind_addr);
         }
 
         let wait_for = wait_for.unwrap_or_else(|| Duration::from_secs(5));

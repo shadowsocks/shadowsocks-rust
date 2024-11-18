@@ -1,6 +1,6 @@
 //! Shadowsocks server
 
-use std::{io, sync::Arc, time::Duration};
+use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::future;
 use log::trace;
@@ -64,7 +64,7 @@ pub async fn run(config: Config) -> io::Result<()> {
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
-        bind_local_addr: config.outbound_bind_addr,
+        bind_local_addr: config.outbound_bind_addr.map(|ip| SocketAddr::new(ip, 0)),
         bind_interface: config.outbound_bind_interface,
 
         ..Default::default()
@@ -110,7 +110,7 @@ pub async fn run(config: Config) -> io::Result<()> {
         }
 
         if let Some(bind_local_addr) = inst.outbound_bind_addr {
-            connect_opts.bind_local_addr = Some(bind_local_addr);
+            connect_opts.bind_local_addr = Some(SocketAddr::new(bind_local_addr, 0));
         }
 
         if let Some(bind_interface) = inst.outbound_bind_interface {

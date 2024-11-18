@@ -2,6 +2,7 @@
 
 use std::{
     io::{self, ErrorKind},
+    net::SocketAddr,
     sync::Arc,
     time::Duration,
 };
@@ -130,7 +131,7 @@ impl Server {
             vpn_protect_path: config.outbound_vpn_protect_path,
 
             bind_interface: config.outbound_bind_interface,
-            bind_local_addr: config.outbound_bind_addr,
+            bind_local_addr: config.outbound_bind_addr.map(|ip| SocketAddr::new(ip, 0)),
 
             ..Default::default()
         };
