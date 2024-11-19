@@ -467,7 +467,7 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr, ipv6_only: bool) -> io
 /// Create a `UdpSocket` for connecting to `addr`
 #[inline(always)]
 pub async fn create_outbound_udp_socket(af: AddrFamily, opts: &ConnectOpts) -> io::Result<UdpSocket> {
-    let bind_addr = match (af, config.bind_local_addr) {
+    let bind_addr = match (af, opts.bind_local_addr) {
         (AddrFamily::Ipv4, Some(SocketAddr::V4(addr))) => addr.into(),
         (AddrFamily::Ipv6, Some(SocketAddr::V6(addr))) => addr.into(),
         (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
