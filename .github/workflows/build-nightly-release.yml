@@ -20,7 +20,21 @@ jobs:
             toolchain: stable
           - target: aarch64-unknown-linux-musl
             toolchain: stable
+          - target: mips-unknown-linux-gnu
+            toolchain: nightly
+          - target: mipsel-unknown-linux-musl
+            toolchain: nightly
           - target: mipsel-unknown-linux-gnu
+            toolchain: nightly
+          - target: mipsel-unknown-linux-musl
+            toolchain: nightly
+          - target: mips64-unknown-linux-gnuabi64
+            toolchain: nightly
+          - target: mips64-unknown-linux-muslabi64
+            toolchain: nightly
+          - target: mips64el-unknown-linux-gnuabi64
+            toolchain: nightly
+          - target: mips64el-unknown-linux-muslabi64
             toolchain: nightly
 
     steps:
@@ -34,7 +48,7 @@ jobs:
           rustup override set ${{ matrix.platform.toolchain }}
 
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross.git
+        run: cargo install cross
 
       - name: Build ${{ matrix.platform.target }}
         timeout-minutes: 120
@@ -61,10 +75,11 @@ jobs:
             fi
 
             compile_nightly="-n"
+            compile_features="-Z build-std=std,panic_abort,proc_macro"
           fi
 
           cd build
-          ./build-release -t ${{ matrix.platform.target }} $compile_features $compile_compress $compile_nightly
+          ./build-release -t ${{ matrix.platform.target }} $compile_features $compile_compress $compile_nightly $compile_features
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
