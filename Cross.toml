@@ -1,13 +1,30 @@
 [build]
-dockerfile = "./docker/linux-cross/Dockerfile"
-pre-build = [
-    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable",
-    ". $HOME/.cargo/env",
-    "cargo install --force --locked bindgen-cli && mv $HOME/.cargo/bin/bindgen /usr/bin",
-    "rm -rf $HOME/.cargo"
-]
-
+# dockerfile = "./docker/linux-cross/Dockerfile"
+# pre-build = [
+#     "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable",
+#     ". $HOME/.cargo/env",
+#     "cargo install --force --locked bindgen-cli && mv $HOME/.cargo/bin/bindgen /usr/bin",
+#     "rm -rf $HOME/.cargo"
+# ]
 
 [build.env]
 passthrough = ["RUSTFLAGS"]
 
+# MIPS targets are dropped to Tier 3
+# https://github.com/rust-lang/compiler-team/issues/648
+[target.mips-unknown-linux-gnu]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips-unknown-linux-musl]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips64-unknown-linux-gnuabi64]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips64-unknown-linux-muslabi64]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips64el-unknown-linux-gnuabi64]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips64el-unknown-linux-muslabi64]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mipsel-unknown-linux-gnu]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mipsel-unknown-linux-musl]
+build-std = ["std", "panic_abort", "proc_macro"]

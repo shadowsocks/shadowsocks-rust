@@ -46,17 +46,6 @@ if [[ "${BUILD_TARGET}" == "" ]]; then
     BUILD_TARGET=$HOST_TRIPLE
 fi
 
-TARGET_SUFFIX=""
-if [[ "${BUILD_TARGET}" == *"-windows-"* ]]; then
-    TARGET_SUFFIX=".exe"
-fi
-
-TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}" "ssservice${TARGET_SUFFIX}")
-
-if [[ "${BUILD_FEATURES}" == *"winservice"* ]]; then
-    TARGETS+=("sswinservice${TARGET_SUFFIX}")
-fi
-
 RELEASE_FOLDER="${ROOT_DIR}/release"
 RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}.${BUILD_TARGET}"
 
@@ -67,6 +56,17 @@ if [[ "${BUILD_TARGET}" != "" ]]; then
     cd "${ROOT_DIR}/../target/${BUILD_TARGET}/release"
 else
     cd "${ROOT_DIR}/../target/release"
+fi
+
+TARGET_SUFFIX=""
+if [[ "${BUILD_TARGET}" == *"-windows-"* ]]; then
+    TARGET_SUFFIX=".exe"
+fi
+
+TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}" "ssservice${TARGET_SUFFIX}")
+
+if [ -e "sswinservice${TARGET_SUFFIX}" ]; then
+    TARGETS+=("sswinservice${TARGET_SUFFIX}")
 fi
 
 if [[ "${BUILD_TARGET}" == *"-windows-"* ]]; then

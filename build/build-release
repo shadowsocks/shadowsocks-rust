@@ -11,8 +11,10 @@ fi
 targets=()
 features=()
 use_upx=false
+use_nightly=false
+cargo_flags=""
 
-while getopts "t:f:u" opt; do
+while getopts "t:f:unZ:" opt; do
     case $opt in
         t)
             targets+=($OPTARG)
@@ -23,8 +25,14 @@ while getopts "t:f:u" opt; do
         u)
             use_upx=true
             ;;
+        n)
+            use_nightly=true
+            ;;
+        Z)
+            cargo_flags="-Z $OPTARG"
+            ;;
         ?)
-            echo "Usage: $(basename $0) [-t <target-triple>] [-f features] [-u]"
+            echo "Usage: $(basename $0) [-t <target-triple>] [-f features] [-u] [-n]"
             ;;
     esac
 done
@@ -47,6 +55,11 @@ if [[ "${use_upx}" = true ]]; then
     fi
 fi
 
+build_command="cross"
+if [[ "${use_nightly}" = true ]]; then
+    build_command="$build_command +nightly"
+fi
+
 
 function build() {
     cd "$CUR_DIR/.."
@@ -59,14 +72,16 @@ function build() {
     if [[ "${TARGET_FEATURES}" != "" ]]; then
         echo "* Building ${TARGET} package ${VERSION} with features \"${TARGET_FEATURES}\" ..."
 
-        cross build --target "${TARGET}" \
-                    --features "${TARGET_FEATURES}" \
-                    --release
+        $build_command build --target "${TARGET}" \
+                             --features "${TARGET_FEATURES}" \
+                             --release \
+                             ${cargo_flags}
     else
         echo "* Building ${TARGET} package ${VERSION} ..."
 
-        cross build --target "${TARGET}" \
-                    --release
+        $build_command build --target "${TARGET}" \
+                             --release \
+                             ${cargo_flags}
     fi
 
     if [[ $? != "0" ]]; then
@@ -107,12 +122,19 @@ function build() {
 
         echo "* Packaging ZIP in ${PKG_PATH} ..."
         cd ${RELEASE_DIR}
+
+        sswinservice=""
+        if [ -e "sswinservice.exe" ]; then
+            sswinservice="sswinservice.exe"
+        fi
+
         zip ${PKG_PATH} \
             "sslocal.exe" \
             "ssserver.exe" \
             "ssurl.exe" \
             "ssmanager.exe" \
-            "ssservice.exe"
+            "ssservice.exe" \
+            "${sswinservice}"
 
         if [[ $? != "0" ]]; then
             exit 1

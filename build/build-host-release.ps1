@@ -48,7 +48,7 @@ $CompressParam = @{
     LiteralPath     = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe", "ssservice.exe"
     DestinationPath = "${PackagePath}"
 }
-if ((${Features}).Contains("winservice")) {
+if ([System.IO.File]::Exists("sswinservice.exe")) {
     $CompressParam.LiteralPath += "sswinservice.exe"
 }
 Compress-Archive @CompressParam

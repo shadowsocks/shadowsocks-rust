@@ -18,6 +18,7 @@ jobs:
         target:
           - x86_64-unknown-linux-musl
           - aarch64-unknown-linux-musl
+          - mipsel-unknown-linux-gnu
 
     steps:
       - uses: actions/checkout@v4
@@ -51,8 +52,17 @@ jobs:
             fi
           fi
 
+          if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
+            sudo apt-get update -y && sudo apt-get install -y upx;
+            if [[ "$?" == "0" ]]; then
+              compile_compress="-u"
+            fi
+
+            compile_nightly="-n"
+          fi
+
           cd build
-          ./build-release -t ${{ matrix.target }} $compile_features $compile_compress
+          ./build-release -t ${{ matrix.target }} $compile_features $compile_compress $compile_nightly
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4

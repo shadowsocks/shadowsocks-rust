@@ -34,6 +34,10 @@ jobs:
           - arm-unknown-linux-musleabihf
           - aarch64-unknown-linux-gnu
           - aarch64-unknown-linux-musl
+          - mips-unknown-linux-gnu
+          - mipsel-unknown-linux-gnu
+          - mips64-unknown-linux-gnuabi64
+          - mips64el-unknown-linux-gnuabi64
 
     steps:
       - uses: actions/checkout@v4
@@ -47,7 +51,7 @@ jobs:
           rustup target add --toolchain stable ${{ matrix.target }}
 
       - name: Install cross
-        run: cargo install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross.git
 
       - name: Build ${{ matrix.target }}
         timeout-minutes: 120
@@ -65,10 +69,12 @@ jobs:
             if [[ "$?" == "0" ]]; then
               compile_compress="-u"
             fi
+
+            compile_nightly="-n"
           fi
 
           cd build
-          ./build-release -t ${{ matrix.target }} $compile_features $compile_compress
+          ./build-release -t ${{ matrix.target }} $compile_features $compile_compress $compile_nightly
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v2
