@@ -21,23 +21,39 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - i686-unknown-linux-musl
-          - x86_64-pc-windows-gnu
-          - x86_64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
-          - armv7-unknown-linux-musleabihf
-          - armv7-unknown-linux-gnueabihf
-          - arm-unknown-linux-gnueabi
-          - arm-unknown-linux-gnueabihf
-          - arm-unknown-linux-musleabi
-          - arm-unknown-linux-musleabihf
-          - aarch64-unknown-linux-gnu
-          - aarch64-unknown-linux-musl
-          - mips-unknown-linux-gnu
-          - mipsel-unknown-linux-gnu
-          - mips64-unknown-linux-gnuabi64
-          - mips64el-unknown-linux-gnuabi64
+        platform:
+          - target: i686-unknown-linux-musl
+            toolchain: stable
+          - target: x86_64-pc-windows-gnu
+            toolchain: stable
+          - target: x86_64-unknown-linux-gnu
+            toolchain: stable
+          - target: x86_64-unknown-linux-musl
+            toolchain: stable
+          - target: armv7-unknown-linux-musleabihf
+            toolchain: stable
+          - target: armv7-unknown-linux-gnueabihf
+            toolchain: stable
+          - target: arm-unknown-linux-gnueabi
+            toolchain: stable
+          - target: arm-unknown-linux-gnueabihf
+            toolchain: stable
+          - target: arm-unknown-linux-musleabi
+            toolchain: stable
+          - target: arm-unknown-linux-musleabihf
+            toolchain: stable
+          - target: aarch64-unknown-linux-gnu
+            toolchain: stable
+          - target: aarch64-unknown-linux-musl
+            toolchain: stable
+          - target: mips-unknown-linux-gnu
+            toolchain: nightly
+          - target: mipsel-unknown-linux-gnu
+            toolchain: nightly
+          - target: mips64-unknown-linux-gnuabi64
+            toolchain: nightly
+          - target: mips64el-unknown-linux-gnuabi64
+            toolchain: nightly
 
     steps:
       - uses: actions/checkout@v4
@@ -45,17 +61,17 @@ jobs:
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install stable
-          rustup default stable
-          rustup override set stable
+          rustup toolchain install ${{ matrix.platform.toolchain }}
+          rustup default ${{ matrix.platform.toolchain }}
+          rustup override set ${{ matrix.platform.toolchain }}
 
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross.git
 
-      - name: Build ${{ matrix.target }}
+      - name: Build ${{ matrix.platform.target }}
         timeout-minutes: 120
         run: |
-          compile_target=${{ matrix.target }}
+          compile_target=${{ matrix.platform.target }}
 
           compile_features="-f full"
 
@@ -73,7 +89,7 @@ jobs:
           fi
 
           cd build
-          ./build-release -t ${{ matrix.target }} $compile_features $compile_compress $compile_nightly
+          ./build-release -t ${{ matrix.platform.target }} $compile_features $compile_compress $compile_nightly
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v2
