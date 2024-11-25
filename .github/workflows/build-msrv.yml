@@ -28,9 +28,9 @@ jobs:
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install 1.74
-          rustup default 1.74
-          rustup override set 1.74
+          rustup toolchain install 1.75
+          rustup default 1.75
+          rustup override set 1.75
       - name: Build with All Features Enabled (Unix)
         if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
         run: cargo build --verbose --features "full-extra local-flow-stat utility-url-outline"

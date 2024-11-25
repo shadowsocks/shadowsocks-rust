@@ -9,7 +9,7 @@ documentation = "https://docs.rs/shadowsocks-core"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.75"
 
 [badges]
 maintenance = { status = "passively-maintained" }
@@ -71,7 +71,8 @@ serde_json = "1.0"
 percent-encoding = "2.1"
 
 futures = "0.3"
-async-trait = "0.1"
+trait-variant = "0.1"
+dynosaur = "0.1.2"
 
 socket2 = { version = "0.5", features = ["all"] }
 tokio = { version = "1.9.0", features = [

@@ -9,7 +9,7 @@ documentation = "https://docs.rs/shadowsocks-service"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.75"
 
 [badges]
 maintenance = { status = "passively-maintained" }
@@ -171,7 +171,7 @@ tokio-rustls = { version = "0.26", optional = true, default-features = false, fe
     "ring",
 ] }
 rustls-native-certs = { version = "0.8", optional = true }
-async-trait = "0.1"
+trait-variant = "0.1"
 
 socket2 = { version = "0.5", features = ["all"] }
 libc = "~0.2.141"

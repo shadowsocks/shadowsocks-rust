@@ -11,7 +11,6 @@ use std::{
 
 #[cfg(feature = "hickory-dns")]
 use arc_swap::ArcSwap;
-use async_trait::async_trait;
 use cfg_if::cfg_if;
 #[cfg(feature = "hickory-dns")]
 use hickory_resolver::config::ResolverConfig;
@@ -31,11 +30,16 @@ use crate::net::ConnectOpts;
 use super::hickory_dns_resolver::DnsResolver as HickoryDnsResolver;
 
 /// Abstract DNS resolver
-#[async_trait]
+#[trait_variant::make(Send)]
+#[dynosaur::dynosaur(DynDnsResolve)]
 pub trait DnsResolve {
     /// Resolves `addr:port` to a list of `SocketAddr`
     async fn resolve(&self, addr: &str, port: u16) -> io::Result<Vec<SocketAddr>>;
 }
+
+// Equivalent to (dyn DnsResolve + Send + Sync)
+unsafe impl Send for DynDnsResolve<'_> {}
+unsafe impl Sync for DynDnsResolve<'_> {}
 
 #[cfg(feature = "hickory-dns")]
 #[derive(Debug)]
@@ -63,7 +67,7 @@ pub enum DnsResolver {
     #[cfg(feature = "hickory-dns")]
     HickoryDns(HickoryDnsResolver),
     /// Customized Resolver
-    Custom(Box<dyn DnsResolve + Send + Sync>),
+    Custom(Box<DynDnsResolve<'static>>),
 }
 
 impl Default for DnsResolver {
@@ -282,7 +286,7 @@ impl DnsResolver {
     where
         R: DnsResolve + Send + Sync + 'static,
     {
-        DnsResolver::Custom(Box::new(custom) as Box<dyn DnsResolve + Send + Sync>)
+        DnsResolver::Custom(DynDnsResolve::boxed(custom))
     }
 
     /// Resolve address into `SocketAddr`s

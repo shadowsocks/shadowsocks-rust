@@ -5,7 +5,6 @@ use std::{
     time::Duration,
 };
 
-use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use etherparse::PacketBuilder;
 use log::debug;
@@ -93,7 +92,6 @@ impl UdpTunInboundWriter {
     }
 }
 
-#[async_trait]
 impl UdpInboundWrite for UdpTunInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         let addr = match *remote_addr {

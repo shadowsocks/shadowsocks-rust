@@ -5,7 +5,6 @@ use std::{
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
-use async_trait::async_trait;
 use futures::future;
 use hickory_resolver::proto::{
     op::{Message, Query},
@@ -104,7 +103,6 @@ impl DnsResolver {
     }
 }
 
-#[async_trait]
 impl DnsResolve for DnsResolver {
     async fn resolve(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
         let mut name = Name::from_utf8(host)?;

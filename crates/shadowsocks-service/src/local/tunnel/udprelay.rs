@@ -2,7 +2,6 @@
 
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
-use async_trait::async_trait;
 use log::{debug, error, info};
 use shadowsocks::{
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
@@ -87,7 +86,6 @@ struct TunnelUdpInboundWriter {
     inbound: Arc<UdpSocket>,
 }
 
-#[async_trait]
 impl UdpInboundWrite for TunnelUdpInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, _remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         self.inbound.send_to(data, peer_addr).await.map(|_| ())

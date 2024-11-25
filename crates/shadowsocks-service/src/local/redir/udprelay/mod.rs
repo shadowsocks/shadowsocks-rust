@@ -7,7 +7,6 @@ use std::{
     time::Duration,
 };
 
-use async_trait::async_trait;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
 use shadowsocks::{
@@ -91,7 +90,6 @@ impl UdpRedirInboundWriter {
     }
 }
 
-#[async_trait]
 impl UdpInboundWrite for UdpRedirInboundWriter {
     async fn send_to(&self, mut peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         // If IPv6 Transparent Proxy is supported on the current platform,

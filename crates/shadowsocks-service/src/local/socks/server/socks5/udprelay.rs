@@ -7,7 +7,6 @@ use std::{
     time::Duration,
 };
 
-use async_trait::async_trait;
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
 use log::{debug, error, info, trace};
@@ -96,7 +95,6 @@ struct Socks5UdpInboundWriter {
     inbound: Arc<UdpSocket>,
 }
 
-#[async_trait]
 impl UdpInboundWrite for Socks5UdpInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         let remote_addr = match remote_addr {
