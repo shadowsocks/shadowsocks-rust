@@ -48,7 +48,6 @@ jobs:
           rustup toolchain install stable
           rustup default stable
           rustup override set stable
-          rustup target add --toolchain stable ${{ matrix.target }}
 
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross.git
