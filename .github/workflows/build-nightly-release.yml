@@ -34,7 +34,7 @@ jobs:
           rustup override set ${{ matrix.platform.toolchain }}
 
       - name: Install cross
-        run: cargo install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross.git
 
       - name: Build ${{ matrix.platform.target }}
         timeout-minutes: 120
