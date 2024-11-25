@@ -48,20 +48,27 @@ jobs:
             toolchain: stable
           - target: mips-unknown-linux-gnu
             toolchain: nightly
-          - target: mipsel-unknown-linux-musl
+          - target: mips-unknown-linux-musl
             toolchain: nightly
           - target: mipsel-unknown-linux-gnu
             toolchain: nightly
           - target: mipsel-unknown-linux-musl
             toolchain: nightly
-          - target: mips64-unknown-linux-gnuabi64
-            toolchain: nightly
-          - target: mips64-unknown-linux-muslabi64
-            toolchain: nightly
+          # FIXME: ring doesn't support mips64 CPU
+          # - target: mips64-unknown-linux-gnuabi64
+          #   toolchain: nightly
+          # - target: mips64-unknown-linux-muslabi64
+          #   toolchain: nightly
           - target: mips64el-unknown-linux-gnuabi64
             toolchain: nightly
-          - target: mips64el-unknown-linux-muslabi64
-            toolchain: nightly
+          # FIXME: Link Error. 
+          #   = note: mips64el-linux-muslsf-gcc: error: crt1.o: No such file or directory
+          #           mips64el-linux-muslsf-gcc: error: crti.o: No such file or directory
+          #           mips64el-linux-muslsf-gcc: error: crtbegin.o: No such file or directory
+          #           mips64el-linux-muslsf-gcc: error: crtend.o: No such file or directory
+          #           mips64el-linux-muslsf-gcc: error: crtn.o: No such file or directory
+          # - target: mips64el-unknown-linux-muslabi64
+          #   toolchain: nightly
 
     steps:
       - uses: actions/checkout@v4
