@@ -20,8 +20,6 @@ jobs:
             toolchain: stable
           - target: aarch64-unknown-linux-musl
             toolchain: stable
-          - target: mips-unknown-linux-musl
-            toolchain: nightly
 
     steps:
       - uses: actions/checkout@v4
@@ -45,13 +43,6 @@ jobs:
 
           if [[ "$compile_target" == *"-windows-"* ]]; then
             compile_features="$compile_features -f winservice"
-          fi
-
-          if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
-            sudo apt-get update -y && sudo apt-get install -y upx;
-            if [[ "$?" == "0" ]]; then
-              compile_compress="-u"
-            fi
           fi
 
           if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then

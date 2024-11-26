@@ -48,12 +48,13 @@ jobs:
             toolchain: stable
           - target: mips-unknown-linux-gnu
             toolchain: nightly
-          - target: mips-unknown-linux-musl
-            toolchain: nightly
+          # cross mips-*-musl images are disabled
+          # - target: mips-unknown-linux-musl
+          #   toolchain: nightly
           - target: mipsel-unknown-linux-gnu
             toolchain: nightly
-          - target: mipsel-unknown-linux-musl
-            toolchain: nightly
+          # - target: mipsel-unknown-linux-musl
+          #   toolchain: nightly
           # FIXME: ring doesn't support mips64 CPU
           # - target: mips64-unknown-linux-gnuabi64
           #   toolchain: nightly
