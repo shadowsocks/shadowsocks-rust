@@ -104,6 +104,9 @@ pub async fn run(config: Config) -> io::Result<()> {
             server_builder.set_dns_resolver(r.clone());
         }
 
+        let mut connect_opts = connect_opts.clone();
+        let accept_opts = accept_opts.clone();
+
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(fwmark) = inst.outbound_fwmark {
             connect_opts.fwmark = Some(fwmark);
@@ -117,8 +120,8 @@ pub async fn run(config: Config) -> io::Result<()> {
             connect_opts.bind_interface = Some(bind_interface);
         }
 
-        server_builder.set_connect_opts(connect_opts.clone());
-        server_builder.set_accept_opts(accept_opts.clone());
+        server_builder.set_connect_opts(connect_opts);
+        server_builder.set_accept_opts(accept_opts);
 
         if let Some(c) = config.udp_max_associations {
             server_builder.set_udp_capacity(c);
