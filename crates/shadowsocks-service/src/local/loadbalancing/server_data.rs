@@ -94,7 +94,6 @@ impl ServerIdent {
         max_server_rtt: Duration,
         check_window: Duration,
     ) -> ServerIdent {
-        #[allow(unused_mut)]
         let mut connect_opts = context.connect_opts_ref().clone();
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
