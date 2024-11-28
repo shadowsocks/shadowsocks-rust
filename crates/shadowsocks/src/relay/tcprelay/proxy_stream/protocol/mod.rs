@@ -86,7 +86,7 @@ pub enum TcpRequestHeaderRef<'a> {
     Aead2022(Aead2022TcpRequestHeaderRef<'a>),
 }
 
-impl<'a> TcpRequestHeaderRef<'a> {
+impl TcpRequestHeaderRef<'_> {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         match *self {
             TcpRequestHeaderRef::Stream(ref h) => h.write_to_buf(buf),

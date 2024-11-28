@@ -81,7 +81,7 @@ pub struct RecvFut<'a, S: DatagramReceive + ?Sized> {
     buf: &'a mut [u8],
 }
 
-impl<'a, S: DatagramReceive + ?Sized> Future for RecvFut<'a, S> {
+impl<S: DatagramReceive + ?Sized> Future for RecvFut<'_, S> {
     type Output = io::Result<usize>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -101,7 +101,7 @@ pub struct RecvFromFut<'a, S: DatagramReceive + ?Sized> {
     buf: &'a mut [u8],
 }
 
-impl<'a, S: DatagramReceive + ?Sized> Future for RecvFromFut<'a, S> {
+impl<S: DatagramReceive + ?Sized> Future for RecvFromFut<'_, S> {
     type Output = io::Result<(usize, SocketAddr)>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -118,7 +118,7 @@ pub struct RecvReadyFut<'a, S: DatagramReceive + ?Sized> {
     io: &'a S,
 }
 
-impl<'a, S: DatagramReceive + ?Sized> Future for RecvReadyFut<'a, S> {
+impl<S: DatagramReceive + ?Sized> Future for RecvReadyFut<'_, S> {
     type Output = io::Result<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -132,7 +132,7 @@ pub struct SendFut<'a, S: DatagramSend + ?Sized> {
     buf: &'a [u8],
 }
 
-impl<'a, S: DatagramSend + ?Sized> Future for SendFut<'a, S> {
+impl<S: DatagramSend + ?Sized> Future for SendFut<'_, S> {
     type Output = io::Result<usize>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -147,7 +147,7 @@ pub struct SendToFut<'a, S: DatagramSend + ?Sized> {
     buf: &'a [u8],
 }
 
-impl<'a, S: DatagramSend + ?Sized> Future for SendToFut<'a, S> {
+impl<S: DatagramSend + ?Sized> Future for SendToFut<'_, S> {
     type Output = io::Result<usize>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -160,7 +160,7 @@ pub struct SendReadyFut<'a, S: DatagramSend + ?Sized> {
     io: &'a S,
 }
 
-impl<'a, S: DatagramSend + ?Sized> Future for SendReadyFut<'a, S> {
+impl<S: DatagramSend + ?Sized> Future for SendReadyFut<'_, S> {
     type Output = io::Result<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

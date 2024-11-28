@@ -129,7 +129,7 @@ impl FromStr for Mode {
 
 struct ModeVisitor;
 
-impl<'de> serde::de::Visitor<'de> for ModeVisitor {
+impl serde::de::Visitor<'_> for ModeVisitor {
     type Value = Mode;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -1078,7 +1078,7 @@ impl Display for ServerAddr {
 
 struct ServerAddrVisitor;
 
-impl<'de> serde::de::Visitor<'de> for ServerAddrVisitor {
+impl serde::de::Visitor<'_> for ServerAddrVisitor {
     type Value = ServerAddr;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -1259,7 +1259,7 @@ impl Display for ManagerAddr {
 
 struct ManagerAddrVisitor;
 
-impl<'de> serde::de::Visitor<'de> for ManagerAddrVisitor {
+impl serde::de::Visitor<'_> for ManagerAddrVisitor {
     type Value = ManagerAddr;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

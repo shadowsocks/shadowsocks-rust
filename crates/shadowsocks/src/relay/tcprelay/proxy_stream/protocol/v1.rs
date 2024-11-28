@@ -33,7 +33,7 @@ pub struct StreamTcpRequestHeaderRef<'a> {
     pub addr: &'a Address,
 }
 
-impl<'a> StreamTcpRequestHeaderRef<'a> {
+impl StreamTcpRequestHeaderRef<'_> {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         self.addr.write_to_buf(buf);
     }

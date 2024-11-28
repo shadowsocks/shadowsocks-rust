@@ -315,7 +315,7 @@ impl DnsResolver {
             }
         }
 
-        impl<'x, 'y> Drop for ResolverLogger<'x, 'y> {
+        impl Drop for ResolverLogger<'_, '_> {
             fn drop(&mut self) {
                 match self.start_time {
                     Some(start_time) => {

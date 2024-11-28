@@ -72,7 +72,7 @@ pub struct Aead2022TcpRequestHeaderRef<'a> {
     pub padding_size: u16,
 }
 
-impl<'a> Aead2022TcpRequestHeaderRef<'a> {
+impl Aead2022TcpRequestHeaderRef<'_> {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         assert!(
             self.padding_size as usize <= MAX_PADDING_SIZE,
