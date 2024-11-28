@@ -11,7 +11,57 @@ env:
   RUST_LOG: "trace"
 
 jobs:
-  buid-test-check:
+  shadowsocks-rust:
+    strategy:
+      matrix:
+        platform:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - if: ${{ runner.os == 'Windows' }}
+        uses: ilammy/setup-nasm@v1
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install 1.80
+          rustup default 1.80
+          rustup override set 1.80
+      - name: Build with All Features Enabled (Unix)
+        if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
+        run: cargo build --verbose --features "full-extra local-flow-stat utility-url-outline"
+      - name: Build with All Features Enabled (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        run: cargo build --verbose --features "full-extra local-flow-stat utility-url-outline winservice"
+
+  shadowsocks-service:
+    strategy:
+      matrix:
+        platform:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - if: ${{ runner.os == 'Windows' }}
+        uses: ilammy/setup-nasm@v1
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install 1.80
+          rustup default 1.80
+          rustup override set 1.80
+      - name: Build with All Features Enabled
+        run: cargo build --manifest-path crates/shadowsocks-service/Cargo.toml --verbose --features "full dns-over-tls dns-over-https dns-over-h3 local-dns local-flow-stat local-http-rustls local-tun local-fake-dns local-online-config stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
+
+  shadowsocks:
     strategy:
       matrix:
         platform:
@@ -31,9 +81,5 @@ jobs:
           rustup toolchain install 1.75
           rustup default 1.75
           rustup override set 1.75
-      - name: Build with All Features Enabled (Unix)
-        if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
-        run: cargo build --verbose --features "full-extra local-flow-stat utility-url-outline"
-      - name: Build with All Features Enabled (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        run: cargo build --verbose --features "full-extra local-flow-stat utility-url-outline winservice"
+      - name: Build with All Features Enabled
+        run: cargo build --manifest-path crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
