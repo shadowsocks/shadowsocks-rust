@@ -72,7 +72,7 @@ impl Device for VirtTunDevice {
     }
 
     fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
-        return Some(VirtTxToken(self));
+        Some(VirtTxToken(self))
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
@@ -86,17 +86,17 @@ pub struct VirtRxToken<'a> {
 }
 
 impl phy::RxToken for VirtRxToken<'_> {
-    fn consume<R, F>(mut self, f: F) -> R
+    fn consume<R, F>(self, f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> R,
+        F: FnOnce(&[u8]) -> R,
     {
-        f(&mut self.buffer[..])
+        f(&self.buffer)
     }
 }
 
 pub struct VirtTxToken<'a>(&'a mut VirtTunDevice);
 
-impl<'a> phy::TxToken for VirtTxToken<'a> {
+impl phy::TxToken for VirtTxToken<'_> {
     fn consume<R, F>(self, len: usize, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,

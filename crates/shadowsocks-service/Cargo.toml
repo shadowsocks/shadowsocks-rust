@@ -9,7 +9,7 @@ documentation = "https://docs.rs/shadowsocks-service"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.80"
 
 [badges]
 maintenance = { status = "passively-maintained" }
@@ -199,7 +199,7 @@ tun2 = { version = "4.0", optional = true, default-features = false, features = 
     "async",
 ] }
 etherparse = { version = "0.16", optional = true }
-smoltcp = { version = "0.11", optional = true, default-features = false, features = [
+smoltcp = { version = "0.12", optional = true, default-features = false, features = [
     "std",
     "log",
     "medium-ip",

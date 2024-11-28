@@ -17,7 +17,7 @@ use std::{
 use log::{debug, error, trace};
 use shadowsocks::{net::TcpSocketOpts, relay::socks5::Address};
 use smoltcp::{
-    iface::{Config as InterfaceConfig, Interface, SocketHandle, SocketSet},
+    iface::{Config as InterfaceConfig, Interface, PollResult, SocketHandle, SocketSet},
     phy::{DeviceCapabilities, Medium},
     socket::tcp::{Socket as TcpSocket, SocketBuffer as TcpSocketBuffer, State as TcpState},
     storage::RingBuffer,
@@ -324,9 +324,7 @@ impl TcpTun {
                         }
 
                         let before_poll = SmolInstant::now();
-                        let updated_sockets = iface.poll(before_poll, device, &mut socket_set);
-
-                        if updated_sockets {
+                        if let PollResult::SocketStateChanged = iface.poll(before_poll, device, &mut socket_set) {
                             trace!("VirtDevice::poll costed {}", SmolInstant::now() - before_poll);
                         }
 
@@ -357,7 +355,10 @@ impl TcpTun {
                             }
 
                             // SHUT_WR
-                            if matches!(control.send_state, TcpSocketState::Close) && socket.send_queue() == 0 && control.send_buffer.is_empty() {
+                            if matches!(control.send_state, TcpSocketState::Close)
+                                && socket.send_queue() == 0
+                                && control.send_buffer.is_empty()
+                            {
                                 trace!("closing TCP Write Half, {:?}", socket.state());
 
                                 // Close the socket. Set to FIN state

@@ -1,6 +1,6 @@
 //! IP packet encapsulation
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::IpAddr;
 
 use smoltcp::wire::{IpProtocol, IpVersion, Ipv4Packet, Ipv6Packet};
 
@@ -21,15 +21,15 @@ impl<T: AsRef<[u8]> + Copy> IpPacket<T> {
 
     pub fn src_addr(&self) -> IpAddr {
         match *self {
-            IpPacket::Ipv4(ref packet) => IpAddr::from(Ipv4Addr::from(packet.src_addr())),
-            IpPacket::Ipv6(ref packet) => IpAddr::from(Ipv6Addr::from(packet.src_addr())),
+            IpPacket::Ipv4(ref packet) => IpAddr::from(packet.src_addr()),
+            IpPacket::Ipv6(ref packet) => IpAddr::from(packet.src_addr()),
         }
     }
 
     pub fn dst_addr(&self) -> IpAddr {
         match *self {
-            IpPacket::Ipv4(ref packet) => IpAddr::from(Ipv4Addr::from(packet.dst_addr())),
-            IpPacket::Ipv6(ref packet) => IpAddr::from(Ipv6Addr::from(packet.dst_addr())),
+            IpPacket::Ipv4(ref packet) => IpAddr::from(packet.dst_addr()),
+            IpPacket::Ipv6(ref packet) => IpAddr::from(packet.dst_addr()),
         }
     }
 
