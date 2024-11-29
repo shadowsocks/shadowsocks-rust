@@ -65,6 +65,9 @@ pub struct ConnectOpts {
     /// Outbound socket binds to interface
     pub bind_interface: Option<String>,
 
+    /// Outbound UDP socket allows IP fragmentation
+    pub udp_allow_fragmentation: bool,
+
     /// TCP options
     pub tcp: TcpSocketOpts,
 
