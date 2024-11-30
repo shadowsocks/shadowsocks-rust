@@ -14,17 +14,21 @@ use shadowsocks_service::{
     run_local, run_server,
 };
 
-fn random_local_tcp_port() -> u16 {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.local_addr().unwrap().port()
+fn random_local_tcp_port_pair() -> (u16, u16) {
+    let listener1 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port1 = listener1.local_addr().unwrap().port();
+
+    let listener2 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port2 = listener2.local_addr().unwrap().port();
+
+    (port1, port2)
 }
 
 #[tokio::test]
 async fn tcp_tunnel() {
     let _ = env_logger::try_init();
 
-    let local_port = random_local_tcp_port();
-    let server_port = random_local_tcp_port();
+    let (local_port, server_port) = random_local_tcp_port_pair();
     let local_config = Config::load_from_str(
         &format!(
             r#"{{
@@ -101,8 +105,7 @@ async fn udp_tunnel() {
 
     time::sleep(Duration::from_secs(1)).await;
 
-    let local_port = random_local_tcp_port();
-    let server_port = random_local_tcp_port();
+    let (local_port, server_port) = random_local_tcp_port_pair();
     let local_config = Config::load_from_str(
         &format!(
             r#"{{
