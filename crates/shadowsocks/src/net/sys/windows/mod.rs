@@ -498,12 +498,12 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, opts: &ConnectOpts
     socket.set_nonblocking(true)?;
     let socket = UdpSocket::from_std(socket.into())?;
 
-    if ! opts.udp_allow_fragmentation {
+    if !opts.udp.allow_fragmentation {
         if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
             warn!("failed to disable IP fragmentation, error: {}", err);
         }
     }
-    
+
     disable_connection_reset(&socket)?;
 
     Ok(socket)

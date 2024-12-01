@@ -53,6 +53,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     connect_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
     connect_opts.tcp.mptcp = config.mptcp;
     connect_opts.udp.mtu = config.udp_mtu;
+    connect_opts.udp.allow_fragmentation = config.outbound_udp_allow_fragmentation;
 
     let mut accept_opts = AcceptOpts {
         ipv6_only: config.ipv6_only,
