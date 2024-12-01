@@ -142,6 +142,7 @@ impl Server {
         connect_opts.tcp.keepalive = config.keep_alive.or(Some(LOCAL_DEFAULT_KEEPALIVE_TIMEOUT));
         connect_opts.tcp.mptcp = config.mptcp;
         connect_opts.udp.mtu = config.udp_mtu;
+        connect_opts.udp.allow_fragmentation = config.outbound_udp_allow_fragmentation;
         context.set_connect_opts(connect_opts);
 
         let mut accept_opts = AcceptOpts {

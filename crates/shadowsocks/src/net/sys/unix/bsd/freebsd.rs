@@ -251,7 +251,7 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, _config: &ConnectO
         UdpSocket::from_std(socket.into())?
     };
 
-    if ! config.udp_allow_fragmentation {
+    if !config.udp.allow_fragmentation {
         if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
             warn!("failed to disable IP fragmentation, error: {}", err);
         }

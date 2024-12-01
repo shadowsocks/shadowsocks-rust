@@ -20,8 +20,8 @@ use crate::{
         sys::set_ipv6_only,
     },
 };
-const IP_RECVDSTPORT: i32 = 33; //Temporary workaround until libc supports this
-const IPV6_RECVDSTPORT: i32 = 64; //Temporary workaround until libc supports this
+const IP_RECVDSTPORT: i32 = 33; // Temporary workaround until libc supports this
+const IPV6_RECVDSTPORT: i32 = 64; // Temporary workaround until libc supports this
 
 pub struct UdpRedirSocket {
     io: AsyncFd<UdpSocket>,
@@ -240,7 +240,7 @@ fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
     unsafe {
         let (_, addr) = SockAddr::try_init(|dst_addr, dst_addr_len| {
             let mut cmsg: *mut libc::cmsghdr = libc::CMSG_FIRSTHDR(msg);
-            let mut addr_or_port_received = false; //The address should come first and then the port, but we use a flag just in case. https://github.com/openbsd/src/blob/3d310523b415eeee9db46a5b67eecf8f9fdd5c8f/sys/netinet/udp_usrreq.c#L662-L687
+            let mut addr_or_port_received = false; // The address should come first and then the port, but we use a flag just in case. https://github.com/openbsd/src/blob/3d310523b415eeee9db46a5b67eecf8f9fdd5c8f/sys/netinet/udp_usrreq.c#L662-L687
             while !cmsg.is_null() {
                 let rcmsg = &*cmsg;
                 match (rcmsg.cmsg_level, rcmsg.cmsg_type) {

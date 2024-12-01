@@ -106,7 +106,7 @@ impl TcpStreamRedirExt for TcpStream {
 
                 PF.natlook(&bind_addr, &peer_addr, Protocol::TCP)
             }
-            #[cfg(target_os = "openbsd")] //in OpenBSD, we can get TCP destination address with getsockname()
+            #[cfg(target_os = "openbsd")] // in OpenBSD, we can get TCP destination address with getsockname()
             RedirType::PacketFilter => self.local_addr(),
             #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
             RedirType::IpFirewall => {
