@@ -815,6 +815,8 @@ Example configuration:
     "outbound_bind_interface": "eth1",
     // Outbound socket bind() to this IP (choose a specific interface)
     "outbound_bind_addr": "11.22.33.44",
+    // Outbound UDP socket allows IP fragmentation (default false)
+    "outbound_udp_allow_fragmentation": false
 
     // Balancer customization
     "balancer": {
