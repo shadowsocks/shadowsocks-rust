@@ -47,8 +47,8 @@ impl PingPongBloom {
 
         PingPongBloom {
             blooms: [
-                Bloom::new_for_fp_rate(item_count, fp_p),
-                Bloom::new_for_fp_rate(item_count, fp_p),
+                Bloom::new_for_fp_rate(item_count, fp_p).expect("BloomFilter1"),
+                Bloom::new_for_fp_rate(item_count, fp_p).expect("BloomFilter2"),
             ],
             bloom_count: [0, 0],
             item_count,
