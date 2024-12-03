@@ -28,11 +28,11 @@ cfg_if! {
                  target_os = "android",
                  target_os = "windows",
                  target_os = "freebsd"))] {
-        use tun2::{
+        use tun::{
             create_as_async, AsyncDevice, Configuration as TunConfiguration, AbstractDevice, Error as TunError, Layer,
         };
     } else {
-        use tun2::{AbstractDevice, Configuration as TunConfiguration, Error as TunError, Layer};
+        use tun::{AbstractDevice, Configuration as TunConfiguration, Error as TunError, Layer};
 
         mod fake_tun;
         use self::fake_tun::{create_as_async, AsyncDevice};

@@ -1880,7 +1880,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3298,7 +3298,7 @@ dependencies = [
  "tokio-native-tls",
  "tokio-rustls",
  "trait-variant",
- "tun2",
+ "tun",
  "webpki-roots",
  "windows-sys 0.59.0",
  "zstd",
@@ -3873,10 +3873,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
-name = "tun2"
-version = "4.0.0"
+name = "tun"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21afe73d3d42581a7400fbf5aec057a646ffe3f8bb5ae3f61d88c7e7f4ac77be"
+checksum = "f3c3f82bccbec181c56278683da7d915cf875a6cf8a450b3bcf1367de222775e"
 dependencies = [
  "bytes",
  "cfg-if",
@@ -3886,7 +3886,7 @@ dependencies = [
  "libc",
  "log",
  "nix",
- "thiserror 1.0.69",
+ "thiserror 2.0.3",
  "tokio",
  "tokio-util",
  "windows-sys 0.59.0",
