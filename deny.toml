@@ -118,7 +118,7 @@ exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
-    { allow = ["WTFPL"], crate = "tun2" },
+    { allow = ["WTFPL"], crate = "tun" },
     { allow = ["LicenseRef-ring"], crate = "ring" },
 ]
 
