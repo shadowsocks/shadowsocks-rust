@@ -89,11 +89,13 @@ async fn tcp_tunnel() {
 async fn udp_tunnel() {
     let _ = env_logger::try_init();
 
-    // A UDP echo server
-    tokio::spawn(async {
-        let socket = UdpSocket::bind("127.0.0.1:9230").await.unwrap();
+    let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let socket_local_addr = socket.local_addr().unwrap();
+    let echo_server_port = socket_local_addr.port();
 
-        debug!("UDP echo server listening on 127.0.0.1:9230");
+    // A UDP echo server
+    tokio::spawn(async move {
+        debug!("UDP echo server listening on {socket_local_addr}");
 
         let mut buffer = [0u8; 65536];
         loop {
@@ -115,7 +117,7 @@ async fn udp_tunnel() {
                     "local_address": "127.0.0.1",
                     "protocol": "tunnel",
                     "forward_address": "127.0.0.1",
-                    "forward_port": 9230
+                    "forward_port": {echo_server_port}
                 }}
             ],
             "server": "127.0.0.1",
