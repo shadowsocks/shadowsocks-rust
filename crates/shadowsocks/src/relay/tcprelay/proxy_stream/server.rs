@@ -69,7 +69,7 @@ impl<S> ProxyServerStream<S> {
         #[cfg(not(feature = "aead-cipher-2022"))]
         let writer_state = ProxyServerStreamWriteState::Established;
 
-        static EMPTY_IDENTITY: [Bytes; 0] = [];
+        const EMPTY_IDENTITY: [Bytes; 0] = [];
         ProxyServerStream {
             stream: CryptoStream::from_stream_with_identity(
                 &context,

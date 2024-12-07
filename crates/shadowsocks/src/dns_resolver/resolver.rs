@@ -161,7 +161,7 @@ async fn hickory_dns_notify_update_dns(resolver: Arc<HickoryDnsSystemResolver>) 
 
     use super::hickory_dns_resolver::create_resolver;
 
-    static DNS_RESOLV_FILE_PATH: &str = "/etc/resolv.conf";
+    const DNS_RESOLV_FILE_PATH: &str = "/etc/resolv.conf";
 
     if !Path::new(DNS_RESOLV_FILE_PATH).exists() {
         trace!("resolv file {DNS_RESOLV_FILE_PATH} doesn't exist");

@@ -84,7 +84,7 @@ impl OnlineConfigService {
     }
 
     async fn run_once_impl(&mut self) -> io::Result<()> {
-        static SHADOWSOCKS_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+        const SHADOWSOCKS_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
         let start_time = Instant::now();
 
