@@ -135,7 +135,7 @@ async fn tcp_tunnel_example(
 
     let mut client = TcpStream::connect(local_addr).await?;
 
-    static HTTP_REQUEST: &[u8] = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\nConnection: close\r\n\r\n";
+    const HTTP_REQUEST: &[u8] = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\nConnection: close\r\n\r\n";
     client.write_all(HTTP_REQUEST).await?;
 
     let mut reader = BufReader::new(client);
@@ -145,7 +145,7 @@ async fn tcp_tunnel_example(
 
     println!("{:?}", ByteStr::new(&buffer));
 
-    static HTTP_RESPONSE_STATUS: &[u8] = b"HTTP/1.0 200 OK\r\n";
+    const HTTP_RESPONSE_STATUS: &[u8] = b"HTTP/1.0 200 OK\r\n";
     assert!(buffer.starts_with(HTTP_RESPONSE_STATUS));
 
     Ok(())

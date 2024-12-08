@@ -853,7 +853,7 @@ impl PingChecker {
     async fn check_request_tcp_chromium(&self) -> io::Result<()> {
         use std::io::{Error, ErrorKind};
 
-        static GET_BODY: &[u8] =
+        const GET_BODY: &[u8] =
             b"GET /generate_204 HTTP/1.1\r\nHost: clients3.google.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
         let addr = Address::DomainNameAddress("clients3.google.com".to_owned(), 80);
@@ -892,7 +892,7 @@ impl PingChecker {
     async fn check_request_tcp_firefox(&self) -> io::Result<()> {
         use std::io::{Error, ErrorKind};
 
-        static GET_BODY: &[u8] =
+        const GET_BODY: &[u8] =
             b"GET /success.txt HTTP/1.1\r\nHost: detectportal.firefox.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
         let addr = Address::DomainNameAddress("detectportal.firefox.com".to_owned(), 80);
@@ -938,7 +938,7 @@ impl PingChecker {
         //    - QNAME: \x07 firefox \x03 com \x00
         //    - QTYPE: 0x0001 A
         //    - QCLASS: 0x0001 IN
-        static DNS_QUERY: &[u8] =
+        const DNS_QUERY: &[u8] =
             b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07firefox\x03com\x00\x00\x01\x00\x01";
 
         let addr = Address::SocketAddress(SocketAddr::new(Ipv4Addr::new(8, 8, 8, 8).into(), 53));

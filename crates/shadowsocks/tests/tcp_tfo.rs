@@ -97,6 +97,6 @@ async fn tcp_tunnel_tfo() {
 
     println!("{:?}", ByteStr::new(&buffer));
 
-    static HTTP_RESPONSE_STATUS: &[u8] = b"HTTP/1.0 200 OK\r\n";
+    const HTTP_RESPONSE_STATUS: &[u8] = b"HTTP/1.0 200 OK\r\n";
     assert!(buffer.starts_with(HTTP_RESPONSE_STATUS));
 }
