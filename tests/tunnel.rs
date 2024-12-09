@@ -67,7 +67,7 @@ async fn tcp_tunnel() {
     tokio::spawn(run_local(local_config));
     tokio::spawn(run_server(server_config));
 
-    time::sleep(Duration::from_secs(1)).await;
+    time::sleep(Duration::from_secs(5)).await;
 
     // Connect it directly, because it is now established a TCP tunnel with detectportal.firefox.com
     let mut stream = TcpStream::connect(("127.0.0.1", local_port)).await.unwrap();
@@ -148,7 +148,7 @@ async fn udp_tunnel() {
     tokio::spawn(run_local(local_config));
     tokio::spawn(run_server(server_config));
 
-    time::sleep(Duration::from_secs(1)).await;
+    time::sleep(Duration::from_secs(5)).await;
 
     const MESSAGE: &[u8] = b"hello shadowsocks";
 
