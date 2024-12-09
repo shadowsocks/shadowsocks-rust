@@ -56,7 +56,7 @@ async fn dns_relay() {
     time::sleep(Duration::from_secs(1)).await;
 
     // Query firefox.com, TransactionID: 0x1234
-    static DNS_QUERY: &[u8] = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07firefox\x03com\x00\x00\x01\x00\x01";
+    const DNS_QUERY: &[u8] = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07firefox\x03com\x00\x00\x01\x00\x01";
 
     // 1. DoT
     {
