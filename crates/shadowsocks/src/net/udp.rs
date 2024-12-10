@@ -166,6 +166,12 @@ impl UdpSocket {
             })
     }
 
+    /// Binds to a specific address as an outbound socket
+    #[inline]
+    pub async fn bind(addr: &SocketAddr) -> io::Result<UdpSocket> {
+        UdpSocket::bind_with_opts(addr, &ConnectOpts::default()).await
+    }
+
     /// Binds to a specific address with opts as an outbound socket
     pub async fn bind_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
         bind_outbound_udp_socket(addr, opts).await.map(|socket| UdpSocket {
