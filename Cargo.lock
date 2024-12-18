@@ -751,7 +751,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3983b127f13995e68c1e29071e5d115cd96f215ccb5e6812e3728cd6f92653b3"
 dependencies = [
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
 ]
 
 [[package]]
@@ -1348,7 +1348,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "serde",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "tinyvec",
  "tokio",
  "tokio-native-tls",
@@ -1378,7 +1378,7 @@ dependencies = [
  "rustls-native-certs",
  "serde",
  "smallvec",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "tokio",
  "tokio-native-tls",
  "tokio-rustls",
@@ -2559,7 +2559,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "tokio",
  "tracing",
 ]
@@ -2578,7 +2578,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "tinyvec",
  "tracing",
  "web-time",
@@ -3175,7 +3175,7 @@ dependencies = [
  "shadowsocks-crypto",
  "socket2",
  "spin",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "tokio",
  "tokio-tfo",
  "trait-variant",
@@ -3243,7 +3243,7 @@ dependencies = [
  "snmalloc-rs",
  "sysexits",
  "tcmalloc",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "time",
  "tokio",
  "tracing",
@@ -3293,7 +3293,7 @@ dependencies = [
  "smoltcp",
  "socket2",
  "spin",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "tokio",
  "tokio-native-tls",
  "tokio-rustls",
@@ -3593,11 +3593,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.7"
+version = "2.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93605438cbd668185516ab499d589afb7ee1859ea3d5fc8f6b0755e1c7443767"
+checksum = "08f5383f3e0071702bf93ab5ee99b52d26936be9dedd9413067cbdcddcb6141a"
 dependencies = [
- "thiserror-impl 2.0.7",
+ "thiserror-impl 2.0.8",
 ]
 
 [[package]]
@@ -3613,9 +3613,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.7"
+version = "2.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1d8749b4531af2117677a5fcd12b1348a3fe2b81e36e61ffeac5c4aa3273e36"
+checksum = "f2f357fcec90b3caef6623a099691be676d033b40a058ac95d2a6ade6fa0c943"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3885,7 +3885,7 @@ dependencies = [
  "libc",
  "log",
  "nix",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "tokio",
  "tokio-util",
  "windows-sys 0.59.0",
@@ -4386,7 +4386,7 @@ dependencies = [
  "futures",
  "libloading",
  "log",
- "thiserror 2.0.7",
+ "thiserror 2.0.8",
  "windows-sys 0.59.0",
 ]
 
