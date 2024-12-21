@@ -15,8 +15,8 @@ use super::config::Socks5AuthConfig;
 #[allow(clippy::module_inception)]
 mod server;
 #[cfg(feature = "local-socks4")]
-mod socks4;
-mod socks5;
+pub mod socks4;
+pub mod socks5;
 
 /// SOCKS4/4a, SOCKS5 Local Server builder
 pub struct SocksBuilder {
