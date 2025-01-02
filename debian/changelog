@@ -1,3 +1,28 @@
+shadowsocks-rust (1.22.0) unstable; urgency=medium
+
+  ## Features, Breaking Changes
+
+  - `ServerConfig::new` returns a `Result`, fails if `password` doesn't match `method`'s requirements
+  - `ConnectOpts::bind_local_addr` supports binding to a specific port
+  - Uses `async` in trait, bump MSRV to v1.75
+  - #1790 `outbound_udp_allow_fragmentation` new option for allowing UDP outbound sockets to enable IP fragmentation
+  - `tun2` has been merged back to `meh/rust-tun`
+  - #1810 `UdpSocket::bind`
+  - `shadowsocks-rust` binary crate "default" feature set to `full`
+
+  ## Bug Fixes
+
+  - Method `none` (`plain`) skips key derivation process.
+  - #1762 Do not crash in `ServerConfig::from_url()` on unknown method
+  - #1759 Flush `local-tun` tcp writer half before close
+  - #1765 Disallow HTTP/SOCKS4a in `socks` protocol handler when authentication is required
+  - `ConnectOpts`'s per-server options should not be shared globally
+  - #1814 `local-dns` upstream udp packet buffer size 256
+
+  ## Miscellaneous
+
+  - Make cryptographic dependencies optional in default build of `shadowsocks` crate.
+
 shadowsocks-rust (1.21.2) unstable; urgency=medium
 
   ## Bug Fixes
