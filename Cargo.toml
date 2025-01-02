@@ -55,21 +55,7 @@ panic = "abort"
 strip = true
 
 [features]
-default = [
-    "logging",
-    "hickory-dns",
-    "local",
-    "server",
-    "manager",
-    "utility",
-    "service",
-    "local-http",
-    "local-tunnel",
-    "local-socks4",
-    "multi-threaded",
-    "aead-cipher",
-    "aead-cipher-2022",
-]
+default = ["full"]
 
 # Basic Features
 basic = [

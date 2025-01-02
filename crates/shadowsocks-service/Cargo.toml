@@ -15,8 +15,7 @@ rust-version = "1.80"
 maintenance = { status = "passively-maintained" }
 
 [features]
-# WARN: Just for compatible. May be removed in the future releases.
-default = ["aead-cipher"]
+default = ["hickory-dns", "aead-cipher"]
 
 full = [
     "local",
