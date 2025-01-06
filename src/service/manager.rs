@@ -27,6 +27,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
+    error::{ShadowsocksError, ShadowsocksResult},
     monitor, vparser,
 };
 
@@ -267,7 +268,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
 }
 
 /// Create `Runtime` and `main` entry
-pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = ExitCode>), ExitCode> {
+pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<Output = ShadowsocksResult>)> {
     let (config, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
             if !matches.contains_id("SERVER_CONFIG") {
@@ -284,13 +285,8 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
         });
 
         let mut service_config = match config_path_opt {
-            Some(ref config_path) => match ServiceConfig::load_from_file(config_path) {
-                Ok(c) => c,
-                Err(err) => {
-                    eprintln!("loading config {config_path:?}, {err}");
-                    return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
-                }
-            },
+            Some(ref config_path) => ServiceConfig::load_from_file(config_path)
+                .map_err(|err| ShadowsocksError::LoadConfigFailure(format!("loading config {config_path:?}, {err}")))?,
             None => ServiceConfig::default(),
         };
         service_config.set_options(matches);
@@ -308,13 +304,8 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
         trace!("{:?}", service_config);
 
         let mut config = match config_path_opt {
-            Some(cpath) => match Config::load_from_file(&cpath, ConfigType::Manager) {
-                Ok(cfg) => cfg,
-                Err(err) => {
-                    eprintln!("loading config {cpath:?}, {err}");
-                    return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
-                }
-            },
+            Some(cpath) => Config::load_from_file(&cpath, ConfigType::Manager)
+                .map_err(|err| ShadowsocksError::LoadConfigFailure(format!("loading config {cpath:?}, {err}")))?,
             None => Config::new(ConfigType::Manager),
         };
 
@@ -421,13 +412,8 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
         }
 
         if let Some(acl_file) = matches.get_one::<String>("ACL") {
-            let acl = match AccessControl::load_from_file(acl_file) {
-                Ok(acl) => acl,
-                Err(err) => {
-                    eprintln!("loading ACL \"{acl_file}\", {err}");
-                    return Err(crate::EXIT_CODE_LOAD_ACL_FAILURE.into());
-                }
-            };
+            let acl = AccessControl::load_from_file(acl_file)
+                .map_err(|err| ShadowsocksError::LoadAclFailure(format!("loading ACL \"{acl_file}\", {err}")))?;
             config.acl = Some(acl);
         }
 
@@ -470,18 +456,16 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
         // DONE reading options
 
-        if config.manager.is_none() {
-            eprintln!(
+        config.manager.as_ref().ok_or_else(|| {
+            ShadowsocksError::InsufficientParams(format!(
                 "missing `manager_address`, consider specifying it by --manager-address command line option, \
                     or \"manager_address\" and \"manager_port\" keys in configuration file"
-            );
-            return Err(crate::EXIT_CODE_INSUFFICIENT_PARAMS.into());
-        }
+            ))
+        })?;
 
-        if let Err(err) = config.check_integrity() {
-            eprintln!("config integrity check failed, {err}");
-            return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
-        }
+        config
+            .check_integrity()
+            .map_err(|err| ShadowsocksError::LoadConfigFailure(format!("config integrity check failed, {err}")))?;
 
         #[cfg(unix)]
         if matches.get_flag("DAEMONIZE") || matches.get_raw("DAEMONIZE_PID_PATH").is_some() {
@@ -491,10 +475,9 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
         #[cfg(unix)]
         if let Some(uname) = matches.get_one::<String>("USER") {
-            if let Err(err) = crate::sys::run_as_user(uname) {
-                eprintln!("failed to change as user, error: {err}");
-                return Err(crate::EXIT_CODE_INSUFFICIENT_PARAMS.into());
-            }
+            crate::sys::run_as_user(uname).map_err(|err| {
+                ShadowsocksError::InsufficientParams(format!("failed to change as user, error: {err}"))
+            })?;
         }
 
         info!("shadowsocks manager {} build {}", crate::VERSION, crate::BUILD_TIME);
@@ -526,17 +509,13 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
         match future::select(server, abort_signal).await {
             // Server future resolved without an error. This should never happen.
-            Either::Left((Ok(..), ..)) => {
-                eprintln!("server exited unexpectedly");
-                crate::EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY.into()
-            }
+            Either::Left((Ok(..), ..)) => Err(ShadowsocksError::ServerExitUnexpectedly(
+                "server exited unexpectedly".to_owned(),
+            )),
             // Server future resolved with error, which are listener errors in most cases
-            Either::Left((Err(err), ..)) => {
-                eprintln!("server aborted with {err}");
-                crate::EXIT_CODE_SERVER_ABORTED.into()
-            }
+            Either::Left((Err(err), ..)) => Err(ShadowsocksError::ServerAborted(format!("server aborted with {err}"))),
             // The abort signal future resolved. Means we should just exit.
-            Either::Right(_) => ExitCode::SUCCESS,
+            Either::Right(_) => Ok(()),
         }
     };
 
@@ -546,9 +525,12 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 /// Program entrance `main`
 #[inline]
 pub fn main(matches: &ArgMatches) -> ExitCode {
-    match create(matches) {
-        Ok((runtime, main_fut)) => runtime.block_on(main_fut),
-        Err(code) => code,
+    match create(matches).and_then(|(runtime, main_fut)| runtime.block_on(main_fut)) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("{err}");
+            err.error_code().into()
+        }
     }
 }
 
