@@ -43,10 +43,3 @@ impl std::fmt::Display for ShadowsocksError {
 }
 
 impl std::error::Error for ShadowsocksError {}
-
-impl std::process::Termination for ShadowsocksError {
-    #[inline]
-    fn report(self) -> std::process::ExitCode {
-        self.error_code().report()
-    }
-}
