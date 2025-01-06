@@ -1,14 +1,3 @@
-// /// Exit code when server exits unexpectedly
-// pub const EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY: sysexits::ExitCode = sysexits::ExitCode::Software;
-// /// Exit code when server aborted
-// pub const EXIT_CODE_SERVER_ABORTED: sysexits::ExitCode = sysexits::ExitCode::Software;
-// /// Exit code when loading configuration from file fails
-// pub const EXIT_CODE_LOAD_CONFIG_FAILURE: sysexits::ExitCode = sysexits::ExitCode::Config;
-// /// Exit code when loading ACL from file fails
-// pub const EXIT_CODE_LOAD_ACL_FAILURE: sysexits::ExitCode = sysexits::ExitCode::Config;
-// /// Exit code when insufficient params are passed via CLI
-// pub const EXIT_CODE_INSUFFICIENT_PARAMS: sysexits::ExitCode = sysexits::ExitCode::Usage;
-
 pub type ShadowsocksResult<T = ()> = Result<T, ShadowsocksError>;
 
 #[derive(Clone, Debug)]
