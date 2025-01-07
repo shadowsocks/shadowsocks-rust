@@ -4,7 +4,7 @@ pub mod allocator;
 pub mod config;
 #[cfg(unix)]
 pub mod daemonize;
-pub mod error;
+mod error;
 #[cfg(feature = "logging")]
 pub mod logging;
 pub mod monitor;
