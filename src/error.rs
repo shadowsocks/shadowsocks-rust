@@ -1,5 +1,10 @@
+//! Shadowsocks-specific error encoding.
+
+/// A result with a shadowsocks-specific error.
 pub type ShadowsocksResult<T = ()> = Result<T, ShadowsocksError>;
 
+/// A generic error class which encodes all possible ways the application can
+/// fail, along with debug information.
 #[derive(Clone, Debug)]
 pub enum ShadowsocksError {
     ServerExitUnexpectedly(String),
@@ -10,7 +15,8 @@ pub enum ShadowsocksError {
 }
 
 impl ShadowsocksError {
-    pub fn error_code(&self) -> sysexits::ExitCode {
+    /// The corresponding `sysexits::ExitCode` for this error.
+    pub fn exit_code(&self) -> sysexits::ExitCode {
         match self {
             Self::ServerExitUnexpectedly(_) | Self::ServerAborted(_) => sysexits::ExitCode::Software,
             Self::LoadConfigFailure(_) | Self::LoadAclFailure(_) => sysexits::ExitCode::Config,

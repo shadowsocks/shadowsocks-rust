@@ -554,7 +554,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("{err}");
-            err.error_code().into()
+            err.exit_code().into()
         }
     }
 }
