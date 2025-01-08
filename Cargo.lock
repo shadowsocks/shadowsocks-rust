@@ -751,7 +751,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3983b127f13995e68c1e29071e5d115cd96f215ccb5e6812e3728cd6f92653b3"
 dependencies = [
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
 ]
 
 [[package]]
@@ -1361,7 +1361,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "serde",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "tinyvec",
  "tokio",
  "tokio-native-tls",
@@ -1391,7 +1391,7 @@ dependencies = [
  "rustls-native-certs",
  "serde",
  "smallvec",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "tokio",
  "tokio-native-tls",
  "tokio-rustls",
@@ -2368,7 +2368,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b7cafe60d6cf8e62e1b9b2ea516a089c008945bb5a275416789e7db0bc199dc"
 dependencies = [
  "memchr",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "ucd-trie",
 ]
 
@@ -2584,7 +2584,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "tokio",
  "tracing",
 ]
@@ -2603,7 +2603,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "tinyvec",
  "tracing",
  "web-time",
@@ -3213,7 +3213,7 @@ dependencies = [
  "shadowsocks-crypto",
  "socket2",
  "spin",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "tokio",
  "tokio-tfo",
  "trait-variant",
@@ -3281,7 +3281,7 @@ dependencies = [
  "snmalloc-rs",
  "sysexits",
  "tcmalloc",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "time",
  "tokio",
  "tracing",
@@ -3331,7 +3331,7 @@ dependencies = [
  "smoltcp",
  "socket2",
  "spin",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "tokio",
  "tokio-native-tls",
  "tokio-rustls",
@@ -3631,11 +3631,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.9"
+version = "2.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f072643fd0190df67a8bab670c20ef5d8737177d6ac6b2e9a236cb096206b2cc"
+checksum = "a3ac7f54ca534db81081ef1c1e7f6ea8a3ef428d2fc069097c079443d24124d3"
 dependencies = [
- "thiserror-impl 2.0.9",
+ "thiserror-impl 2.0.10",
 ]
 
 [[package]]
@@ -3651,9 +3651,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.9"
+version = "2.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b50fa271071aae2e6ee85f842e2e28ba8cd2c5fb67f11fcb1fd70b276f9e7d4"
+checksum = "9e9465d30713b56a37ede7185763c3492a91be2f5fa68d958c44e41ab9248beb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3938,7 +3938,7 @@ dependencies = [
  "libc",
  "log",
  "nix",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "tokio",
  "tokio-util",
  "windows-sys 0.59.0",
@@ -4493,7 +4493,7 @@ dependencies = [
  "futures",
  "libloading",
  "log",
- "thiserror 2.0.9",
+ "thiserror 2.0.10",
  "windows-sys 0.59.0",
  "winreg2",
 ]
