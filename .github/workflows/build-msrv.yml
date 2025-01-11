@@ -78,8 +78,8 @@ jobs:
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install 1.75
-          rustup default 1.75
-          rustup override set 1.75
+          rustup toolchain install 1.77
+          rustup default 1.77
+          rustup override set 1.77
       - name: Build with All Features Enabled
         run: cargo build --manifest-path crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
