@@ -481,11 +481,9 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         // DONE READING options
 
         if config.server.is_empty() {
-            return Err(ShadowsocksError::InsufficientParams(format!(
-                "missing proxy servers, consider specifying it by \
+            return Err(ShadowsocksError::InsufficientParams("missing proxy servers, consider specifying it by \
                     --server-addr, --encrypt-method, --password command line option, \
-                        or configuration file, check more details in https://shadowsocks.org/doc/configs.html"
-            )));
+                        or configuration file, check more details in https://shadowsocks.org/doc/configs.html".to_string()));
         }
 
         config
