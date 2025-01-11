@@ -939,10 +939,8 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         // DONE READING options
 
         if config.local.is_empty() {
-            return Err(ShadowsocksError::InsufficientParams(format!(
-                "missing `local_address`, consider specifying it by --local-addr command line option, \
-                    or \"local_address\" and \"local_port\" in configuration file"
-            )));
+            return Err(ShadowsocksError::InsufficientParams("missing `local_address`, consider specifying it by --local-addr command line option, \
+                    or \"local_address\" and \"local_port\" in configuration file".to_string()));
         }
 
         config

@@ -32,7 +32,7 @@ mod sys;
 /// Established Client Transparent Proxy
 ///
 /// This method must be called after handshaking with client (for example, socks5 handshaking)
-async fn establish_client_tcp_redir<'a>(
+async fn establish_client_tcp_redir(
     context: Arc<ServiceContext>,
     balancer: PingBalancer,
     mut stream: TcpStream,

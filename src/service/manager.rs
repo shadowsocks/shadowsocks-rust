@@ -457,10 +457,8 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         // DONE reading options
 
         config.manager.as_ref().ok_or_else(|| {
-            ShadowsocksError::InsufficientParams(format!(
-                "missing `manager_address`, consider specifying it by --manager-address command line option, \
-                    or \"manager_address\" and \"manager_port\" keys in configuration file"
-            ))
+            ShadowsocksError::InsufficientParams("missing `manager_address`, consider specifying it by --manager-address command line option, \
+                    or \"manager_address\" and \"manager_port\" keys in configuration file".to_string())
         })?;
 
         config

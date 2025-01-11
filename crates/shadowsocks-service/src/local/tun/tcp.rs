@@ -546,7 +546,7 @@ impl TcpTun {
 
     pub async fn drive_interface_state(&mut self, frame: &[u8]) {
         if self.iface_tx.send(frame.to_vec()).is_err() {
-            panic!("interface send channel closed unexpectly");
+            panic!("interface send channel closed unexpectedly");
         }
 
         // Wake up and poll the interface.
@@ -565,7 +565,7 @@ impl TcpTun {
 /// Established Client Transparent Proxy
 ///
 /// This method must be called after handshaking with client (for example, socks5 handshaking)
-async fn establish_client_tcp_redir<'a>(
+async fn establish_client_tcp_redir(
     context: Arc<ServiceContext>,
     balancer: PingBalancer,
     mut stream: TcpConnection,
