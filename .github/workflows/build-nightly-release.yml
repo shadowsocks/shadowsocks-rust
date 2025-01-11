@@ -20,6 +20,8 @@ jobs:
             toolchain: stable
           - target: aarch64-unknown-linux-musl
             toolchain: stable
+          - target: mips-unknown-linux-gnu
+            toolchain: nightly
           - target: mipsel-unknown-linux-gnu
             toolchain: nightly
           - target: mips64el-unknown-linux-gnuabi64
