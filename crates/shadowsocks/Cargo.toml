@@ -92,7 +92,7 @@ notify = { version = "8.0", optional = true }
 
 aes = { version = "0.8", optional = true }
 blake3 = "1.5"
-shadowsocks-crypto = { version = "0.5.8", default-features = false }
+shadowsocks-crypto = { version = "0.6.0", default-features = false }
 
 [target.'cfg(any(windows, target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "macos", target_os = "ios", target_os = "watchos", target_os = "tvos"))'.dependencies]
 tokio-tfo = "0.3"
