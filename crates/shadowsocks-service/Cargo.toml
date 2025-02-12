@@ -42,27 +42,13 @@ hickory-dns = ["hickory-resolver", "shadowsocks/trust-dns"]
 trust-dns = ["hickory-dns"]
 dns-over-tls = [
     "hickory-dns",
-    "hickory-resolver/dns-over-tls",
     "hickory-resolver/dns-over-rustls",
     "hickory-resolver/webpki-roots",
-    "hickory-resolver/native-certs",
-]
-dns-over-native-tls = [
-    "hickory-dns",
-    "hickory-resolver/dns-over-tls",
-    "hickory-resolver/dns-over-native-tls",
-]
-dns-over-native-tls-vendored = [
-    "hickory-dns",
-    "hickory-resolver/dns-over-tls",
-    "hickory-resolver/dns-over-native-tls",
-    "native-tls/vendored",
 ]
 dns-over-https = [
     "hickory-dns",
     "hickory-resolver/dns-over-https-rustls",
     "hickory-resolver/webpki-roots",
-    "hickory-resolver/native-certs",
 ]
 dns-over-h3 = ["hickory-dns", "hickory-resolver/dns-over-h3"]
 
