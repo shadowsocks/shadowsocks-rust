@@ -2467,10 +2467,7 @@ impl Config {
 
             #[cfg(feature = "hickory-dns")]
             "google" => DnsConfig::HickoryDns(ResolverConfig::google()),
-            #[cfg(all(
-                feature = "hickory-dns",
-                any(feature = "dns-over-tls", feature = "dns-over-native-tls")
-            ))]
+            #[cfg(all(feature = "hickory-dns", feature = "dns-over-tls"))]
             "google_tls" => DnsConfig::HickoryDns(ResolverConfig::google_tls()),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-https"))]
             "google_https" => DnsConfig::HickoryDns(ResolverConfig::google_https()),
@@ -2479,20 +2476,14 @@ impl Config {
 
             #[cfg(feature = "hickory-dns")]
             "cloudflare" => DnsConfig::HickoryDns(ResolverConfig::cloudflare()),
-            #[cfg(all(
-                feature = "hickory-dns",
-                any(feature = "dns-over-tls", feature = "dns-over-native-tls")
-            ))]
+            #[cfg(all(feature = "hickory-dns", feature = "dns-over-tls"))]
             "cloudflare_tls" => DnsConfig::HickoryDns(ResolverConfig::cloudflare_tls()),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-https"))]
             "cloudflare_https" => DnsConfig::HickoryDns(ResolverConfig::cloudflare_https()),
 
             #[cfg(feature = "hickory-dns")]
             "quad9" => DnsConfig::HickoryDns(ResolverConfig::quad9()),
-            #[cfg(all(
-                feature = "hickory-dns",
-                any(feature = "dns-over-tls", feature = "dns-over-native-tls")
-            ))]
+            #[cfg(all(feature = "hickory-dns", feature = "dns-over-tls"))]
             "quad9_tls" => DnsConfig::HickoryDns(ResolverConfig::quad9_tls()),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-https"))]
             "quad9_https" => DnsConfig::HickoryDns(ResolverConfig::quad9_https()),
