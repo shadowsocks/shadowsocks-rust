@@ -244,7 +244,7 @@ rpmalloc = { version = "0.2", optional = true }
 
 shadowsocks-service = { version = "1.23.0", path = "./crates/shadowsocks-service" }
 
-windows-service = { version = "0.7", optional = true }
+windows-service = { version = "0.8", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5"
