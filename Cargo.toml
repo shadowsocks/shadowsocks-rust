@@ -229,7 +229,7 @@ directories = "6.0"
 xdg = "2.5"
 rpassword = "7.3"
 libc = { version = "0.2", features = ["extra_traits"] }
-rand = "0.8"
+rand = "0.9"
 
 futures = "0.3"
 tokio = { version = "1", features = ["rt", "signal"] }

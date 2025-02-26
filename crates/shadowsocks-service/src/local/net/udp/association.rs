@@ -234,13 +234,13 @@ where
 }
 
 thread_local! {
-    static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy());
+    static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_os_rng());
 }
 
 /// Generate an AEAD-2022 Client SessionID
 #[inline]
 pub fn generate_client_session_id() -> u64 {
-    CLIENT_SESSION_RNG.with(|rng| rng.borrow_mut().gen())
+    CLIENT_SESSION_RNG.with(|rng| rng.borrow_mut().random())
 }
 
 impl<W> UdpAssociationContext<W>
@@ -541,7 +541,7 @@ where
                 // Reopen a new session is not perfect, because the remote target will receive packets from a different address.
                 // For most application protocol, like QUIC, it is fine to change client address.
                 //
-                // But it will happen only when a client continously send 18446744073709551616 packets without renewing the socket.
+                // But it will happen only when a client continuously send 18446744073709551616 packets without renewing the socket.
 
                 let new_session_id = generate_client_session_id();
 

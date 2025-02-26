@@ -238,7 +238,7 @@ impl UdpServer {
                 }
 
                 peer_addr_opt = self.keepalive_rx.recv() => {
-                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectly");
+                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectedly");
                     self.assoc_map.keep_alive(&peer_addr);
                 }
 
@@ -462,12 +462,12 @@ impl Drop for UdpAssociationContext {
 }
 
 thread_local! {
-    static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy());
+    static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_os_rng());
 }
 
 #[inline]
 fn generate_server_session_id() -> u64 {
-    CLIENT_SESSION_RNG.with(|rng| rng.borrow_mut().gen())
+    CLIENT_SESSION_RNG.with(|rng| rng.borrow_mut().random())
 }
 
 impl UdpAssociationContext {

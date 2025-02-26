@@ -23,7 +23,7 @@ use hickory_resolver::proto::{
     rr::{DNSClass, Name, RData, RecordType},
 };
 use log::{debug, error, info, trace, warn};
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, UdpSocket},
@@ -854,7 +854,7 @@ impl DnsClient {
 
     async fn lookup_remote_inner(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
         let mut message = Message::new();
-        message.set_id(thread_rng().gen());
+        message.set_id(rng().random());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
@@ -876,7 +876,7 @@ impl DnsClient {
                     .map_err(From::from)
             }
             Mode::TcpAndUdp => {
-                // Query TCP & UDP simutaneously
+                // Query TCP & UDP simultaneously
 
                 let message2 = message.clone();
                 let tcp_fut = async {
@@ -884,7 +884,7 @@ impl DnsClient {
                     // Then this future will be disabled and have no effect
                     //
                     // Randomly choose from 500ms ~ 1.5s for preventing obvious request pattern
-                    let sleep_time = thread_rng().gen_range(500..=1500);
+                    let sleep_time = rng().random_range(500..=1500);
                     time::sleep(Duration::from_millis(sleep_time)).await;
 
                     let server = self.balancer.best_tcp_server();
@@ -933,7 +933,7 @@ impl DnsClient {
 
     async fn lookup_local_inner(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
         let mut message = Message::new();
-        message.set_id(thread_rng().gen());
+        message.set_id(rng().random());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
@@ -945,7 +945,7 @@ impl DnsClient {
                     self.client_cache
                         .lookup_local(ns, message.clone(), self.context.connect_opts_ref(), true);
                 let tcp_query = async move {
-                    // Send TCP query after 500ms, because UDP will always return faster than TCP, there is no need to send queries simutaneously
+                    // Send TCP query after 500ms, because UDP will always return faster than TCP, there is no need to send queries simultaneously
                     time::sleep(Duration::from_millis(500)).await;
 
                     self.client_cache

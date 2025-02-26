@@ -15,7 +15,7 @@ use bytes::{BufMut, BytesMut};
 use hickory_resolver::proto::{op::Message, ProtoError, ProtoErrorKind};
 use log::{error, trace};
 use lru_time_cache::{Entry, LruCache};
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use shadowsocks::{
     config::ServerConfig,
     context::SharedContext,
@@ -139,7 +139,7 @@ impl DnsClient {
 
     async fn inner_lookup(&mut self, msg: &mut Message) -> Result<Message, ProtoError> {
         // Make a random ID
-        msg.set_id(thread_rng().gen());
+        msg.set_id(rng().random());
 
         trace!("DNS lookup {:?}", msg);
 
