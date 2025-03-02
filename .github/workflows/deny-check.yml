@@ -1,7 +1,7 @@
 name: Cargo Deny Check
 on: [push, pull_request]
 jobs:
-  cargo-deny:
+  deny-check:
     runs-on: ubuntu-latest
     strategy:
       matrix:

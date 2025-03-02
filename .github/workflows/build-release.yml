@@ -14,7 +14,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-cross:
+  build-release-cross:
     runs-on: ubuntu-latest
     env:
       RUST_BACKTRACE: full
@@ -117,7 +117,7 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           tag_name: ${{ inputs.tag || github.ref_name }}
 
-  build-unix:
+  build-release-unix:
     runs-on: ${{ matrix.os }}
     env:
       BUILD_EXTRA_FEATURES: "full"
@@ -162,7 +162,7 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           tag_name: ${{ inputs.tag || github.ref_name }}
 
-  build-windows:
+  build-release-windows:
     runs-on: windows-latest
     env:
       RUSTFLAGS: "-C target-feature=+crt-static"

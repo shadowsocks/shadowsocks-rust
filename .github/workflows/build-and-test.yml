@@ -11,7 +11,7 @@ env:
   RUST_LOG: "trace"
 
 jobs:
-  build-test-check:
+  build-and-test:
     strategy:
       matrix:
         platform:

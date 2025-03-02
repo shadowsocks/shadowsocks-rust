@@ -11,7 +11,7 @@ env:
   RUST_LOG: "trace"
 
 jobs:
-  shadowsocks-rust:
+  build-msrv-shadowsocks-rust:
     strategy:
       matrix:
         platform:
@@ -38,7 +38,7 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: cargo build --verbose --features "full-extra local-flow-stat utility-url-outline winservice"
 
-  shadowsocks-service:
+  build-msrv-shadowsocks-service:
     strategy:
       matrix:
         platform:
@@ -61,7 +61,7 @@ jobs:
       - name: Build with All Features Enabled
         run: cargo build --manifest-path crates/shadowsocks-service/Cargo.toml --verbose --features "full dns-over-tls dns-over-https dns-over-h3 local-dns local-flow-stat local-http-rustls local-tun local-fake-dns local-online-config stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
 
-  shadowsocks:
+  build-msrv-shadowsocks:
     strategy:
       matrix:
         platform:

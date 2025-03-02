@@ -8,7 +8,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-cross:
+  build-nightly-cross:
     runs-on: ubuntu-latest
     env:
       RUST_BACKTRACE: full
@@ -70,7 +70,7 @@ jobs:
           name: ${{ matrix.platform.target }}
           path: build/release/*
 
-  build-unix:
+  build-nightly-unix:
     runs-on: ${{ matrix.os }}
     env:
       BUILD_EXTRA_FEATURES: "full"
@@ -111,7 +111,7 @@ jobs:
           name: ${{ matrix.target }}
           path: build/release/*
 
-  build-windows:
+  build-nightly-windows:
     runs-on: windows-latest
     env:
       RUSTFLAGS: "-C target-feature=+crt-static"
