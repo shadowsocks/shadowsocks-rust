@@ -4,7 +4,6 @@ use std::process::ExitCode;
 
 use base64::Engine as _;
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgMatches, Command};
-use rand::RngCore;
 
 use shadowsocks_service::shadowsocks::crypto::{available_ciphers, CipherKind};
 
@@ -34,8 +33,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
     let key_len = method.key_len();
     if key_len > 0 {
         let mut key = vec![0u8; key_len];
-        let mut rng = rand::thread_rng();
-        rng.fill_bytes(&mut key);
+        rand::fill(key.as_mut_slice());
 
         let encoded_key = base64::engine::general_purpose::STANDARD.encode(&key);
         println!("{encoded_key}");
