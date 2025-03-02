@@ -23,7 +23,6 @@ use hickory_resolver::proto::{
     rr::{DNSClass, Name, RData, RecordType},
 };
 use log::{debug, error, info, trace, warn};
-use rand::{thread_rng, Rng};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, UdpSocket},
@@ -854,7 +853,7 @@ impl DnsClient {
 
     async fn lookup_remote_inner(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
         let mut message = Message::new();
-        message.set_id(thread_rng().gen());
+        message.set_id(rand::random());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
@@ -884,7 +883,7 @@ impl DnsClient {
                     // Then this future will be disabled and have no effect
                     //
                     // Randomly choose from 500ms ~ 1.5s for preventing obvious request pattern
-                    let sleep_time = thread_rng().gen_range(500..=1500);
+                    let sleep_time = rand::random_range(500..=1500);
                     time::sleep(Duration::from_millis(sleep_time)).await;
 
                     let server = self.balancer.best_tcp_server();
@@ -933,7 +932,7 @@ impl DnsClient {
 
     async fn lookup_local_inner(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
         let mut message = Message::new();
-        message.set_id(thread_rng().gen());
+        message.set_id(rand::random());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
