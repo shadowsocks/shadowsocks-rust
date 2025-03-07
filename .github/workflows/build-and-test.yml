@@ -32,7 +32,7 @@ jobs:
         name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2
         with:
-          version: "20"
+          version: "18"
       - name: Install Rust
         run: |
           rustup set profile minimal
