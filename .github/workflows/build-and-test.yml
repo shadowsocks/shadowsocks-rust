@@ -28,8 +28,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - if: ${{ runner.os == 'Windows' }}
         uses: ilammy/setup-nasm@v1
-      - if: ${{ matrix.platform == 'ubuntu-latest' || matrix.platform == 'windows-latest' }}
-        uses: egor-tensin/setup-clang@v1
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "20"
       - name: Install Rust
         run: |
           rustup set profile minimal
