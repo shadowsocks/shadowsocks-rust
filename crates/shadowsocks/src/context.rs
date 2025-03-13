@@ -133,7 +133,11 @@ impl Context {
     }
 
     /// Resolves DNS address to `SocketAddr`s
-    pub async fn dns_resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
+    pub async fn dns_resolve<'a>(
+        &self,
+        addr: &'a str,
+        port: u16,
+    ) -> io::Result<impl Iterator<Item = SocketAddr> + 'a + use<'a>> {
         self.dns_resolver.resolve(addr, port).await
     }
 

@@ -231,13 +231,16 @@ impl Server {
 
                             let req = StatRequest { stat };
 
-                            if let Err(err) = client.stat(&req).await {
-                                error!(
-                                    "failed to send stat to manager {}, error: {}, {:?}",
-                                    manager_addr, err, req
-                                );
-                            } else {
-                                trace!("report to manager {}, {:?}", manager_addr, req);
+                            match client.stat(&req).await {
+                                Err(err) => {
+                                    error!(
+                                        "failed to send stat to manager {}, error: {}, {:?}",
+                                        manager_addr, err, req
+                                    );
+                                }
+                                _ => {
+                                    trace!("report to manager {}, {:?}", manager_addr, req);
+                                }
                             }
                         }
                     }

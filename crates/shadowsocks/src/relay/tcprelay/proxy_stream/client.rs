@@ -303,7 +303,7 @@ where
 
         loop {
             match this.writer_state {
-                ProxyClientStreamWriteState::Connect(ref addr) => {
+                &mut ProxyClientStreamWriteState::Connect(ref addr) => {
                     let buffer = make_first_packet_buffer(this.stream.method(), addr, buf);
 
                     // Save the concatenated buffer before it is written successfully.
@@ -313,7 +313,7 @@ where
                     // before IO completion.
                     *(this.writer_state) = ProxyClientStreamWriteState::Connecting(buffer);
                 }
-                ProxyClientStreamWriteState::Connecting(ref buffer) => {
+                &mut ProxyClientStreamWriteState::Connecting(ref buffer) => {
                     let n = ready!(this.stream.poll_write_encrypted(cx, buffer))?;
 
                     // In general, poll_write_encrypted should perform like write_all.

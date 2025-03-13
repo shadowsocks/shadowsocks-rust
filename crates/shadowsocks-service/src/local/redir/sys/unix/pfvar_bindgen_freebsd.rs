@@ -2405,7 +2405,7 @@ fn bindgen_test_layout_fd_set() {
         concat!("Offset of field: ", stringify!(fd_set), "::", stringify!(__fds_bits))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pselect(
         arg1: ::std::os::raw::c_int,
         arg2: *mut fd_set,
@@ -2415,7 +2415,7 @@ extern "C" {
         arg6: *const sigset_t,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn select(
         arg1: ::std::os::raw::c_int,
         arg2: *mut fd_set,
@@ -2424,13 +2424,13 @@ extern "C" {
         arg5: *mut timeval,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ftruncate(arg1: ::std::os::raw::c_int, arg2: off_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn lseek(arg1: ::std::os::raw::c_int, arg2: off_t, arg3: ::std::os::raw::c_int) -> off_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn mmap(
         arg1: *mut ::std::os::raw::c_void,
         arg2: usize,
@@ -2440,7 +2440,7 @@ extern "C" {
         arg6: off_t,
     ) -> *mut ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn truncate(arg1: *const ::std::os::raw::c_char, arg2: off_t) -> ::std::os::raw::c_int;
 }
 pub type sig_atomic_t = ::std::os::raw::c_long;
@@ -3480,7 +3480,7 @@ fn bindgen_test_layout_sigstack() {
         concat!("Offset of field: ", stringify!(sigstack), "::", stringify!(ss_onstack))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn signal(arg1: ::std::os::raw::c_int, arg2: __sighandler_t) -> __sighandler_t;
 }
 pub type counter_u64_t = *mut u64;
@@ -3510,23 +3510,23 @@ fn bindgen_test_layout__cpuset() {
     );
 }
 pub type cpuset_t = _cpuset;
-extern "C" {
+unsafe extern "C" {
     pub fn __cpuset_alloc(set_size: usize) -> *mut cpuset_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn __cpuset_free(ptr: *mut cpuset_t);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn cpuset(arg1: *mut cpusetid_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn cpuset_setid(arg1: cpuwhich_t, arg2: id_t, arg3: cpusetid_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn cpuset_getid(arg1: cpulevel_t, arg2: cpuwhich_t, arg3: id_t, arg4: *mut cpusetid_t)
         -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn cpuset_getaffinity(
         arg1: cpulevel_t,
         arg2: cpuwhich_t,
@@ -3535,7 +3535,7 @@ extern "C" {
         arg5: *mut cpuset_t,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn cpuset_setaffinity(
         arg1: cpulevel_t,
         arg2: cpuwhich_t,
@@ -4248,56 +4248,56 @@ fn bindgen_test_layout___sFILE() {
     );
 }
 pub type FILE = __sFILE;
-extern "C" {
+unsafe extern "C" {
     pub static mut __stdinp: *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut __stdoutp: *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut __stderrp: *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clearerr(arg1: *mut FILE);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fclose(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn feof(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ferror(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fflush(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fgetc(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fgetpos(arg1: *mut FILE, arg2: *mut fpos_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fgets(
         arg1: *mut ::std::os::raw::c_char,
         arg2: ::std::os::raw::c_int,
         arg3: *mut FILE,
     ) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fopen(arg1: *const ::std::os::raw::c_char, arg2: *const ::std::os::raw::c_char) -> *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fprintf(arg1: *mut FILE, arg2: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fputc(arg1: ::std::os::raw::c_int, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fputs(arg1: *const ::std::os::raw::c_char, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fread(
         arg1: *mut ::std::os::raw::c_void,
         arg2: ::std::os::raw::c_ulong,
@@ -4305,26 +4305,26 @@ extern "C" {
         arg4: *mut FILE,
     ) -> ::std::os::raw::c_ulong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn freopen(
         arg1: *const ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
         arg3: *mut FILE,
     ) -> *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fscanf(arg1: *mut FILE, arg2: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fseek(arg1: *mut FILE, arg2: ::std::os::raw::c_long, arg3: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fsetpos(arg1: *mut FILE, arg2: *const fpos_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ftell(arg1: *mut FILE) -> ::std::os::raw::c_long;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fwrite(
         arg1: *const ::std::os::raw::c_void,
         arg2: ::std::os::raw::c_ulong,
@@ -4332,46 +4332,46 @@ extern "C" {
         arg4: *mut FILE,
     ) -> ::std::os::raw::c_ulong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getc(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getchar() -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn gets_s(arg1: *mut ::std::os::raw::c_char, arg2: rsize_t) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn perror(arg1: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn printf(arg1: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn putc(arg1: ::std::os::raw::c_int, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn putchar(arg1: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn puts(arg1: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn remove(arg1: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rename(arg1: *const ::std::os::raw::c_char, arg2: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rewind(arg1: *mut FILE);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn scanf(arg1: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setbuf(arg1: *mut FILE, arg2: *mut ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setvbuf(
         arg1: *mut FILE,
         arg2: *mut ::std::os::raw::c_char,
@@ -4379,47 +4379,47 @@ extern "C" {
         arg4: usize,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sprintf(
         arg1: *mut ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
         ...
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sscanf(
         arg1: *const ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
         ...
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn tmpfile() -> *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn tmpnam(arg1: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ungetc(arg1: ::std::os::raw::c_int, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vfprintf(
         arg1: *mut FILE,
         arg2: *const ::std::os::raw::c_char,
         arg3: *mut __va_list_tag,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vprintf(arg1: *const ::std::os::raw::c_char, arg2: *mut __va_list_tag) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vsprintf(
         arg1: *mut ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
         arg3: *mut __va_list_tag,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn snprintf(
         arg1: *mut ::std::os::raw::c_char,
         arg2: ::std::os::raw::c_ulong,
@@ -4427,7 +4427,7 @@ extern "C" {
         ...
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vsnprintf(
         arg1: *mut ::std::os::raw::c_char,
         arg2: ::std::os::raw::c_ulong,
@@ -4435,108 +4435,108 @@ extern "C" {
         arg4: *mut __va_list_tag,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vfscanf(
         arg1: *mut FILE,
         arg2: *const ::std::os::raw::c_char,
         arg3: *mut __va_list_tag,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vscanf(arg1: *const ::std::os::raw::c_char, arg2: *mut __va_list_tag) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vsscanf(
         arg1: *const ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
         arg3: *mut __va_list_tag,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ctermid(arg1: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fdopen(arg1: ::std::os::raw::c_int, arg2: *const ::std::os::raw::c_char) -> *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fileno(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pclose(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn popen(arg1: *const ::std::os::raw::c_char, arg2: *const ::std::os::raw::c_char) -> *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ftrylockfile(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn flockfile(arg1: *mut FILE);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn funlockfile(arg1: *mut FILE);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getc_unlocked(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getchar_unlocked() -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn putc_unlocked(arg1: ::std::os::raw::c_int, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn putchar_unlocked(arg1: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clearerr_unlocked(arg1: *mut FILE);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn feof_unlocked(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ferror_unlocked(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fflush_unlocked(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fileno_unlocked(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fputc_unlocked(arg1: ::std::os::raw::c_int, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fputs_unlocked(arg1: *const ::std::os::raw::c_char, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fread_unlocked(arg1: *mut ::std::os::raw::c_void, arg2: usize, arg3: usize, arg4: *mut FILE) -> usize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fwrite_unlocked(arg1: *const ::std::os::raw::c_void, arg2: usize, arg3: usize, arg4: *mut FILE) -> usize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fseeko(arg1: *mut FILE, arg2: __off_t, arg3: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ftello(arg1: *mut FILE) -> __off_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getw(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn putw(arg1: ::std::os::raw::c_int, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn tempnam(
         arg1: *const ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
     ) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fmemopen(arg1: *mut ::std::os::raw::c_void, arg2: usize, arg3: *const ::std::os::raw::c_char) -> *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getdelim(
         arg1: *mut *mut ::std::os::raw::c_char,
         arg2: *mut usize,
@@ -4544,10 +4544,10 @@ extern "C" {
         arg4: *mut FILE,
     ) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn open_memstream(arg1: *mut *mut ::std::os::raw::c_char, arg2: *mut usize) -> *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn renameat(
         arg1: ::std::os::raw::c_int,
         arg2: *const ::std::os::raw::c_char,
@@ -4555,67 +4555,67 @@ extern "C" {
         arg4: *const ::std::os::raw::c_char,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vdprintf(
         arg1: ::std::os::raw::c_int,
         arg2: *const ::std::os::raw::c_char,
         arg3: *mut __va_list_tag,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getline(arg1: *mut *mut ::std::os::raw::c_char, arg2: *mut usize, arg3: *mut FILE) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dprintf(arg1: ::std::os::raw::c_int, arg2: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn asprintf(
         arg1: *mut *mut ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
         ...
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ctermid_r(arg1: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fcloseall();
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fdclose(arg1: *mut FILE, arg2: *mut ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fgetln(arg1: *mut FILE, arg2: *mut usize) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fmtcheck(
         arg1: *const ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fpurge(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setbuffer(arg1: *mut FILE, arg2: *mut ::std::os::raw::c_char, arg3: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setlinebuf(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn vasprintf(
         arg1: *mut *mut ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
         arg3: *mut __va_list_tag,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub static sys_nerr: ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub static sys_errlist: [*const ::std::os::raw::c_char; 0usize];
 }
-extern "C" {
+unsafe extern "C" {
     pub fn funopen(
         arg1: *const ::std::os::raw::c_void,
         arg2: ::std::option::Option<
@@ -4728,20 +4728,20 @@ fn bindgen_test_layout_cookie_io_functions_t() {
         )
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn fopencookie(
         arg1: *mut ::std::os::raw::c_void,
         arg2: *const ::std::os::raw::c_char,
         arg3: cookie_io_functions_t,
     ) -> *mut FILE;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn __srget(arg1: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn __swbuf(arg1: ::std::os::raw::c_int, arg2: *mut FILE) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut __isthreaded: ::std::os::raw::c_int;
 }
 #[repr(C)]
@@ -4750,159 +4750,159 @@ pub struct FreeBSD_nvlist {
     _unused: [u8; 0],
 }
 pub type FreeBSD_nvlist_t = FreeBSD_nvlist;
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_create(flags: ::std::os::raw::c_int) -> *mut FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_destroy(nvl: *mut FreeBSD_nvlist_t);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_error(nvl: *const FreeBSD_nvlist_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_empty(nvl: *const FreeBSD_nvlist_t) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_flags(nvl: *const FreeBSD_nvlist_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_set_error(nvl: *mut FreeBSD_nvlist_t, error: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_clone(nvl: *const FreeBSD_nvlist_t) -> *mut FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_dump(nvl: *const FreeBSD_nvlist_t, fd: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_fdump(nvl: *const FreeBSD_nvlist_t, fp: *mut FILE);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_size(nvl: *const FreeBSD_nvlist_t) -> usize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_pack(nvl: *const FreeBSD_nvlist_t, sizep: *mut usize) -> *mut ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_unpack(
         buf: *const ::std::os::raw::c_void,
         size: usize,
         flags: ::std::os::raw::c_int,
     ) -> *mut FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_send(sock: ::std::os::raw::c_int, nvl: *const FreeBSD_nvlist_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_recv(sock: ::std::os::raw::c_int, flags: ::std::os::raw::c_int) -> *mut FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_xfer(
         sock: ::std::os::raw::c_int,
         nvl: *mut FreeBSD_nvlist_t,
         flags: ::std::os::raw::c_int,
     ) -> *mut FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_next(
         nvl: *const FreeBSD_nvlist_t,
         typep: *mut ::std::os::raw::c_int,
         cookiep: *mut *mut ::std::os::raw::c_void,
     ) -> *const ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_parent(
         nvl: *const FreeBSD_nvlist_t,
         cookiep: *mut *mut ::std::os::raw::c_void,
     ) -> *const FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_array_next(nvl: *const FreeBSD_nvlist_t) -> *const FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_in_array(nvl: *const FreeBSD_nvlist_t) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_pararr(
         nvl: *const FreeBSD_nvlist_t,
         cookiep: *mut *mut ::std::os::raw::c_void,
     ) -> *const FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_type(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         type_: ::std::os::raw::c_int,
     ) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_null(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_bool(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_number(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_string(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_nvlist(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_binary(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_bool_array(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_number_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_string_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_nvlist_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_descriptor(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_exists_descriptor_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_null(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_bool(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char, value: bool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_number(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char, value: u64);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_string(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: *const ::std::os::raw::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_stringf(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -4910,7 +4910,7 @@ extern "C" {
         ...
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_stringv(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -4918,14 +4918,14 @@ extern "C" {
         valueap: *mut __va_list_tag,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_nvlist(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: *const FreeBSD_nvlist_t,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_binary(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -4933,7 +4933,7 @@ extern "C" {
         size: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_bool_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -4941,7 +4941,7 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_number_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -4949,7 +4949,7 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_string_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -4957,7 +4957,7 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_nvlist_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -4965,14 +4965,14 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_descriptor(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: ::std::os::raw::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_add_descriptor_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -4980,56 +4980,56 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_append_bool_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: bool,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_append_number_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: u64,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_append_string_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: *const ::std::os::raw::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_append_nvlist_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: *const FreeBSD_nvlist_t,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_append_descriptor_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: ::std::os::raw::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_string(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: *mut ::std::os::raw::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_nvlist(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: *mut FreeBSD_nvlist_t,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_binary(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -5037,7 +5037,7 @@ extern "C" {
         size: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_bool_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -5045,7 +5045,7 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_string_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -5053,7 +5053,7 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_nvlist_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -5061,7 +5061,7 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_number_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -5069,14 +5069,14 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_descriptor(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         value: ::std::os::raw::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_move_descriptor_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
@@ -5084,185 +5084,185 @@ extern "C" {
         nitems: usize,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_bool(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_number(nvl: *const FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> u64;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_string(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_nvlist(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> *const FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_binary(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         sizep: *mut usize,
     ) -> *const ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_bool_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *const bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_number_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *const u64;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_string_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *const *const ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_nvlist_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *const *const FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_descriptor(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_get_descriptor_array(
         nvl: *const FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *const ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_bool(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_number(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char) -> u64;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_string(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_nvlist(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> *mut FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_binary(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         sizep: *mut usize,
     ) -> *mut ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_bool_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *mut bool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_number_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *mut u64;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_string_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *mut *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_nvlist_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *mut *mut FreeBSD_nvlist_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_descriptor(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_take_descriptor_array(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         nitemsp: *mut usize,
     ) -> *mut ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_type(
         nvl: *mut FreeBSD_nvlist_t,
         name: *const ::std::os::raw::c_char,
         type_: ::std::os::raw::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_null(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_bool(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_number(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_string(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_nvlist(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_binary(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_bool_array(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_number_array(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_string_array(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_nvlist_array(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_binary_array(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_descriptor(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn FreeBSD_nvlist_free_descriptor_array(nvl: *mut FreeBSD_nvlist_t, name: *const ::std::os::raw::c_char);
 }
 #[repr(C)]
@@ -5270,7 +5270,7 @@ extern "C" {
 pub struct __hack {
     _unused: [u8; 0],
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sysctl(
         arg1: *const ::std::os::raw::c_int,
         arg2: ::std::os::raw::c_uint,
@@ -5280,7 +5280,7 @@ extern "C" {
         arg6: usize,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sysctlbyname(
         arg1: *const ::std::os::raw::c_char,
         arg2: *mut ::std::os::raw::c_void,
@@ -5289,7 +5289,7 @@ extern "C" {
         arg5: usize,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sysctlnametomib(
         arg1: *const ::std::os::raw::c_char,
         arg2: *mut ::std::os::raw::c_int,
@@ -5826,7 +5826,7 @@ pub type uma_release = ::std::option::Option<
         count: ::std::os::raw::c_int,
     ),
 >;
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zcreate(
         name: *const ::std::os::raw::c_char,
         size: usize,
@@ -5838,7 +5838,7 @@ extern "C" {
         flags: u32,
     ) -> uma_zone_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zsecond_create(
         name: *const ::std::os::raw::c_char,
         ctor: uma_ctor,
@@ -5848,7 +5848,7 @@ extern "C" {
         primary: uma_zone_t,
     ) -> uma_zone_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zcache_create(
         name: *const ::std::os::raw::c_char,
         size: ::std::os::raw::c_int,
@@ -5862,27 +5862,27 @@ extern "C" {
         flags: ::std::os::raw::c_int,
     ) -> uma_zone_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zdestroy(zone: uma_zone_t);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zalloc_arg(
         zone: uma_zone_t,
         arg: *mut ::std::os::raw::c_void,
         flags: ::std::os::raw::c_int,
     ) -> *mut ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zalloc_pcpu_arg(
         zone: uma_zone_t,
         arg: *mut ::std::os::raw::c_void,
         flags: ::std::os::raw::c_int,
     ) -> *mut ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zalloc_smr(zone: uma_zone_t, flags: ::std::os::raw::c_int) -> *mut ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zalloc_domain(
         zone: uma_zone_t,
         arg: *mut ::std::os::raw::c_void,
@@ -5890,16 +5890,16 @@ extern "C" {
         flags: ::std::os::raw::c_int,
     ) -> *mut ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zfree_arg(zone: uma_zone_t, item: *mut ::std::os::raw::c_void, arg: *mut ::std::os::raw::c_void);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zfree_pcpu_arg(zone: uma_zone_t, item: *mut ::std::os::raw::c_void, arg: *mut ::std::os::raw::c_void);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zfree_smr(zone: uma_zone_t, item: *mut ::std::os::raw::c_void);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zwait(zone: uma_zone_t);
 }
 pub type uma_alloc = ::std::option::Option<
@@ -5913,92 +5913,92 @@ pub type uma_alloc = ::std::option::Option<
 >;
 pub type uma_free =
     ::std::option::Option<unsafe extern "C" fn(item: *mut ::std::os::raw::c_void, size: vm_size_t, pflag: u8)>;
-extern "C" {
+unsafe extern "C" {
     pub fn uma_reclaim(req: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_reclaim_domain(req: ::std::os::raw::c_int, domain: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_reclaim(arg1: uma_zone_t, req: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_reclaim_domain(arg1: uma_zone_t, req: ::std::os::raw::c_int, domain: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_set_align(align: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_reserve(zone: uma_zone_t, nitems: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_reserve_kva(zone: uma_zone_t, nitems: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_max(zone: uma_zone_t, nitems: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_maxcache(zone: uma_zone_t, nitems: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_get_max(zone: uma_zone_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_warning(zone: uma_zone_t, warning: *const ::std::os::raw::c_char);
 }
 pub type uma_maxaction_t = ::std::option::Option<unsafe extern "C" fn(arg1: uma_zone_t, arg2: ::std::os::raw::c_int)>;
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_maxaction(zone: uma_zone_t, arg1: uma_maxaction_t);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_get_cur(zone: uma_zone_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_init(zone: uma_zone_t, uminit: uma_init);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_fini(zone: uma_zone_t, fini: uma_fini);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_zinit(zone: uma_zone_t, zinit: uma_init);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_zfini(zone: uma_zone_t, zfini: uma_fini);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_allocf(zone: uma_zone_t, allocf: uma_alloc);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_freef(zone: uma_zone_t, freef: uma_free);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_set_smr(zone: uma_zone_t, smr: smr_t);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_get_smr(zone: uma_zone_t) -> smr_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_prealloc(zone: uma_zone_t, itemcnt: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_exhausted(zone: uma_zone_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_zone_memory(zone: uma_zone_t) -> usize;
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut pcpu_zone_4: uma_zone_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut pcpu_zone_8: uma_zone_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut pcpu_zone_16: uma_zone_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut pcpu_zone_32: uma_zone_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut pcpu_zone_64: uma_zone_t;
 }
 #[repr(C)]
@@ -6333,19 +6333,19 @@ fn bindgen_test_layout_uma_percpu_stat() {
         )
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_reclaim_wakeup();
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_reclaim_worker(arg1: *mut ::std::os::raw::c_void);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_limit() -> ::std::os::raw::c_ulong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_size() -> ::std::os::raw::c_ulong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn uma_avail() -> ::std::os::raw::c_long;
 }
 #[repr(C)]
@@ -6585,31 +6585,31 @@ fn bindgen_test_layout_tm() {
         concat!("Offset of field: ", stringify!(tm), "::", stringify!(tm_zone))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub static mut tzname: [*mut ::std::os::raw::c_char; 0usize];
 }
-extern "C" {
+unsafe extern "C" {
     pub fn asctime(arg1: *const tm) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clock() -> clock_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ctime(arg1: *const time_t) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn difftime(arg1: time_t, arg2: time_t) -> f64;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn gmtime(arg1: *const time_t) -> *mut tm;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn localtime(arg1: *const time_t) -> *mut tm;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn mktime(arg1: *mut tm) -> time_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn strftime(
         arg1: *mut ::std::os::raw::c_char,
         arg2: usize,
@@ -6617,22 +6617,22 @@ extern "C" {
         arg4: *const tm,
     ) -> usize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn time(arg1: *mut time_t) -> time_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timer_create(arg1: clockid_t, arg2: *mut sigevent, arg3: *mut timer_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timer_delete(arg1: timer_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timer_gettime(arg1: timer_t, arg2: *mut itimerspec) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timer_getoverrun(arg1: timer_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timer_settime(
         arg1: timer_t,
         arg2: ::std::os::raw::c_int,
@@ -6640,25 +6640,25 @@ extern "C" {
         arg4: *mut itimerspec,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn tzset();
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clock_getres(arg1: clockid_t, arg2: *mut timespec) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clock_gettime(arg1: clockid_t, arg2: *mut timespec) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clock_settime(arg1: clockid_t, arg2: *const timespec) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn nanosleep(arg1: *const timespec, arg2: *mut timespec) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clock_getcpuclockid(arg1: pid_t, arg2: *mut clockid_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clock_nanosleep(
         arg1: clockid_t,
         arg2: ::std::os::raw::c_int,
@@ -6666,41 +6666,41 @@ extern "C" {
         arg4: *mut timespec,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn asctime_r(arg1: *const tm, arg2: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ctime_r(arg1: *const time_t, arg2: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn gmtime_r(arg1: *const time_t, arg2: *mut tm) -> *mut tm;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn localtime_r(arg1: *const time_t, arg2: *mut tm) -> *mut tm;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn strptime(
         arg1: *const ::std::os::raw::c_char,
         arg2: *const ::std::os::raw::c_char,
         arg3: *mut tm,
     ) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timezone(arg1: ::std::os::raw::c_int, arg2: ::std::os::raw::c_int) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timelocal(arg1: *mut tm) -> time_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timegm(arg1: *mut tm) -> time_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timer_oshandle_np(timerid: timer_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn time2posix(t: time_t) -> time_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn posix2time(t: time_t) -> time_t;
 }
 #[repr(C)]
@@ -6709,7 +6709,7 @@ pub struct _xlocale {
     _unused: [u8; 0],
 }
 pub type locale_t = *mut _xlocale;
-extern "C" {
+unsafe extern "C" {
     pub fn strftime_l(
         arg1: *mut ::std::os::raw::c_char,
         arg2: usize,
@@ -6718,49 +6718,49 @@ extern "C" {
         arg5: locale_t,
     ) -> usize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timespec_get(ts: *mut timespec, base: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn timespec_getres(arg1: *mut timespec, arg2: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setitimer(
         arg1: ::std::os::raw::c_int,
         arg2: *const itimerval,
         arg3: *mut itimerval,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn utimes(arg1: *const ::std::os::raw::c_char, arg2: *const timeval) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn adjtime(arg1: *const timeval, arg2: *mut timeval) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn clock_getcpuclockid2(arg1: id_t, arg2: ::std::os::raw::c_int, arg3: *mut clockid_t)
         -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn futimes(arg1: ::std::os::raw::c_int, arg2: *const timeval) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn futimesat(
         arg1: ::std::os::raw::c_int,
         arg2: *const ::std::os::raw::c_char,
         arg3: *const timeval,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn lutimes(arg1: *const ::std::os::raw::c_char, arg2: *const timeval) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn settimeofday(arg1: *const timeval, arg2: *const timezone) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getitimer(arg1: ::std::os::raw::c_int, arg2: *mut itimerval) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn gettimeofday(arg1: *mut timeval, arg2: *mut timezone) -> ::std::os::raw::c_int;
 }
 #[repr(C)]
@@ -7527,16 +7527,16 @@ fn bindgen_test_layout_mmsghdr() {
         concat!("Offset of field: ", stringify!(mmsghdr), "::", stringify!(msg_len))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn accept(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn bind(arg1: ::std::os::raw::c_int, arg2: *const sockaddr, arg3: socklen_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn connect(arg1: ::std::os::raw::c_int, arg2: *const sockaddr, arg3: socklen_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn accept4(
         arg1: ::std::os::raw::c_int,
         arg2: *mut sockaddr,
@@ -7544,7 +7544,7 @@ extern "C" {
         arg4: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn bindat(
         arg1: ::std::os::raw::c_int,
         arg2: ::std::os::raw::c_int,
@@ -7552,7 +7552,7 @@ extern "C" {
         arg4: socklen_t,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn connectat(
         arg1: ::std::os::raw::c_int,
         arg2: ::std::os::raw::c_int,
@@ -7560,15 +7560,15 @@ extern "C" {
         arg4: socklen_t,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getpeername(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t)
         -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getsockname(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t)
         -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getsockopt(
         arg1: ::std::os::raw::c_int,
         arg2: ::std::os::raw::c_int,
@@ -7577,10 +7577,10 @@ extern "C" {
         arg5: *mut socklen_t,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn listen(arg1: ::std::os::raw::c_int, arg2: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn recv(
         arg1: ::std::os::raw::c_int,
         arg2: *mut ::std::os::raw::c_void,
@@ -7588,7 +7588,7 @@ extern "C" {
         arg4: ::std::os::raw::c_int,
     ) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn recvfrom(
         arg1: ::std::os::raw::c_int,
         arg2: *mut ::std::os::raw::c_void,
@@ -7598,10 +7598,10 @@ extern "C" {
         arg6: *mut socklen_t,
     ) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn recvmsg(arg1: ::std::os::raw::c_int, arg2: *mut msghdr, arg3: ::std::os::raw::c_int) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn recvmmsg(
         arg1: ::std::os::raw::c_int,
         arg2: *mut mmsghdr,
@@ -7610,7 +7610,7 @@ extern "C" {
         arg5: *const timespec,
     ) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn send(
         arg1: ::std::os::raw::c_int,
         arg2: *const ::std::os::raw::c_void,
@@ -7618,7 +7618,7 @@ extern "C" {
         arg4: ::std::os::raw::c_int,
     ) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sendto(
         arg1: ::std::os::raw::c_int,
         arg2: *const ::std::os::raw::c_void,
@@ -7628,10 +7628,10 @@ extern "C" {
         arg6: socklen_t,
     ) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sendmsg(arg1: ::std::os::raw::c_int, arg2: *const msghdr, arg3: ::std::os::raw::c_int) -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sendfile(
         arg1: ::std::os::raw::c_int,
         arg2: ::std::os::raw::c_int,
@@ -7642,14 +7642,14 @@ extern "C" {
         arg7: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sendmmsg(arg1: ::std::os::raw::c_int, arg2: *mut mmsghdr, arg3: usize, arg4: ::std::os::raw::c_int)
         -> isize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setfib(arg1: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setsockopt(
         arg1: ::std::os::raw::c_int,
         arg2: ::std::os::raw::c_int,
@@ -7658,20 +7658,20 @@ extern "C" {
         arg5: socklen_t,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn shutdown(arg1: ::std::os::raw::c_int, arg2: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn sockatmark(arg1: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn socket(
         arg1: ::std::os::raw::c_int,
         arg2: ::std::os::raw::c_int,
         arg3: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn socketpair(
         arg1: ::std::os::raw::c_int,
         arg2: ::std::os::raw::c_int,
@@ -9698,19 +9698,19 @@ fn bindgen_test_layout_if_nameindex() {
         concat!("Offset of field: ", stringify!(if_nameindex), "::", stringify!(if_name))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn if_freenameindex(arg1: *mut if_nameindex);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn if_indextoname(
         arg1: ::std::os::raw::c_uint,
         arg2: *mut ::std::os::raw::c_char,
     ) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn if_nameindex() -> *mut if_nameindex;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn if_nametoindex(arg1: *const ::std::os::raw::c_char) -> ::std::os::raw::c_uint;
 }
 #[repr(C, packed)]
@@ -9869,32 +9869,32 @@ fn bindgen_test_layout_ether_vlan_header() {
 pub struct mbuf {
     _unused: [u8; 0],
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ether_bpf_mtap_if(ifp: *mut ifnet, m: *mut mbuf);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ether_aton(arg1: *const ::std::os::raw::c_char) -> *mut ether_addr;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ether_aton_r(arg1: *const ::std::os::raw::c_char, arg2: *mut ether_addr) -> *mut ether_addr;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ether_hostton(arg1: *const ::std::os::raw::c_char, arg2: *mut ether_addr) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ether_line(
         arg1: *const ::std::os::raw::c_char,
         arg2: *mut ether_addr,
         arg3: *mut ::std::os::raw::c_char,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ether_ntoa(arg1: *const ether_addr) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ether_ntoa_r(arg1: *const ether_addr, arg2: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ether_ntohost(arg1: *mut ::std::os::raw::c_char, arg2: *const ether_addr) -> ::std::os::raw::c_int;
 }
 #[repr(C)]
@@ -10238,7 +10238,7 @@ pub type rn_walktree_from_t = ::std::option::Option<
     ) -> ::std::os::raw::c_int,
 >;
 pub type rn_close_t = ::std::option::Option<unsafe extern "C" fn(rn: *mut radix_node, head: *mut radix_head)>;
-extern "C" {
+unsafe extern "C" {
     pub fn rn_nextprefix(rn: *mut radix_node) -> *mut radix_node;
 }
 #[repr(C)]
@@ -10426,22 +10426,22 @@ fn bindgen_test_layout_radix_mask_head() {
         )
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_inithead_internal(rh: *mut radix_head, base_nodes: *mut radix_node, off: ::std::os::raw::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_inithead(arg1: *mut *mut ::std::os::raw::c_void, arg2: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_detachhead(arg1: *mut *mut ::std::os::raw::c_void) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_refines(
         arg1: *const ::std::os::raw::c_void,
         arg2: *const ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_addroute(
         arg1: *mut ::std::os::raw::c_void,
         arg2: *const ::std::os::raw::c_void,
@@ -10449,24 +10449,24 @@ extern "C" {
         arg4: *mut radix_node,
     ) -> *mut radix_node;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_delete(
         arg1: *const ::std::os::raw::c_void,
         arg2: *const ::std::os::raw::c_void,
         arg3: *mut radix_head,
     ) -> *mut radix_node;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_lookup(
         v_arg: *const ::std::os::raw::c_void,
         m_arg: *const ::std::os::raw::c_void,
         head: *mut radix_head,
     ) -> *mut radix_node;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_match(arg1: *const ::std::os::raw::c_void, arg2: *mut radix_head) -> *mut radix_node;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_walktree_from(
         h: *mut radix_head,
         a: *mut ::std::os::raw::c_void,
@@ -10475,7 +10475,7 @@ extern "C" {
         w: *mut ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn rn_walktree(
         arg1: *mut radix_head,
         arg2: walktree_f_t,
@@ -10561,16 +10561,16 @@ fn bindgen_test_layout_sockaddr_in() {
         concat!("Offset of field: ", stringify!(sockaddr_in), "::", stringify!(sin_zero))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn htonl(arg1: u32) -> u32;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn htons(arg1: u16) -> u16;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ntohl(arg1: u32) -> u32;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn ntohs(arg1: u16) -> u16;
 }
 #[repr(C)]
@@ -10870,7 +10870,7 @@ fn bindgen_test_layout___msfilterreq() {
         )
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setipv4sourcefilter(
         arg1: ::std::os::raw::c_int,
         arg2: in_addr,
@@ -10880,7 +10880,7 @@ extern "C" {
         arg6: *mut in_addr,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getipv4sourcefilter(
         arg1: ::std::os::raw::c_int,
         arg2: in_addr,
@@ -10890,7 +10890,7 @@ extern "C" {
         arg6: *mut in_addr,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn setsourcefilter(
         arg1: ::std::os::raw::c_int,
         arg2: u32,
@@ -10901,7 +10901,7 @@ extern "C" {
         arg7: *mut sockaddr_storage,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn getsourcefilter(
         arg1: ::std::os::raw::c_int,
         arg2: u32,
@@ -11074,22 +11074,22 @@ fn bindgen_test_layout_sockaddr_in6() {
         )
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub static in6addr_any: in6_addr;
 }
-extern "C" {
+unsafe extern "C" {
     pub static in6addr_loopback: in6_addr;
 }
-extern "C" {
+unsafe extern "C" {
     pub static in6addr_nodelocal_allnodes: in6_addr;
 }
-extern "C" {
+unsafe extern "C" {
     pub static in6addr_linklocal_allnodes: in6_addr;
 }
-extern "C" {
+unsafe extern "C" {
     pub static in6addr_linklocal_allrouters: in6_addr;
 }
-extern "C" {
+unsafe extern "C" {
     pub static in6addr_linklocal_allv2routers: in6_addr;
 }
 #[repr(C)]
@@ -11282,17 +11282,17 @@ fn bindgen_test_layout_ip6_mtuinfo() {
         concat!("Offset of field: ", stringify!(ip6_mtuinfo), "::", stringify!(ip6m_mtu))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_option_space(arg1: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_option_init(
         arg1: *mut ::std::os::raw::c_void,
         arg2: *mut *mut cmsghdr,
         arg3: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_option_append(
         arg1: *mut cmsghdr,
         arg2: *const u8,
@@ -11300,7 +11300,7 @@ extern "C" {
         arg4: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_option_alloc(
         arg1: *mut cmsghdr,
         arg2: ::std::os::raw::c_int,
@@ -11308,45 +11308,45 @@ extern "C" {
         arg4: ::std::os::raw::c_int,
     ) -> *mut u8;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_option_next(arg1: *const cmsghdr, arg2: *mut *mut u8) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_option_find(
         arg1: *const cmsghdr,
         arg2: *mut *mut u8,
         arg3: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rthdr_space(arg1: ::std::os::raw::c_int, arg2: ::std::os::raw::c_int) -> usize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rthdr_init(arg1: *mut ::std::os::raw::c_void, arg2: ::std::os::raw::c_int) -> *mut cmsghdr;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rthdr_add(
         arg1: *mut cmsghdr,
         arg2: *const in6_addr,
         arg3: ::std::os::raw::c_uint,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rthdr_lasthop(arg1: *mut cmsghdr, arg2: ::std::os::raw::c_uint) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rthdr_segments(arg1: *const cmsghdr) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rthdr_getaddr(arg1: *mut cmsghdr, arg2: ::std::os::raw::c_int) -> *mut in6_addr;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rthdr_getflags(arg1: *const cmsghdr, arg2: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_opt_init(arg1: *mut ::std::os::raw::c_void, arg2: socklen_t) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_opt_append(
         arg1: *mut ::std::os::raw::c_void,
         arg2: socklen_t,
@@ -11357,14 +11357,14 @@ extern "C" {
         arg7: *mut *mut ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_opt_finish(
         arg1: *mut ::std::os::raw::c_void,
         arg2: socklen_t,
         arg3: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_opt_set_val(
         arg1: *mut ::std::os::raw::c_void,
         arg2: ::std::os::raw::c_int,
@@ -11372,7 +11372,7 @@ extern "C" {
         arg4: socklen_t,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_opt_next(
         arg1: *mut ::std::os::raw::c_void,
         arg2: socklen_t,
@@ -11382,7 +11382,7 @@ extern "C" {
         arg6: *mut *mut ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_opt_find(
         arg1: *mut ::std::os::raw::c_void,
         arg2: socklen_t,
@@ -11392,7 +11392,7 @@ extern "C" {
         arg6: *mut *mut ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_opt_get_val(
         arg1: *mut ::std::os::raw::c_void,
         arg2: ::std::os::raw::c_int,
@@ -11400,10 +11400,10 @@ extern "C" {
         arg4: socklen_t,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rth_space(arg1: ::std::os::raw::c_int, arg2: ::std::os::raw::c_int) -> socklen_t;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rth_init(
         arg1: *mut ::std::os::raw::c_void,
         arg2: socklen_t,
@@ -11411,19 +11411,19 @@ extern "C" {
         arg4: ::std::os::raw::c_int,
     ) -> *mut ::std::os::raw::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rth_add(arg1: *mut ::std::os::raw::c_void, arg2: *const in6_addr) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rth_reverse(
         arg1: *const ::std::os::raw::c_void,
         arg2: *mut ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rth_segments(arg1: *const ::std::os::raw::c_void) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn inet6_rth_getaddr(arg1: *const ::std::os::raw::c_void, arg2: ::std::os::raw::c_int) -> *mut in6_addr;
 }
 pub const PF_INOUT: _bindgen_ty_1 = 0;
@@ -14320,21 +14320,21 @@ fn bindgen_test_layout_pf_anchor() {
         concat!("Offset of field: ", stringify!(pf_anchor), "::", stringify!(match_))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_INSERT_COLOR(
         arg1: *mut pf_anchor_global,
         arg2: *mut pf_anchor,
         arg3: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_REMOVE_COLOR(
         arg1: *mut pf_anchor_global,
         arg2: *mut pf_anchor,
         arg3: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_INSERT_FINISH(
         arg1: *mut pf_anchor_global,
         arg2: *mut pf_anchor,
@@ -14342,59 +14342,59 @@ extern "C" {
         arg4: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_INSERT(arg1: *mut pf_anchor_global, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_REMOVE(arg1: *mut pf_anchor_global, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_FIND(arg1: *mut pf_anchor_global, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_NFIND(arg1: *mut pf_anchor_global, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_NEXT(arg1: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_INSERT_NEXT(
         arg1: *mut pf_anchor_global,
         arg2: *mut pf_anchor,
         arg3: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_PREV(arg1: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_INSERT_PREV(
         arg1: *mut pf_anchor_global,
         arg2: *mut pf_anchor,
         arg3: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_MINMAX(arg1: *mut pf_anchor_global, arg2: ::std::os::raw::c_int) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_global_RB_REINSERT(arg1: *mut pf_anchor_global, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_INSERT_COLOR(
         arg1: *mut pf_anchor_node,
         arg2: *mut pf_anchor,
         arg3: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_REMOVE_COLOR(
         arg1: *mut pf_anchor_node,
         arg2: *mut pf_anchor,
         arg3: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_INSERT_FINISH(
         arg1: *mut pf_anchor_node,
         arg2: *mut pf_anchor,
@@ -14402,45 +14402,45 @@ extern "C" {
         arg4: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_INSERT(arg1: *mut pf_anchor_node, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_REMOVE(arg1: *mut pf_anchor_node, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_FIND(arg1: *mut pf_anchor_node, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_NFIND(arg1: *mut pf_anchor_node, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_NEXT(arg1: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_INSERT_NEXT(
         arg1: *mut pf_anchor_node,
         arg2: *mut pf_anchor,
         arg3: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_PREV(arg1: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_INSERT_PREV(
         arg1: *mut pf_anchor_node,
         arg2: *mut pf_anchor,
         arg3: *mut pf_anchor,
     ) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_MINMAX(arg1: *mut pf_anchor_node, arg2: ::std::os::raw::c_int) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_anchor_node_RB_REINSERT(arg1: *mut pf_anchor_node, arg2: *mut pf_anchor) -> *mut pf_anchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_get_ruleset_number(arg1: u_int8_t) -> ::std::os::raw::c_int;
 }
 #[repr(C)]
@@ -17715,21 +17715,21 @@ fn bindgen_test_layout_pf_kanchor() {
         concat!("Offset of field: ", stringify!(pf_kanchor), "::", stringify!(refcnt))
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_INSERT_COLOR(
         arg1: *mut pf_kanchor_global,
         arg2: *mut pf_kanchor,
         arg3: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_REMOVE_COLOR(
         arg1: *mut pf_kanchor_global,
         arg2: *mut pf_kanchor,
         arg3: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_INSERT_FINISH(
         arg1: *mut pf_kanchor_global,
         arg2: *mut pf_kanchor,
@@ -17737,59 +17737,59 @@ extern "C" {
         arg4: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_INSERT(arg1: *mut pf_kanchor_global, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_REMOVE(arg1: *mut pf_kanchor_global, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_FIND(arg1: *mut pf_kanchor_global, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_NFIND(arg1: *mut pf_kanchor_global, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_NEXT(arg1: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_INSERT_NEXT(
         arg1: *mut pf_kanchor_global,
         arg2: *mut pf_kanchor,
         arg3: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_PREV(arg1: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_INSERT_PREV(
         arg1: *mut pf_kanchor_global,
         arg2: *mut pf_kanchor,
         arg3: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_MINMAX(arg1: *mut pf_kanchor_global, arg2: ::std::os::raw::c_int) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_global_RB_REINSERT(arg1: *mut pf_kanchor_global, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_INSERT_COLOR(
         arg1: *mut pf_kanchor_node,
         arg2: *mut pf_kanchor,
         arg3: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_REMOVE_COLOR(
         arg1: *mut pf_kanchor_node,
         arg2: *mut pf_kanchor,
         arg3: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_INSERT_FINISH(
         arg1: *mut pf_kanchor_node,
         arg2: *mut pf_kanchor,
@@ -17797,42 +17797,42 @@ extern "C" {
         arg4: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_INSERT(arg1: *mut pf_kanchor_node, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_REMOVE(arg1: *mut pf_kanchor_node, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_FIND(arg1: *mut pf_kanchor_node, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_NFIND(arg1: *mut pf_kanchor_node, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_NEXT(arg1: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_INSERT_NEXT(
         arg1: *mut pf_kanchor_node,
         arg2: *mut pf_kanchor,
         arg3: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_PREV(arg1: *mut pf_kanchor) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_INSERT_PREV(
         arg1: *mut pf_kanchor_node,
         arg2: *mut pf_kanchor,
         arg3: *mut pf_kanchor,
     ) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_MINMAX(arg1: *mut pf_kanchor_node, arg2: ::std::os::raw::c_int) -> *mut pf_kanchor;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_kanchor_node_RB_REINSERT(arg1: *mut pf_kanchor_node, arg2: *mut pf_kanchor) -> *mut pf_kanchor;
 }
 #[repr(C)]
@@ -19744,16 +19744,16 @@ fn bindgen_test_layout_pf_ifspeed_v1() {
         )
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_osfp_add(arg1: *mut pf_osfp_ioctl) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_osfp_flush();
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_osfp_get(arg1: *mut pf_osfp_ioctl) -> ::std::os::raw::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pf_osfp_match(arg1: *mut pf_os_fingerprint_pf_osfp_enlist, arg2: pf_osfp_t) -> ::std::os::raw::c_int;
 }
 pub type __builtin_va_list = [__va_list_tag; 1usize];

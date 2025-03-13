@@ -280,7 +280,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
 }
 
 /// Create `Runtime` and `main` entry
-pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<Output = ShadowsocksResult>)> {
+pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<Output = ShadowsocksResult> + use<>)> {
     let (config, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
             if !matches.contains_id("SERVER_CONFIG") {
@@ -418,11 +418,11 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         }
 
         if let Some(addr) = matches.get_one::<ManagerAddr>("MANAGER_ADDR").cloned() {
-            if let Some(ref mut manager_config) = config.manager {
+            match config.manager { Some(ref mut manager_config) => {
                 manager_config.addr = addr;
-            } else {
+            } _ => {
                 config.manager = Some(ManagerConfig::new(addr));
-            }
+            }}
         }
 
         #[cfg(all(unix, not(target_os = "android")))]

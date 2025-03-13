@@ -290,7 +290,7 @@ impl DnsResolver {
     }
 
     /// Resolve address into `SocketAddr`s
-    pub async fn resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
+    pub async fn resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a + use<'a>> {
         struct ResolverLogger<'x, 'y> {
             resolver: &'x DnsResolver,
             addr: &'y str,

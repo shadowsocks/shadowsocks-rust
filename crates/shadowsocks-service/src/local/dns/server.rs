@@ -211,15 +211,17 @@ impl DnsTcpServerBuilder {
     async fn build(self) -> io::Result<DnsTcpServer> {
         cfg_if::cfg_if! {
             if #[cfg(target_os = "macos")] {
-                let listener = if let Some(launchd_socket_name) = self.launchd_socket_name {
-                    use tokio::net::TcpListener as TokioTcpListener;
-                    use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
+                let listener = match self.launchd_socket_name {
+                    Some(launchd_socket_name) => {
+                        use tokio::net::TcpListener as TokioTcpListener;
+                        use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
 
-                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name, true)?;
-                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
-                    TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
-                } else {
-                    create_standard_tcp_listener(&self.context, &self.bind_addr).await?
+                        let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name, true)?;
+                        let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                        TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
+                    } _ => {
+                        create_standard_tcp_listener(&self.context, &self.bind_addr).await?
+                    }
                 };
             } else {
                 let listener = create_standard_tcp_listener(&self.context, &self.bind_addr).await?;
@@ -384,15 +386,15 @@ impl DnsUdpServerBuilder {
     async fn build(self) -> io::Result<DnsUdpServer> {
         cfg_if::cfg_if! {
             if #[cfg(target_os = "macos")] {
-                let socket = if let Some(launchd_socket_name) = self.launchd_socket_name {
+                let socket = match self.launchd_socket_name { Some(launchd_socket_name) => {
                     use tokio::net::UdpSocket as TokioUdpSocket;
                     use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
 
                     let std_socket = get_launch_activate_udp_socket(&launchd_socket_name, true)?;
                     TokioUdpSocket::from_std(std_socket)?
-                } else {
+                } _ => {
                     create_standard_udp_listener(&self.context, &self.bind_addr).await?.into()
-                };
+                }};
             } else {
                 let socket = create_standard_udp_listener(&self.context, &self.bind_addr).await?.into();
             }
@@ -589,7 +591,7 @@ fn should_forward_by_query(context: &ServiceContext, balancer: &PingBalancer, qu
     // https://github.com/shadowsocks/shadowsocks-android/issues/2722
     for server in balancer.servers() {
         let svr_cfg = server.server_config();
-        if let ServerAddr::DomainName(ref dn, ..) = svr_cfg.addr() {
+        if let ServerAddr::DomainName(dn, ..) = svr_cfg.addr() {
             // Convert domain name to `Name`
             // Ignore it if error occurs
             if let Ok(name) = Name::from_str(dn) {
@@ -629,11 +631,11 @@ fn should_forward_by_response(
     query: &Query,
 ) -> bool {
     if let Some(acl) = acl {
-        if let Ok(ref local_response) = local_response {
+        if let Ok(local_response) = local_response {
             let mut names = HashSet::new();
             names.insert(query.name());
             macro_rules! examine_name {
-                ($name:expr, $is_answer:expr) => {{
+                ($name:expr_2021, $is_answer:expr_2021) => {{
                     names.insert($name);
                     if $is_answer {
                         if let Some(value) = check_name_in_proxy_list(acl, $name) {
@@ -647,7 +649,7 @@ fn should_forward_by_response(
                 }};
             }
             macro_rules! examine_record {
-                ($rec:ident, $is_answer:expr) => {
+                ($rec:ident, $is_answer:expr_2021) => {
                     if let RData::CNAME(name) = $rec.data() {
                         if $is_answer {
                             if let Some(value) = check_name_in_proxy_list(acl, name) {

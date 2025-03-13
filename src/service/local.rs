@@ -577,7 +577,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
 }
 
 /// Create `Runtime` and `main` entry
-pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<Output = ShadowsocksResult>)> {
+pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<Output = ShadowsocksResult> + use<>)> {
     #[cfg_attr(not(feature = "local-online-config"), allow(unused_mut))]
     let (config, _, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {

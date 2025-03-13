@@ -162,7 +162,7 @@ where
 
         // Wakeup writer task because we have already received the salt
         #[cfg(feature = "aead-cipher-2022")]
-        if let ProxyServerStreamWriteState::PrepareHeader(ref mut waker) = this.writer_state {
+        if let ProxyServerStreamWriteState::PrepareHeader(waker) = this.writer_state {
             if let Some(waker) = waker.take() {
                 waker.wake();
             }

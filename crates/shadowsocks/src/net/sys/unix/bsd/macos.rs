@@ -407,7 +407,7 @@ struct msghdr_x {
     msg_datalen: libc::size_t,       //< byte length of buffer in msg_iov
 }
 
-extern "C" {
+unsafe extern "C" {
     fn recvmsg_x(s: libc::c_int, msgp: *const msghdr_x, cnt: libc::c_uint, flags: libc::c_int) -> libc::ssize_t;
     fn sendmsg_x(s: libc::c_int, msgp: *const msghdr_x, cnt: libc::c_uint, flags: libc::c_int) -> libc::ssize_t;
 }

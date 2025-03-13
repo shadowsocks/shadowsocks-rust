@@ -10,7 +10,7 @@ mod resolver;
 /// Helper macro for resolving host and then process each addresses
 #[macro_export]
 macro_rules! lookup_then {
-    ($context:expr, $addr:expr, $port:expr, |$resolved_addr:ident| $body:block) => {{
+    ($context:expr_2021, $addr:expr_2021, $port:expr_2021, |$resolved_addr:ident| $body:block) => {{
         use std::net::SocketAddr;
 
         let ipv6_first = $context.ipv6_first();
@@ -49,7 +49,7 @@ macro_rules! lookup_then {
         }
     }};
 
-    (RESOLVE @ $addrs:expr, $resolved_addr:ident, $body:block) => {{
+    (RESOLVE @ $addrs:expr_2021, $resolved_addr:ident, $body:block) => {{
         let mut result = None;
 
         for $resolved_addr in $addrs {
@@ -70,7 +70,7 @@ macro_rules! lookup_then {
 
 #[macro_export]
 macro_rules! lookup_then_connect {
-    ($context:expr, $addr:expr, $port:expr, |$resolved_addr:ident| $body:block) => {{
+    ($context:expr_2021, $addr:expr_2021, $port:expr_2021, |$resolved_addr:ident| $body:block) => {{
         use futures::future::{self, Either};
         use log::trace;
         use std::{net::SocketAddr, time::Duration};

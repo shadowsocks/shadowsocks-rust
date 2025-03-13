@@ -30,7 +30,7 @@ pub fn adjust_nofile() {
             {
                 use std::ptr;
 
-                extern "C" {
+                unsafe extern "C" {
                     fn sysctlbyname(
                         name: *const libc::c_char,
                         oldp: *mut libc::c_void,

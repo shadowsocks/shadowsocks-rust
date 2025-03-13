@@ -447,14 +447,19 @@ where
                     err
                 );
             }
-        } else if let Err(err) = self.dispatch_received_proxied_packet(target_addr, data).await {
-            error!(
-                "udp relay {} -> {} (proxied) with {} bytes, error: {}",
-                self.peer_addr,
-                target_addr,
-                data.len(),
-                err
-            );
+        } else {
+            match self.dispatch_received_proxied_packet(target_addr, data).await {
+                Err(err) => {
+                    error!(
+                        "udp relay {} -> {} (proxied) with {} bytes, error: {}",
+                        self.peer_addr,
+                        target_addr,
+                        data.len(),
+                        err
+                    );
+                }
+                _ => {}
+            }
         }
     }
 
@@ -615,23 +620,26 @@ where
         self.keepalive_flag = true;
 
         // Send back to client
-        if let Err(err) = self.respond_writer.send_to(self.peer_addr, addr, data).await {
-            warn!(
-                "udp failed to send back {} bytes to client {}, from target {} ({}), error: {}",
-                data.len(),
-                self.peer_addr,
-                addr,
-                if bypassed { "bypassed" } else { "proxied" },
-                err
-            );
-        } else {
-            trace!(
-                "udp relay {} <- {} ({}) with {} bytes",
-                self.peer_addr,
-                addr,
-                if bypassed { "bypassed" } else { "proxied" },
-                data.len()
-            );
+        match self.respond_writer.send_to(self.peer_addr, addr, data).await {
+            Err(err) => {
+                warn!(
+                    "udp failed to send back {} bytes to client {}, from target {} ({}), error: {}",
+                    data.len(),
+                    self.peer_addr,
+                    addr,
+                    if bypassed { "bypassed" } else { "proxied" },
+                    err
+                );
+            }
+            Ok(..) => {
+                trace!(
+                    "udp relay {} <- {} ({}) with {} bytes",
+                    self.peer_addr,
+                    addr,
+                    if bypassed { "bypassed" } else { "proxied" },
+                    data.len()
+                );
+            }
         }
     }
 }

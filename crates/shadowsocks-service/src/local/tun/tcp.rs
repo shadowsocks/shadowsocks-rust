@@ -119,7 +119,7 @@ impl TcpConnection {
         socket_creation_tx: &mpsc::UnboundedSender<TcpSocketCreation>,
         manager_notify: Arc<ManagerNotify>,
         tcp_opts: &TcpSocketOpts,
-    ) -> impl Future<Output = TcpConnection> {
+    ) -> impl Future<Output = TcpConnection> + use<> {
         let send_buffer_size = tcp_opts.send_buffer_size.unwrap_or(DEFAULT_TCP_SEND_BUFFER_SIZE);
         let recv_buffer_size = tcp_opts.recv_buffer_size.unwrap_or(DEFAULT_TCP_RECV_BUFFER_SIZE);
 

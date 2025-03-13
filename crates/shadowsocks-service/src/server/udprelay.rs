@@ -68,11 +68,11 @@ impl NatMap {
 
     fn keep_alive(&mut self, key: &NatKey) {
         match (self, key) {
-            (NatMap::Association(ref mut m), NatKey::PeerAddr(ref peer_addr)) => {
+            (NatMap::Association(m), NatKey::PeerAddr(peer_addr)) => {
                 m.get(peer_addr);
             }
             #[cfg(feature = "aead-cipher-2022")]
-            (NatMap::Session(ref mut m), NatKey::SessionId(ref session_id)) => {
+            (NatMap::Session(m), NatKey::SessionId(session_id)) => {
                 m.get(session_id);
             }
             #[allow(unreachable_patterns)]
@@ -220,7 +220,7 @@ impl UdpServer {
         async fn multicore_recv(orx_opt: &mut Option<mpsc::Receiver<QueuedDataType>>) -> QueuedDataType {
             match orx_opt {
                 None => future::pending().await,
-                Some(ref mut orx) => match orx.recv().await {
+                Some(orx) => match orx.recv().await {
                     Some(t) => t,
                     None => unreachable!("multicore sender should keep at least 1"),
                 },
@@ -752,16 +752,19 @@ impl UdpAssociationContext {
         match self.client_session {
             None => {
                 // Naive route, send data directly back to client without session
-                if let Err(err) = self.inbound.send_to(self.peer_addr, &addr, data).await {
-                    warn!(
-                        "udp failed to send back {} bytes to client {}, from target {}, error: {}",
-                        data.len(),
-                        self.peer_addr,
-                        addr,
-                        err
-                    );
-                } else {
-                    trace!("udp relay {} <- {} with {} bytes", self.peer_addr, addr, data.len());
+                match self.inbound.send_to(self.peer_addr, &addr, data).await {
+                    Err(err) => {
+                        warn!(
+                            "udp failed to send back {} bytes to client {}, from target {}, error: {}",
+                            data.len(),
+                            self.peer_addr,
+                            addr,
+                            err
+                        );
+                    }
+                    _ => {
+                        trace!("udp relay {} <- {} with {} bytes", self.peer_addr, addr, data.len());
+                    }
                 }
             }
             Some(ref client_session) => {
@@ -791,27 +794,30 @@ impl UdpAssociationContext {
                 control.packet_id = self.server_packet_id;
                 control.user.clone_from(&client_session.client_user);
 
-                if let Err(err) = self
+                match self
                     .inbound
                     .send_to_with_ctrl(self.peer_addr, &addr, &control, data)
                     .await
                 {
-                    warn!(
-                        "udp failed to send back {} bytes to client {}, from target {}, control: {:?}, error: {}",
-                        data.len(),
-                        self.peer_addr,
-                        addr,
-                        control,
-                        err
-                    );
-                } else {
-                    trace!(
-                        "udp relay {} <- {} with {} bytes, control {:?}",
-                        self.peer_addr,
-                        addr,
-                        data.len(),
-                        control
-                    );
+                    Err(err) => {
+                        warn!(
+                            "udp failed to send back {} bytes to client {}, from target {}, control: {:?}, error: {}",
+                            data.len(),
+                            self.peer_addr,
+                            addr,
+                            control,
+                            err
+                        );
+                    }
+                    _ => {
+                        trace!(
+                            "udp relay {} <- {} with {} bytes, control {:?}",
+                            self.peer_addr,
+                            addr,
+                            data.len(),
+                            control
+                        );
+                    }
                 }
             }
         }

@@ -499,10 +499,11 @@ impl<S> CryptoStream<S> {
     /// Returning (DataChunkCount, RemainingBytes)
     #[cfg(feature = "aead-cipher-2022")]
     pub(crate) fn current_data_chunk_remaining(&self) -> (u64, usize) {
-        if let DecryptedReader::Aead2022(ref dec) = self.dec {
-            dec.current_data_chunk_remaining()
-        } else {
-            panic!("only AEAD-2022 protocol has data chunk counter");
+        match self.dec {
+            DecryptedReader::Aead2022(ref dec) => dec.current_data_chunk_remaining(),
+            _ => {
+                panic!("only AEAD-2022 protocol has data chunk counter");
+            }
         }
     }
 }

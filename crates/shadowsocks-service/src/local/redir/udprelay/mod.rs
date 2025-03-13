@@ -133,21 +133,22 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
 
         let inbound = {
             let mut cache = self.inbound_cache.cache.lock().await;
-            if let Some(socket) = cache.get(&addr) {
-                socket.clone()
-            } else {
-                // Create a socket binds to destination addr
-                // This only works for systems that supports binding to non-local addresses
-                //
-                // This socket has to set SO_REUSEADDR and SO_REUSEPORT.
-                // Outbound addresses could be connected from different source addresses.
-                let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?;
+            match cache.get(&addr) {
+                Some(socket) => socket.clone(),
+                _ => {
+                    // Create a socket binds to destination addr
+                    // This only works for systems that supports binding to non-local addresses
+                    //
+                    // This socket has to set SO_REUSEADDR and SO_REUSEPORT.
+                    // Outbound addresses could be connected from different source addresses.
+                    let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?;
 
-                // UDP socket could be shared between threads and is safe to be manipulated by multiple threads
-                let inbound = Arc::new(inbound);
-                cache.insert(addr, inbound.clone());
+                    // UDP socket could be shared between threads and is safe to be manipulated by multiple threads
+                    let inbound = Arc::new(inbound);
+                    cache.insert(addr, inbound.clone());
 
-                inbound
+                    inbound
+                }
             }
         };
 

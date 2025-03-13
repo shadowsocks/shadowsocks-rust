@@ -4,7 +4,7 @@ use std::{ffi::CString, io, os::fd::RawFd, ptr};
 
 use log::error;
 
-extern "C" {
+unsafe extern "C" {
     /// https://developer.apple.com/documentation/xpc/1505523-launch_activate_socket
     fn launch_activate_socket(
         name: *const libc::c_char,

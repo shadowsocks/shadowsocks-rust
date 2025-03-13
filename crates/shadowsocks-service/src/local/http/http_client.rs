@@ -383,10 +383,13 @@ where
                     && (req.uri().scheme().is_some() || req.uri().authority().is_some())
                 {
                     let mut builder = Uri::builder();
-                    if let Some(path_and_query) = req.uri().path_and_query() {
-                        builder = builder.path_and_query(path_and_query.as_str());
-                    } else {
-                        builder = builder.path_and_query("/");
+                    match req.uri().path_and_query() {
+                        Some(path_and_query) => {
+                            builder = builder.path_and_query(path_and_query.as_str());
+                        }
+                        _ => {
+                            builder = builder.path_and_query("/");
+                        }
                     }
                     *(req.uri_mut()) = builder.build()?;
                 }

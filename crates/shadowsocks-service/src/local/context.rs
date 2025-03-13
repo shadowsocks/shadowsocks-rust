@@ -137,7 +137,7 @@ impl ServiceContext {
             Some(ref acl) => {
                 #[cfg(feature = "local-dns")]
                 {
-                    if let Address::SocketAddress(ref saddr) = addr {
+                    if let Address::SocketAddress(saddr) = addr {
                         // do the reverse lookup in our local cache
                         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock().await;
                         // if a qname is found

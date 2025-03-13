@@ -48,15 +48,17 @@ impl TunnelTcpServerBuilder {
     pub async fn build(self) -> io::Result<TunnelTcpServer> {
         cfg_if::cfg_if! {
             if #[cfg(target_os = "macos")] {
-                let listener = if let Some(launchd_socket_name) = self.launchd_socket_name {
-                    use tokio::net::TcpListener as TokioTcpListener;
-                    use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
+                let listener = match self.launchd_socket_name {
+                    Some(launchd_socket_name) => {
+                        use tokio::net::TcpListener as TokioTcpListener;
+                        use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
 
-                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name, true)?;
-                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
-                    ShadowTcpListener::from_listener(tokio_listener, self.context.accept_opts())?
-                } else {
-                    create_standard_tcp_listener(&self.context, &self.client_config).await?
+                        let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name, true)?;
+                        let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                        ShadowTcpListener::from_listener(tokio_listener, self.context.accept_opts())?
+                    } _ => {
+                        create_standard_tcp_listener(&self.context, &self.client_config).await?
+                    }
                 };
             } else {
                 let listener = create_standard_tcp_listener(&self.context, &self.client_config).await?;
