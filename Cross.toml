@@ -6,10 +6,10 @@
 #     "cargo install --force --locked bindgen-cli && mv $HOME/.cargo/bin/bindgen /usr/bin",
 #     "rm -rf $HOME/.cargo"
 # ]
-pre-build = [
-    "apt update",
-    "apt install --assume-yes --no-install-recommends build-essential llvm-8-dev libclang-8-dev clang-8",
-]
+# pre-build = [
+#     "apt update",
+#     "apt install --assume-yes --no-install-recommends build-essential llvm-8-dev libclang-8-dev clang-8",
+# ]
 
 [build.env]
 passthrough = ["RUSTFLAGS"]

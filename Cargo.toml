@@ -85,7 +85,6 @@ full = [
     "local-dns",
     "local-redir",
     "local-tun",
-    "local-fake-dns",
     "local-online-config",
     "multi-threaded",
     "stream-cipher",
@@ -97,6 +96,7 @@ full = [
 full-extra = [
     "full",
     "dns-over-h3",
+    "local-fake-dns",
     "aead-cipher-extra",
     "aead-cipher-2022-extra",
     "security-replay-attack-detect",
