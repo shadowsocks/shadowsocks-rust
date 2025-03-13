@@ -6,6 +6,10 @@
 #     "cargo install --force --locked bindgen-cli && mv $HOME/.cargo/bin/bindgen /usr/bin",
 #     "rm -rf $HOME/.cargo"
 # ]
+pre-build = [
+    "apt update",
+    "apt install --assume-yes --no-install-recommends build-essential llvm-8-dev libclang-8-dev clang-8",
+]
 
 [build.env]
 passthrough = ["RUSTFLAGS"]
@@ -13,19 +17,19 @@ passthrough = ["RUSTFLAGS"]
 # MIPS targets are dropped to Tier 3
 # https://github.com/rust-lang/compiler-team/issues/648
 # FIXME: build-std with sequence is supported only on git
-# [target.mips-unknown-linux-gnu]
-# build-std = ["std", "panic_abort", "proc_macro"]
-# [target.mips-unknown-linux-musl]
-# build-std = ["std", "panic_abort", "proc_macro"]
-# [target.mips64-unknown-linux-gnuabi64]
-# build-std = ["std", "panic_abort", "proc_macro"]
-# [target.mips64-unknown-linux-muslabi64]
-# build-std = ["std", "panic_abort", "proc_macro"]
-# [target.mips64el-unknown-linux-gnuabi64]
-# build-std = ["std", "panic_abort", "proc_macro"]
-# [target.mips64el-unknown-linux-muslabi64]
-# build-std = ["std", "panic_abort", "proc_macro"]
-# [target.mipsel-unknown-linux-gnu]
-# build-std = ["std", "panic_abort", "proc_macro"]
-# [target.mipsel-unknown-linux-musl]
-# build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips-unknown-linux-gnu]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips-unknown-linux-musl]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips64-unknown-linux-gnuabi64]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips64-unknown-linux-muslabi64]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips64el-unknown-linux-gnuabi64]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mips64el-unknown-linux-muslabi64]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mipsel-unknown-linux-gnu]
+build-std = ["std", "panic_abort", "proc_macro"]
+[target.mipsel-unknown-linux-musl]
+build-std = ["std", "panic_abort", "proc_macro"]

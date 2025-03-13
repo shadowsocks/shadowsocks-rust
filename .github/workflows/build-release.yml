@@ -82,7 +82,7 @@ jobs:
           rustup override set ${{ matrix.platform.toolchain }}
 
       - name: Install cross
-        run: cargo install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build ${{ matrix.platform.target }}
         timeout-minutes: 120
@@ -102,11 +102,11 @@ jobs:
             fi
 
             compile_nightly="-n"
-            compile_features="-Z build-std=std,panic_abort,proc_macro"
+            #compile_cargo_flags="-Z build-std=std,panic_abort,proc_macro"
           fi
 
           cd build
-          ./build-release -t ${{ matrix.platform.target }} $compile_features $compile_compress $compile_nightly $compile_features
+          ./build-release -t ${{ matrix.platform.target }} $compile_features $compile_compress $compile_nightly $compile_cargo_flags
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v2
