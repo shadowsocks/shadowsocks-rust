@@ -30,9 +30,7 @@ jobs:
         uses: ilammy/setup-nasm@v1
       - if: ${{ matrix.platform == 'ubuntu-latest' }}
         name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "18"
+        run: sudo apt install -y clang
       - name: Install Rust
         run: |
           rustup set profile minimal
