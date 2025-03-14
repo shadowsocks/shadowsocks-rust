@@ -447,19 +447,14 @@ where
                     err
                 );
             }
-        } else {
-            match self.dispatch_received_proxied_packet(target_addr, data).await {
-                Err(err) => {
-                    error!(
-                        "udp relay {} -> {} (proxied) with {} bytes, error: {}",
-                        self.peer_addr,
-                        target_addr,
-                        data.len(),
-                        err
-                    );
-                }
-                _ => {}
-            }
+        } else if let Err(err) = self.dispatch_received_proxied_packet(target_addr, data).await {
+            error!(
+                "udp relay {} -> {} (proxied) with {} bytes, error: {}",
+                self.peer_addr,
+                target_addr,
+                data.len(),
+                err
+            );
         }
     }
 
