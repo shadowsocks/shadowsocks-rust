@@ -297,7 +297,7 @@ impl FakeDnsManager {
                     // Ok. It is not expired yet. Try to extend its expire time.
                     ip_mapping.expire_time = now + self.expire_duration.as_secs() as i64;
                     let nv = ip_mapping.encode_to_vec()?;
-                    let _ = db.put(&ip2name_key, nv)?;
+                    db.put(&ip2name_key, nv)?;
 
                     // Update name2ip's expire time
 
@@ -313,7 +313,7 @@ impl FakeDnsManager {
                                 let mut domain_name_mapping = proto::DomainNameMapping::decode(&v)?;
                                 domain_name_mapping.expire_time = ip_mapping.expire_time;
                                 let nv = domain_name_mapping.encode_to_vec()?;
-                                let _ = db.put(&name2ip_key, nv)?;
+                                db.put(&name2ip_key, nv)?;
                             }
                             None => {
                                 // Interesting. No name2ip.
