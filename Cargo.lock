@@ -1971,7 +1971,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3659,9 +3659,9 @@ dependencies = [
 
 [[package]]
 name = "sysexits"
-version = "0.8.5"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a70e00b0ea6c3e7154dfc48fee004bf61bdc154fd99b7e17c05318503b9660b"
+checksum = "198f60d1f7f003f168507691e42d082df109ef0f05c6fd006e22528371a5f1b4"
 
 [[package]]
 name = "system-configuration"
@@ -4338,7 +4338,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
