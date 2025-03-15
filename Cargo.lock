@@ -267,12 +267,6 @@ checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
 
 [[package]]
 name = "base64"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
-
-[[package]]
-name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
@@ -395,18 +389,20 @@ dependencies = [
 
 [[package]]
 name = "bson"
-version = "2.13.0"
+version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "068208f2b6fcfa27a7f1ee37488d2bb8ba2640f68f5475d08e1d9130696aba59"
+checksum = "af8113ff51309e2779e8785a246c10fb783e8c2452f134d6257fd71cc03ccd6c"
 dependencies = [
  "ahash",
- "base64 0.13.1",
+ "base64",
  "bitvec",
+ "getrandom 0.2.15",
+ "getrandom 0.3.1",
  "hex",
  "indexmap",
  "js-sys",
  "once_cell",
- "rand 0.8.5",
+ "rand 0.9.0",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -1265,8 +1261,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43a49c392881ce6d5c3b8cb70f98717b7c07aabbdff06687b9030dbfbe2725f8"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi 0.13.3+wasi-0.2.2",
+ "wasm-bindgen",
  "windows-targets 0.52.6",
 ]
 
@@ -2873,7 +2871,7 @@ version = "0.12.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "989e327e510263980e231de548a33e63d34962d29ae61b467389a1a09627a254"
 dependencies = [
- "base64 0.22.1",
+ "base64",
  "bytes",
  "encoding_rs",
  "futures-channel",
@@ -3320,7 +3318,7 @@ version = "1.23.0"
 dependencies = [
  "aes",
  "arc-swap",
- "base64 0.22.1",
+ "base64",
  "blake3",
  "bloomfilter",
  "byte_string",
@@ -3385,7 +3383,7 @@ dependencies = [
 name = "shadowsocks-rust"
 version = "1.23.0"
 dependencies = [
- "base64 0.22.1",
+ "base64",
  "build-time",
  "byte_string",
  "byteorder",
@@ -4157,6 +4155,7 @@ checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
 dependencies = [
  "getrandom 0.2.15",
  "serde",
+ "wasm-bindgen",
 ]
 
 [[package]]
