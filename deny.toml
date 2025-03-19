@@ -77,9 +77,6 @@ ignore = [
 
     # https://github.com/estk/log4rs/pull/351
     { id = "RUSTSEC-2024-0388", reason = "log4rs PRs are not merged yet" },
-    # https://github.com/spacejam/sled/issues/1514
-    # https://github.com/notify-rs/notify/pull/652
-    { id = "RUSTSEC-2024-0384", reason = "notify, sled are not updated yet" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.

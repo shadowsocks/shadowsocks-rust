@@ -72,6 +72,12 @@ jobs:
           #   toolchain: nightly
 
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+
+      - name: Install LLVM and Clang
+        run: sudo apt install -y clang
+
       - uses: actions/checkout@v4
 
       - name: Install Rust
