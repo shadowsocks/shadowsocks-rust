@@ -28,6 +28,9 @@ jobs:
             toolchain: nightly
 
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+
       - uses: actions/checkout@v4
 
       - name: Install Rust
