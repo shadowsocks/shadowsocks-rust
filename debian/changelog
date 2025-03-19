@@ -1,3 +1,22 @@
+shadowsocks-rust (1.23.0) unstable; urgency=medium
+
+  ## Features, Breaking Changes
+
+  - MSRV bumps to v1.85, Rust language edition upgraded to `2024`
+  - `rand` crate upgraded to v0.9, which may be incompatible with other older crates
+  - `local-fake-dns` switched storage engine from `sled` to `rocksdb`, users should delete the old database file and let `sslocal` recreate it ageain
+    - `local-fake-dns` is moved from `full` to `full-extra` feature because its still unstable
+
+  ## Bug fixes
+
+  - #1832 Fixes FreeBSD build error
+  - #1833 Fixes `sswinservice.exe` file paths in Powershell build script
+  - `mips-*` targets cross build reenabled
+
+  ## Miscellaneous
+
+  - #1834 Shadowsocks entrance APIs has strongly typed errors
+
 shadowsocks-rust (1.22.0) unstable; urgency=medium
 
   ## Features, Breaking Changes
