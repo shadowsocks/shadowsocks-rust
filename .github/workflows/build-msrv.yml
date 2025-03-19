@@ -24,6 +24,9 @@ jobs:
       - if: ${{ matrix.platform == 'ubuntu-latest' }}
         name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
+      - if: ${{ matrix.platform == 'ubuntu-latest' }}
+        name: Install LLVM and Clang
+        run: sudo apt install -y clang
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - if: ${{ runner.os == 'Windows' }}
@@ -54,6 +57,9 @@ jobs:
       - if: ${{ matrix.platform == 'ubuntu-latest' }}
         name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
+      - if: ${{ matrix.platform == 'ubuntu-latest' }}
+        name: Install LLVM and Clang
+        run: sudo apt install -y clang
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - if: ${{ runner.os == 'Windows' }}
@@ -80,6 +86,9 @@ jobs:
       - if: ${{ matrix.platform == 'ubuntu-latest' }}
         name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
+      - if: ${{ matrix.platform == 'ubuntu-latest' }}
+        name: Install LLVM and Clang
+        run: sudo apt install -y clang
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - if: ${{ runner.os == 'Windows' }}
