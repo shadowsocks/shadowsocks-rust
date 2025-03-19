@@ -57,8 +57,8 @@ use std::{
 };
 
 use aes::{
-    cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
     Aes128, Aes256, Block,
+    cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -68,11 +68,11 @@ use lru_time_cache::LruCache;
 #[cfg(feature = "aead-cipher-2022-extra")]
 use crate::crypto::v2::udp::ChaCha8Poly1305Cipher;
 use crate::{
-    config::{method_support_eih, ServerUser, ServerUserManager},
+    config::{ServerUser, ServerUserManager, method_support_eih},
     context::Context,
     crypto::{
-        v2::udp::{ChaCha20Poly1305Cipher, UdpCipher},
         CipherKind,
+        v2::udp::{ChaCha20Poly1305Cipher, UdpCipher},
     },
     relay::{
         get_aead_2022_padding_size,

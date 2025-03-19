@@ -15,7 +15,7 @@ const AEAD2022_MAX_PADDING_SIZE: usize = 900;
 fn get_aead_2022_padding_size(payload: &[u8]) -> usize {
     use std::cell::RefCell;
 
-    use rand::{rngs::SmallRng, Rng, SeedableRng};
+    use rand::{Rng, SeedableRng, rngs::SmallRng};
 
     thread_local! {
         static PADDING_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_os_rng());

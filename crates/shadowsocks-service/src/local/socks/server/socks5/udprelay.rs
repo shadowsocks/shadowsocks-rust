@@ -11,11 +11,11 @@ use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
 use log::{debug, error, info, trace};
 use shadowsocks::{
+    ServerAddr,
     relay::{
         socks5::{Address, UdpAssociateHeader},
         udprelay::MAXIMUM_UDP_PAYLOAD_SIZE,
     },
-    ServerAddr,
 };
 use tokio::{net::UdpSocket, time};
 
@@ -23,7 +23,7 @@ use crate::{
     local::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
-        net::{udp::listener::create_standard_udp_listener, UdpAssociationManager, UdpInboundWrite},
+        net::{UdpAssociationManager, UdpInboundWrite, udp::listener::create_standard_udp_listener},
     },
     net::utils::to_ipv4_mapped,
 };

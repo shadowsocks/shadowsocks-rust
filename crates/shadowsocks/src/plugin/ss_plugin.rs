@@ -7,11 +7,7 @@ use tokio::process::Command;
 pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr, _mode: PluginMode) -> Command {
     trace!(
         "Starting plugin \"{}\", opt: {:?}, arg: {:?}, remote: {}, local: {}",
-        plugin.plugin,
-        plugin.plugin_opts,
-        plugin.plugin_args,
-        remote,
-        local
+        plugin.plugin, plugin.plugin_opts, plugin.plugin_args, remote, local
     );
 
     let mut cmd = Command::new(&plugin.plugin);

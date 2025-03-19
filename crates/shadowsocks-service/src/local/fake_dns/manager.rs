@@ -75,9 +75,7 @@ macro_rules! map_domain_ip {
                                 db.put(&name2ip_key, nv)?;
                                 trace!(
                                     "fakedns mapping {} -> {}, expires {}",
-                                    $domain,
-                                    i,
-                                    domain_name_mapping.expire_time
+                                    $domain, i, domain_name_mapping.expire_time
                                 );
                                 return Ok((i, $self.expire_duration));
                             } else {
@@ -94,9 +92,7 @@ macro_rules! map_domain_ip {
                                         db.put(&ip2name_key, nv)?;
                                         trace!(
                                             "fakedns mapping {} -> {}, expires {}",
-                                            $domain,
-                                            i,
-                                            domain_name_mapping.expire_time
+                                            $domain, i, domain_name_mapping.expire_time
                                         );
                                         return Ok((i, $self.expire_duration));
                                     }
@@ -141,9 +137,7 @@ macro_rules! map_domain_ip {
                 db.put(&name2ip_key, nv)?;
                 trace!(
                     "fakedns mapping {} -> {}, expires {} created",
-                    $domain,
-                    ip,
-                    domain_name_mapping.expire_time
+                    $domain, ip, domain_name_mapping.expire_time
                 );
 
                 return Ok((ip, $self.expire_duration));

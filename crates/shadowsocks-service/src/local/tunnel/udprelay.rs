@@ -4,15 +4,15 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{debug, error, info};
 use shadowsocks::{
-    relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
     ServerAddr,
+    relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
 };
 use tokio::{net::UdpSocket, time};
 
 use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
-    net::{udp::listener::create_standard_udp_listener, UdpAssociationManager, UdpInboundWrite},
+    net::{UdpAssociationManager, UdpInboundWrite, udp::listener::create_standard_udp_listener},
 };
 
 pub struct TunnelUdpServerBuilder {

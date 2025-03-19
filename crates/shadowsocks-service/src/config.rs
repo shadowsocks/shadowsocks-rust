@@ -1893,7 +1893,9 @@ impl Config {
                         return Err(err);
                     }
                     None => {
-                        warn!("OnlineConfig \"version\" is missing in the configuration, assuming it is a compatible version for this project");
+                        warn!(
+                            "OnlineConfig \"version\" is missing in the configuration, assuming it is a compatible version for this project"
+                        );
                     }
                 }
             }

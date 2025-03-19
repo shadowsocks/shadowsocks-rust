@@ -10,11 +10,11 @@ use std::{
 use futures::future;
 use log::{error, trace};
 use shadowsocks::{
+    ManagerClient,
     config::{ManagerAddr, ServerConfig},
     dns_resolver::DnsResolver,
     net::{AcceptOpts, ConnectOpts},
     plugin::{Plugin, PluginMode},
-    ManagerClient,
 };
 use tokio::time;
 

@@ -186,9 +186,7 @@ impl Tun {
 
         trace!(
             "[TUN] tun device network: {} (address: {}, netmask: {})",
-            address_net,
-            address,
-            netmask
+            address_net, address, netmask
         );
 
         let address_broadcast = address_net.broadcast();
@@ -283,10 +281,7 @@ impl Tun {
         if src_non_unicast || dst_non_unicast {
             trace!(
                 "[TUN] IP packet {} (unicast? {}) -> {} (unicast? {}) throwing away",
-                src_ip_addr,
-                !src_non_unicast,
-                dst_ip_addr,
-                !dst_non_unicast
+                src_ip_addr, !src_non_unicast, dst_ip_addr, !dst_non_unicast
             );
             return Ok(());
         }
@@ -320,11 +315,7 @@ impl Tun {
 
                 trace!(
                     "[TUN] TCP packet {} (unicast? {}) -> {} (unicast? {}) {}",
-                    src_addr,
-                    !src_non_unicast,
-                    dst_addr,
-                    !dst_non_unicast,
-                    tcp_packet
+                    src_addr, !src_non_unicast, dst_addr, !dst_non_unicast, tcp_packet
                 );
 
                 // TCP first handshake packet.
@@ -366,11 +357,7 @@ impl Tun {
                 let payload = udp_packet.payload();
                 trace!(
                     "[TUN] UDP packet {} (unicast? {}) -> {} (unicast? {}) {}",
-                    src_addr,
-                    !src_non_unicast,
-                    dst_addr,
-                    !dst_non_unicast,
-                    udp_packet
+                    src_addr, !src_non_unicast, dst_addr, !dst_non_unicast, udp_packet
                 );
 
                 if let Err(err) = self.udp.handle_packet(src_addr, dst_addr, payload).await {

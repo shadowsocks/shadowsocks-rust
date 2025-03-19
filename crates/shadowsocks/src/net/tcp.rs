@@ -19,15 +19,14 @@ use tokio::{
     net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream},
 };
 
-use crate::{context::Context, relay::socks5::Address, ServerAddr};
+use crate::{ServerAddr, context::Context, relay::socks5::Address};
 
 use super::{
-    is_dual_stack_addr,
+    AcceptOpts, ConnectOpts, is_dual_stack_addr,
     sys::{
-        create_inbound_tcp_socket, set_common_sockopt_after_accept, set_tcp_fastopen, socket_bind_dual_stack,
-        TcpStream as SysTcpStream,
+        TcpStream as SysTcpStream, create_inbound_tcp_socket, set_common_sockopt_after_accept, set_tcp_fastopen,
+        socket_bind_dual_stack,
     },
-    AcceptOpts, ConnectOpts,
 };
 
 /// TcpStream for outbound connections

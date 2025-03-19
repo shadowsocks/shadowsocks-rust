@@ -2,9 +2,9 @@
 
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
-use hickory_resolver::proto::op::{response_code::ResponseCode, Message};
+use hickory_resolver::proto::op::{Message, response_code::ResponseCode};
 use log::error;
-use shadowsocks::{lookup_then, net::UdpSocket as ShadowUdpSocket, ServerAddr};
+use shadowsocks::{ServerAddr, lookup_then, net::UdpSocket as ShadowUdpSocket};
 use tokio::time;
 
 use crate::local::context::ServiceContext;

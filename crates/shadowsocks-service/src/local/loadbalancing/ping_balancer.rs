@@ -7,8 +7,8 @@ use std::{
     iter::Iterator,
     net::{Ipv4Addr, SocketAddr},
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -18,14 +18,14 @@ use byte_string::ByteStr;
 use futures::future;
 use log::{debug, error, info, trace, warn};
 use shadowsocks::{
+    ServerConfig,
     config::{Mode, ServerSource},
     plugin::{Plugin, PluginMode},
     relay::{
         socks5::Address,
         tcprelay::proxy_stream::ProxyClientStream,
-        udprelay::{options::UdpSocketControlData, proxy_socket::ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
+        udprelay::{MAXIMUM_UDP_PAYLOAD_SIZE, options::UdpSocketControlData, proxy_socket::ProxySocket},
     },
-    ServerConfig,
 };
 use spin::Mutex as SpinMutex;
 use tokio::{
@@ -39,7 +39,7 @@ use crate::{config::ServerInstanceConfig, local::context::ServiceContext};
 
 use super::{
     server_data::ServerIdent,
-    server_stat::{Score, DEFAULT_CHECK_INTERVAL_SEC, DEFAULT_CHECK_TIMEOUT_SEC},
+    server_stat::{DEFAULT_CHECK_INTERVAL_SEC, DEFAULT_CHECK_TIMEOUT_SEC, Score},
 };
 
 const EXPECTED_CHECK_POINTS_IN_CHECK_WINDOW: u32 = 67;

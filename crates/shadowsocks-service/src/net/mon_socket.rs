@@ -3,11 +3,11 @@
 use std::{io, net::SocketAddr, sync::Arc};
 
 use shadowsocks::{
+    ProxySocket,
     relay::{
         socks5::Address,
-        udprelay::{options::UdpSocketControlData, DatagramReceive, DatagramSend},
+        udprelay::{DatagramReceive, DatagramSend, options::UdpSocketControlData},
     },
-    ProxySocket,
 };
 
 use super::flow::FlowStat;

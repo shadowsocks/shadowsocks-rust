@@ -42,15 +42,15 @@ hickory-dns = ["hickory-resolver", "shadowsocks/trust-dns"]
 trust-dns = ["hickory-dns"]
 dns-over-tls = [
     "hickory-dns",
-    "hickory-resolver/dns-over-rustls",
+    "hickory-resolver/tls-ring",
     "hickory-resolver/webpki-roots",
 ]
 dns-over-https = [
     "hickory-dns",
-    "hickory-resolver/dns-over-https-rustls",
+    "hickory-resolver/https-ring",
     "hickory-resolver/webpki-roots",
 ]
-dns-over-h3 = ["hickory-dns", "hickory-resolver/dns-over-h3"]
+dns-over-h3 = ["hickory-dns", "hickory-resolver/h3-ring"]
 
 # Enable DNS-relay
 local-dns = ["local", "hickory-dns"]
@@ -166,7 +166,7 @@ http-body-util = { version = "0.1", optional = true }
 http = { version = "1.1", optional = true }
 httparse = { version = "1.9", optional = true }
 
-hickory-resolver = { version = "=0.25.0-alpha.5", optional = true, features = [
+hickory-resolver = { version = "0.25", optional = true, features = [
     "serde",
 ] }
 

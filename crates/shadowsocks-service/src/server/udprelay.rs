@@ -12,26 +12,26 @@ use bytes::Bytes;
 use futures::future;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 use shadowsocks::{
+    ServerConfig,
     config::ServerUser,
     crypto::CipherCategory,
     lookup_then,
     net::{
-        get_ip_stack_capabilities, AcceptOpts, AddrFamily, UdpSocket as OutboundUdpSocket,
-        UdpSocket as InboundUdpSocket,
+        AcceptOpts, AddrFamily, UdpSocket as OutboundUdpSocket, UdpSocket as InboundUdpSocket,
+        get_ip_stack_capabilities,
     },
     relay::{
         socks5::Address,
-        udprelay::{options::UdpSocketControlData, ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
+        udprelay::{MAXIMUM_UDP_PAYLOAD_SIZE, ProxySocket, options::UdpSocketControlData},
     },
-    ServerConfig,
 };
 use tokio::{runtime::Handle, sync::mpsc, task::JoinHandle, time};
 
 use crate::net::{
-    packet_window::PacketWindowFilter, utils::to_ipv4_mapped, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
-    UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
+    MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
+    packet_window::PacketWindowFilter, utils::to_ipv4_mapped,
 };
 
 use super::context::ServiceContext;

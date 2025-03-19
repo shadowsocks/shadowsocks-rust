@@ -128,7 +128,7 @@ where
                         return Err(io::Error::new(
                             ErrorKind::TimedOut,
                             format!("connect {} timeout", svr_cfg.addr()),
-                        ))
+                        ));
                     }
                 }
             }

@@ -3,14 +3,14 @@
 #[cfg(unix)]
 use std::path::Path;
 use std::{
-    collections::{hash_map::Entry, HashMap, VecDeque},
+    collections::{HashMap, VecDeque, hash_map::Entry},
     future::Future,
     io,
     net::SocketAddr,
     time::Duration,
 };
 
-use hickory_resolver::proto::{op::Message, ProtoError};
+use hickory_resolver::proto::{ProtoError, op::Message};
 use log::{debug, trace};
 use tokio::sync::Mutex;
 

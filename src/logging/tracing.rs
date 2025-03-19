@@ -4,7 +4,7 @@ use std::io::IsTerminal;
 
 use time::UtcOffset;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter, FmtSubscriber};
+use tracing_subscriber::{EnvFilter, FmtSubscriber, fmt::time::OffsetTime};
 
 use crate::config::LogConfig;
 

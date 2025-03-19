@@ -6,7 +6,7 @@ use std::{fmt, io, net::SocketAddr};
 
 use tokio::net::UdpSocket;
 #[cfg(unix)]
-use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixDatagram};
+use tokio::net::{UnixDatagram, unix::SocketAddr as UnixSocketAddr};
 
 use crate::{
     config::ManagerAddr,

@@ -10859,12 +10859,12 @@ unsafe extern "C" {
 unsafe extern "C" {
     #[link_name = "\u{1}_getpeername$UNIX2003"]
     pub fn getpeername(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     #[link_name = "\u{1}_getsockname$UNIX2003"]
     pub fn getsockname(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn getsockopt(

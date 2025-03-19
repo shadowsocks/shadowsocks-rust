@@ -65,8 +65,8 @@ impl ProxyHttpStream {
         use rustls_native_certs::CertificateResult;
         use std::sync::Arc;
         use tokio_rustls::{
-            rustls::{pki_types::ServerName, ClientConfig, RootCertStore},
             TlsConnector,
+            rustls::{ClientConfig, RootCertStore, pki_types::ServerName},
         };
 
         static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {

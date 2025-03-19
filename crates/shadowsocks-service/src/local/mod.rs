@@ -106,8 +106,12 @@ impl Server {
             let server = &inst.config;
 
             if server.method().is_stream() {
-                log::warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
-                    DO NOT USE. It will be removed in the future.", server.method(), server.addr());
+                log::warn!(
+                    "stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
+                    DO NOT USE. It will be removed in the future.",
+                    server.method(),
+                    server.addr()
+                );
             }
         }
 

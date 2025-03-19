@@ -3,9 +3,9 @@
 use std::process::ExitCode;
 
 use base64::Engine as _;
-use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValuesParser};
 
-use shadowsocks_service::shadowsocks::crypto::{available_ciphers, CipherKind};
+use shadowsocks_service::shadowsocks::crypto::{CipherKind, available_ciphers};
 
 /// Defines command line options
 pub fn define_command_line_options(mut app: Command) -> Command {

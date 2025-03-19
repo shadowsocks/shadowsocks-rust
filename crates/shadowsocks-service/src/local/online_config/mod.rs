@@ -19,7 +19,7 @@ use mime::Mime;
 use shadowsocks::config::ServerSource;
 use tokio::time;
 
-use self::content_encoding::{read_body, ContentEncoding};
+use self::content_encoding::{ContentEncoding, read_body};
 
 mod content_encoding;
 
@@ -214,7 +214,8 @@ impl OnlineConfigService {
 
         let finish_time = Instant::now();
 
-        debug!("server-loader task finished loading {} servers from url: {}, fetch time: {:?}, read time: {:?}, load time: {:?}, total time: {:?}",
+        debug!(
+            "server-loader task finished loading {} servers from url: {}, fetch time: {:?}, read time: {:?}, load time: {:?}, total time: {:?}",
             server_len,
             self.config_url,
             fetch_time - start_time,

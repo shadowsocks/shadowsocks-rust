@@ -3,13 +3,13 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
-use shadowsocks::{net::TcpListener as ShadowTcpListener, relay::socks5::Address, ServerAddr};
+use shadowsocks::{ServerAddr, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
 use tokio::{net::TcpStream, time};
 
 use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
-    net::{tcp::listener::create_standard_tcp_listener, AutoProxyClientStream},
+    net::{AutoProxyClientStream, tcp::listener::create_standard_tcp_listener},
     utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
 };
 

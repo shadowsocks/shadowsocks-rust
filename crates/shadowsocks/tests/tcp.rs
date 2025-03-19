@@ -14,6 +14,7 @@ use tokio::{
 };
 
 use shadowsocks::{
+    ProxyClientStream, ProxyListener,
     config::{ServerConfig, ServerType},
     context::Context,
     crypto::CipherKind,
@@ -24,7 +25,6 @@ use shadowsocks::{
             utils::{copy_from_encrypted, copy_to_encrypted},
         },
     },
-    ProxyClientStream, ProxyListener,
 };
 
 async fn handle_tcp_tunnel_server_client(

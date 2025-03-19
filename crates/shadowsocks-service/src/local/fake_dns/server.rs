@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{future, FutureExt};
+use futures::{FutureExt, future};
 use ipnet::{Ipv4Net, Ipv6Net};
 use shadowsocks::config::{Mode, ServerAddr};
 

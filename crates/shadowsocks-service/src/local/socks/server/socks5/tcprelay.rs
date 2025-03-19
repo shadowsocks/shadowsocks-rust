@@ -9,12 +9,12 @@ use std::{
 
 use log::{debug, error, trace, warn};
 use shadowsocks::{
+    ServerAddr,
     config::Mode,
     relay::socks5::{
         self, Address, Command, Error as Socks5Error, HandshakeRequest, HandshakeResponse, PasswdAuthRequest,
         PasswdAuthResponse, Reply, TcpRequestHeader, TcpResponseHeader,
     },
-    ServerAddr,
 };
 use tokio::net::TcpStream;
 
@@ -145,8 +145,7 @@ impl Socks5TcpHandler {
         if self.auth.passwd.check_user(user_name, password) {
             trace!(
                 "socks5 authenticated with Username/Password method, user: {}, password: {}",
-                user_name,
-                password
+                user_name, password
             );
 
             let rsp = PasswdAuthResponse::new(0);

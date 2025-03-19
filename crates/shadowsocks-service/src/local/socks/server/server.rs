@@ -1,7 +1,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info};
-use shadowsocks::{config::Mode, net::TcpListener as ShadowTcpListener, ServerAddr};
+use shadowsocks::{ServerAddr, config::Mode, net::TcpListener as ShadowTcpListener};
 use tokio::{net::TcpStream, time};
 
 #[cfg(feature = "local-http")]

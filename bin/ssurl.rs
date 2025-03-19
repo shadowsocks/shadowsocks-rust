@@ -6,7 +6,7 @@
 use std::process::ExitCode;
 
 use clap::{Arg, ArgAction, Command, ValueHint};
-use qrcode::{types::Color, QrCode};
+use qrcode::{QrCode, types::Color};
 
 use shadowsocks_service::{
     config::{Config, ConfigType, ServerInstanceConfig},

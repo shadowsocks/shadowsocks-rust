@@ -8,7 +8,7 @@ use shadowsocks::{
     relay::{socks5::Address, tcprelay::utils::copy_encrypted_bidirectional},
 };
 use tokio::{
-    io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, copy_bidirectional},
     time,
 };
 
@@ -60,8 +60,7 @@ where
 
                 trace!(
                     "tcp tunnel {} -> {} (proxied) sent handshake without data",
-                    peer_addr,
-                    target_addr
+                    peer_addr, target_addr
                 );
             }
         }
@@ -71,18 +70,13 @@ where
         Ok((wn, rn)) => {
             trace!(
                 "tcp tunnel {} <-> {} (proxied) closed, L2R {} bytes, R2L {} bytes",
-                peer_addr,
-                target_addr,
-                rn,
-                wn
+                peer_addr, target_addr, rn, wn
             );
         }
         Err(err) => {
             trace!(
                 "tcp tunnel {} <-> {} (proxied) closed with error: {}",
-                peer_addr,
-                target_addr,
-                err
+                peer_addr, target_addr, err
             );
         }
     }
@@ -106,18 +100,13 @@ where
         Ok((rn, wn)) => {
             trace!(
                 "tcp tunnel {} <-> {} (bypassed) closed, L2R {} bytes, R2L {} bytes",
-                peer_addr,
-                target_addr,
-                rn,
-                wn
+                peer_addr, target_addr, rn, wn
             );
         }
         Err(err) => {
             trace!(
                 "tcp tunnel {} <-> {} (bypassed) closed with error: {}",
-                peer_addr,
-                target_addr,
-                err
+                peer_addr, target_addr, err
             );
         }
     }

@@ -8,7 +8,7 @@ use std::{
     io::{self, ErrorKind},
     net::SocketAddr,
     sync::Arc,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
     time::Duration,
 };
 
@@ -29,8 +29,8 @@ use crate::{
 use super::{
     compat::{DatagramReceive, DatagramReceiveExt, DatagramSend, DatagramSendExt, DatagramSocket},
     crypto_io::{
-        decrypt_client_payload, decrypt_server_payload, encrypt_client_payload, encrypt_server_payload, ProtocolError,
-        ProtocolResult,
+        ProtocolError, ProtocolResult, decrypt_client_payload, decrypt_server_payload, encrypt_client_payload,
+        encrypt_server_payload,
     },
 };
 
@@ -385,7 +385,8 @@ where
 
     /// Send a UDP packet to target through proxy `target`
     pub async fn send_to(&self, target: SocketAddr, addr: &Address, payload: &[u8]) -> ProxySocketResult<usize> {
-        self.send_to_with_ctrl(target, addr, &DEFAULT_SOCKET_CONTROL, payload).await
+        self.send_to_with_ctrl(target, addr, &DEFAULT_SOCKET_CONTROL, payload)
+            .await
     }
 
     /// Send a UDP packet to target through proxy `target`
@@ -479,10 +480,7 @@ where
 
         trace!(
             "UDP server client receive from {}, control: {:?}, packet length {} bytes, payload length {} bytes",
-            addr,
-            control,
-            recv_n,
-            n
+            addr, control, recv_n, n
         );
 
         Ok((n, addr, recv_n, control))
@@ -527,11 +525,7 @@ where
 
         trace!(
             "UDP server client receive from {}, addr {}, control: {:?}, packet length {} bytes, payload length {} bytes",
-            target_addr,
-            addr,
-            control,
-            recv_n,
-            n,
+            target_addr, addr, control, recv_n, n,
         );
 
         Ok((n, target_addr, addr, recv_n, control))

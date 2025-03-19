@@ -3,10 +3,10 @@
 use std::io;
 
 use hickory_resolver::proto::{
-    op::{header::MessageType, response_code::ResponseCode, Header, Message, OpCode},
+    op::{Header, Message, OpCode, header::MessageType, response_code::ResponseCode},
     rr::{
-        rdata::{A, AAAA},
         DNSClass, RData, Record, RecordType,
+        rdata::{A, AAAA},
     },
 };
 use log::{debug, trace, warn};

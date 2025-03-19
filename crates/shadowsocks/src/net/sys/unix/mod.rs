@@ -9,7 +9,7 @@ use log::warn;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
 use tokio::net::UdpSocket;
 
-use crate::net::{is_dual_stack_addr, sys::socket_bind_dual_stack, AcceptOpts, AddrFamily, ConnectOpts, TcpSocketOpts};
+use crate::net::{AcceptOpts, AddrFamily, ConnectOpts, TcpSocketOpts, is_dual_stack_addr, sys::socket_bind_dual_stack};
 
 cfg_if! {
     if #[cfg(any(target_os = "linux", target_os = "android"))] {

@@ -10,10 +10,9 @@ use std::{
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
 use shadowsocks::{
-    lookup_then,
-    net::{get_ip_stack_capabilities, ConnectOpts},
+    ServerAddr, lookup_then,
+    net::{ConnectOpts, get_ip_stack_capabilities},
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
-    ServerAddr,
 };
 use tokio::{sync::Mutex, task::JoinHandle, time};
 
@@ -186,10 +185,7 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
 
                 trace!(
                     "udp redir send back data {} bytes, remote: {}, peer: {}, socket_opts: {:?}",
-                    n,
-                    remote_addr,
-                    peer_addr,
-                    self.socket_opts
+                    n, remote_addr, peer_addr, self.socket_opts
                 );
 
                 Ok(())

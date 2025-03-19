@@ -41,9 +41,9 @@ pub async fn build_dns_resolver(
                         Ok(r) => Some(r),
                         Err(err) => {
                             warn!(
-                            "initialize hickory-dns DNS system resolver failed, fallback to default system resolver, error: {}",
-                            err
-                        );
+                                "initialize hickory-dns DNS system resolver failed, fallback to default system resolver, error: {}",
+                                err
+                            );
                             None
                         }
                     };

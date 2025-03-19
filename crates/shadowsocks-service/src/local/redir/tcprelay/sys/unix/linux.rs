@@ -6,7 +6,7 @@ use std::{
 };
 
 use log::warn;
-use shadowsocks::net::{is_dual_stack_addr, set_tcp_fastopen, AcceptOpts};
+use shadowsocks::net::{AcceptOpts, is_dual_stack_addr, set_tcp_fastopen};
 use socket2::SockAddr;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 

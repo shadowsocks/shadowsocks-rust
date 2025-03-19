@@ -12,7 +12,7 @@ use shadowsocks_service::config::RedirType;
 use shadowsocks_service::local::dns::NameServerAddr;
 use shadowsocks_service::{
     config::{ManagerServerHost, ManagerServerMode},
-    shadowsocks::{crypto::CipherKind, relay::socks5::Address, ManagerAddr, ServerAddr, ServerConfig},
+    shadowsocks::{ManagerAddr, ServerAddr, ServerConfig, crypto::CipherKind, relay::socks5::Address},
 };
 
 macro_rules! value_parser_type {

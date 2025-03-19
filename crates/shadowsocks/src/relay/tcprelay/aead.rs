@@ -47,7 +47,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     context::Context,
-    crypto::{v1::Cipher, CipherKind},
+    crypto::{CipherKind, v1::Cipher},
 };
 
 /// AEAD packet payload must be smaller than 0x3FFF
@@ -64,7 +64,9 @@ pub enum ProtocolError {
     DecryptDataError,
     #[error("decrypt length failed")]
     DecryptLengthError,
-    #[error("buffer size too large ({0:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero")]
+    #[error(
+        "buffer size too large ({0:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero"
+    )]
     DataTooLong(usize),
 }
 

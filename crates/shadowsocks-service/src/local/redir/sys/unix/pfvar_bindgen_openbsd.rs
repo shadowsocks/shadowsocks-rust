@@ -1134,7 +1134,7 @@ pub const uio_seg_UIO_SYSSPACE: uio_seg = 1;
 pub type uio_seg = ::std::os::raw::c_uint;
 unsafe extern "C" {
     pub fn preadv(arg1: ::std::os::raw::c_int, arg2: *const iovec, arg3: ::std::os::raw::c_int, arg4: __off_t)
-        -> isize;
+    -> isize;
 }
 unsafe extern "C" {
     pub fn pwritev(
@@ -1599,11 +1599,11 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn getpeername(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn getsockname(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn getsockopt(

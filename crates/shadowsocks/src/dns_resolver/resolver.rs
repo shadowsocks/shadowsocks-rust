@@ -18,7 +18,7 @@ use hickory_resolver::config::ResolverConfig;
 use hickory_resolver::config::ResolverOpts;
 #[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
 use log::error;
-use log::{log_enabled, trace, Level};
+use log::{Level, log_enabled, trace};
 use tokio::net::lookup_host;
 #[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
 use tokio::task::JoinHandle;
@@ -290,7 +290,11 @@ impl DnsResolver {
     }
 
     /// Resolve address into `SocketAddr`s
-    pub async fn resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a + use<'a>> {
+    pub async fn resolve<'a>(
+        &self,
+        addr: &'a str,
+        port: u16,
+    ) -> io::Result<impl Iterator<Item = SocketAddr> + 'a + use<'a>> {
         struct ResolverLogger<'x, 'y> {
             resolver: &'x DnsResolver,
             addr: &'y str,

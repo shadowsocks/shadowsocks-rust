@@ -6,6 +6,7 @@ use std::{collections::HashMap, io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
 use shadowsocks::{
+    ManagerListener, ServerAddr,
     config::{Mode, ServerConfig, ServerType, ServerUser, ServerUserManager},
     context::{Context, SharedContext},
     crypto::CipherKind,
@@ -19,7 +20,6 @@ use shadowsocks::{
     },
     net::{AcceptOpts, ConnectOpts},
     plugin::PluginConfig,
-    ManagerListener, ServerAddr,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 

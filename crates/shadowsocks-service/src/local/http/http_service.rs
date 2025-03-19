@@ -3,12 +3,11 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use bytes::Bytes;
-use http_body_util::{combinators::BoxBody, BodyExt};
+use http_body_util::{BodyExt, combinators::BoxBody};
 use hyper::{
-    body,
+    HeaderMap, Method, Request, Response, StatusCode, Uri, Version, body,
     header::{self, HeaderValue},
     http::uri::{Authority, Scheme},
-    HeaderMap, Method, Request, Response, StatusCode, Uri, Version,
 };
 use log::{debug, error, trace};
 use shadowsocks::relay::Address;

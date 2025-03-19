@@ -15,11 +15,11 @@ use std::{
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use futures::{
-    future::{self, Either},
     FutureExt,
+    future::{self, Either},
 };
 use hickory_resolver::proto::{
-    op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
+    op::{Message, OpCode, Query, header::MessageType, response_code::ResponseCode},
     rr::{DNSClass, Name, RData, RecordType},
 };
 use log::{debug, error, info, trace, warn};
@@ -30,10 +30,10 @@ use tokio::{
 };
 
 use shadowsocks::{
+    ServerAddr,
     config::Mode,
     net::TcpListener,
-    relay::{udprelay::MAXIMUM_UDP_PAYLOAD_SIZE, Address},
-    ServerAddr,
+    relay::{Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
 };
 
 use crate::{

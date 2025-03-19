@@ -3524,7 +3524,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn cpuset_getid(arg1: cpulevel_t, arg2: cpuwhich_t, arg3: id_t, arg4: *mut cpusetid_t)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn cpuset_getaffinity(
@@ -6739,7 +6739,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn clock_getcpuclockid2(arg1: id_t, arg2: ::std::os::raw::c_int, arg3: *mut clockid_t)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn futimes(arg1: ::std::os::raw::c_int, arg2: *const timeval) -> ::std::os::raw::c_int;
@@ -7562,11 +7562,11 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn getpeername(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn getsockname(arg1: ::std::os::raw::c_int, arg2: *mut sockaddr, arg3: *mut socklen_t)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn getsockopt(
@@ -7644,7 +7644,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn sendmmsg(arg1: ::std::os::raw::c_int, arg2: *mut mmsghdr, arg3: usize, arg4: ::std::os::raw::c_int)
-        -> isize;
+    -> isize;
 }
 unsafe extern "C" {
     pub fn setfib(arg1: ::std::os::raw::c_int) -> ::std::os::raw::c_int;

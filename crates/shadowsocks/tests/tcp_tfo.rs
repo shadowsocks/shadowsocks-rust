@@ -13,6 +13,7 @@ use byte_string::ByteStr;
 use futures::future;
 use log::debug;
 use shadowsocks::{
+    ProxyClientStream, ProxyListener, ServerConfig,
     config::ServerType,
     context::Context,
     crypto::CipherKind,
@@ -21,7 +22,6 @@ use shadowsocks::{
         socks5::Address,
         tcprelay::utils::{copy_from_encrypted, copy_to_encrypted},
     },
-    ProxyClientStream, ProxyListener, ServerConfig,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},

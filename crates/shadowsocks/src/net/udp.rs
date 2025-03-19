@@ -35,11 +35,11 @@ use futures::ready;
 use tokio::io::Interest;
 use tokio::{io::ReadBuf, net::ToSocketAddrs};
 
-use crate::{context::Context, relay::socks5::Address, ServerAddr};
+use crate::{ServerAddr, context::Context, relay::socks5::Address};
 
 use super::{
-    sys::{bind_outbound_udp_socket, create_inbound_udp_socket, create_outbound_udp_socket},
     AcceptOpts, AddrFamily, ConnectOpts,
+    sys::{bind_outbound_udp_socket, create_inbound_udp_socket, create_outbound_udp_socket},
 };
 
 /// Message struct for `batch_send`

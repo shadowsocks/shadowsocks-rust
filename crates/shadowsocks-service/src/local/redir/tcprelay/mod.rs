@@ -8,7 +8,7 @@ use std::{
 };
 
 use log::{debug, error, info, trace};
-use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address, ServerAddr};
+use shadowsocks::{ServerAddr, lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
 use tokio::{
     net::{TcpListener, TcpStream},
     time,

@@ -4,13 +4,13 @@ use std::{
     fmt::{self, Debug},
     net::SocketAddr,
     sync::{
-        atomic::{AtomicU32, Ordering},
         Arc,
+        atomic::{AtomicU32, Ordering},
     },
     time::Duration,
 };
 
-use shadowsocks::{net::ConnectOpts, ServerConfig};
+use shadowsocks::{ServerConfig, net::ConnectOpts};
 use tokio::sync::Mutex;
 
 use crate::{config::ServerInstanceConfig, local::context::ServiceContext};

@@ -10,11 +10,11 @@ use std::{
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use hickory_resolver::proto::{
-    op::{response_code::ResponseCode, Message},
+    op::{Message, response_code::ResponseCode},
     serialize::binary::{BinEncodable, BinEncoder, EncodeMode},
 };
 use log::{error, trace};
-use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, ServerAddr};
+use shadowsocks::{ServerAddr, lookup_then, net::TcpListener as ShadowTcpListener};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,

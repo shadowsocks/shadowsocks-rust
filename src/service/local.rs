@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
+use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint, builder::PossibleValuesParser};
 use futures::future::{self, FutureExt};
 use log::{error, info, trace};
 use tokio::{
@@ -25,13 +25,13 @@ use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
     config::{
-        read_variable_field_value, Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType,
-        ServerInstanceConfig,
+        Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType, ServerInstanceConfig,
+        read_variable_field_value,
     },
-    local::{loadbalancing::PingBalancer, Server},
+    local::{Server, loadbalancing::PingBalancer},
     shadowsocks::{
         config::{Mode, ServerAddr, ServerConfig, ServerSource},
-        crypto::{available_ciphers, CipherKind},
+        crypto::{CipherKind, available_ciphers},
         plugin::PluginConfig,
     },
 };
@@ -939,8 +939,11 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         // DONE READING options
 
         if config.local.is_empty() {
-            return Err(ShadowsocksError::InsufficientParams("missing `local_address`, consider specifying it by --local-addr command line option, \
-                    or \"local_address\" and \"local_port\" in configuration file".to_string()));
+            return Err(ShadowsocksError::InsufficientParams(
+                "missing `local_address`, consider specifying it by --local-addr command line option, \
+                    or \"local_address\" and \"local_port\" in configuration file"
+                    .to_string(),
+            ));
         }
 
         config
@@ -1099,7 +1102,7 @@ impl ServerReloader {
     #[cfg(unix)]
     async fn launch_signal_reload_server_task(self: Arc<Self>) {
         use log::debug;
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
 
         let mut sigusr1 = signal(SignalKind::user_defined1()).expect("signal");
 

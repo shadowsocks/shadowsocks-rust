@@ -500,7 +500,10 @@ where
             debug_assert_eq!(method.key_len(), 0);
 
             if !password.is_empty() {
-                warn!("method \"none\" doesn't need a password, which should be set as an empty String, but password.len() = {}", password.len());
+                warn!(
+                    "method \"none\" doesn't need a password, which should be set as an empty String, but password.len() = {}",
+                    password.len()
+                );
             }
 
             return Ok((password, Vec::new().into_boxed_slice(), Vec::new()));

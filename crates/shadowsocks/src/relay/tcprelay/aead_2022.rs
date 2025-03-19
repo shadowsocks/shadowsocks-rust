@@ -54,8 +54,8 @@ use std::{
 };
 
 use aes::{
-    cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
     Aes128, Aes256, Block,
+    cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -65,9 +65,9 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use super::{crypto_io::StreamType, proxy_stream::protocol::v2::SERVER_STREAM_TIMESTAMP_MAX_DIFF};
 use crate::{
-    config::{method_support_eih, ServerUserManager},
+    config::{ServerUserManager, method_support_eih},
     context::Context,
-    crypto::{v2::tcp::TcpCipher, CipherKind},
+    crypto::{CipherKind, v2::tcp::TcpCipher},
 };
 
 #[inline]

@@ -13,7 +13,7 @@ use pin_project::pin_project;
 use sendfd::{RecvWithFd, SendWithFd};
 use tokio::{
     io::{AsyncRead, AsyncWrite, Interest, ReadBuf},
-    net::{unix::SocketAddr, UnixListener as TokioUnixListener, UnixStream as TokioUnixStream},
+    net::{UnixListener as TokioUnixListener, UnixStream as TokioUnixStream, unix::SocketAddr},
 };
 
 /// A UnixStream supports transferring FDs between processes

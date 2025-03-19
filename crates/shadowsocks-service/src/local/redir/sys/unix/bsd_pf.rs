@@ -13,7 +13,7 @@ use nix::ioctl_readwrite;
 use once_cell::sync::Lazy;
 use socket2::{Protocol, SockAddr};
 
-use super::pfvar::{in6_addr, in_addr, pfioc_natlook, sockaddr_in, sockaddr_in6, PF_OUT};
+use super::pfvar::{PF_OUT, in_addr, in6_addr, pfioc_natlook, sockaddr_in, sockaddr_in6};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use super::pfvar::{pf_addr, pfioc_states, pfsync_state};
 
