@@ -10,7 +10,6 @@ use std::{
     time::Duration,
 };
 
-use cfg_if::cfg_if;
 use futures::ready;
 use hickory_resolver::{
     ResolveError, Resolver,
