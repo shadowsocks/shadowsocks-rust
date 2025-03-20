@@ -158,10 +158,7 @@ impl AsyncRead for TcpConnection {
         let n = control.recv_buffer.dequeue_slice(recv_buf);
         buf.advance(n);
 
-        if n > 0 {
-            self.manager_notify.cancel();
-        }
-        Ok(()).into()
+        if n > 0 { Ok(()).into() } else { Poll::Pending }
     }
 }
 
@@ -188,10 +185,7 @@ impl AsyncWrite for TcpConnection {
 
         let n = control.send_buffer.enqueue_slice(buf);
 
-        if n > 0 {
-            self.manager_notify.cancel();
-        }
-        Ok(n).into()
+        if n > 0 { Ok(n).into() } else { Poll::Pending }
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
