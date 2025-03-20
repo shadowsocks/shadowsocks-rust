@@ -888,9 +888,9 @@ dependencies = [
 
 [[package]]
 name = "dynosaur"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1b7ff6b5c4d1df9f75c6bcce5cebfa480a448d298b0c83a07b3f5bb318ad10f"
+checksum = "277b2cb52d2df4acece06bb16bc0bb0a006970c7bf504eac2d310927a6f65890"
 dependencies = [
  "dynosaur_derive",
  "trait-variant",
@@ -898,9 +898,9 @@ dependencies = [
 
 [[package]]
 name = "dynosaur_derive"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a600ac649c596084163b9bcde422e9973a321dd190b9d8b15dde23986e53f425"
+checksum = "7a4102713839a8c01c77c165bc38ef2e83948f6397fa1e1dcfacec0f07b149d3"
 dependencies = [
  "proc-macro2",
  "quote",
