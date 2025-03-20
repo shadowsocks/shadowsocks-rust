@@ -19,7 +19,7 @@ use shadowsocks::{net::TcpSocketOpts, relay::socks5::Address};
 use smoltcp::{
     iface::{Config as InterfaceConfig, Interface, PollResult, SocketHandle, SocketSet},
     phy::{DeviceCapabilities, Medium},
-    socket::tcp::{Socket as TcpSocket, SocketBuffer as TcpSocketBuffer, State as TcpState},
+    socket::tcp::{CongestionControl, Socket as TcpSocket, SocketBuffer as TcpSocketBuffer, State as TcpState},
     storage::RingBuffer,
     time::{Duration as SmolDuration, Instant as SmolInstant},
     wire::{HardwareAddress, IpAddress, IpCidr, Ipv4Address, Ipv6Address, TcpPacket},
@@ -516,6 +516,8 @@ impl TcpTun {
             socket.set_timeout(Some(SmolDuration::from_secs(7200)));
             // NO ACK delay
             // socket.set_ack_delay(None);
+            // Enable Cubic congestion control
+            socket.set_congestion_control(CongestionControl::Cubic);
 
             if let Err(err) = socket.listen(dst_addr) {
                 return Err(io::Error::new(ErrorKind::Other, format!("listen error: {:?}", err)));
