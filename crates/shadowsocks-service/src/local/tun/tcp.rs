@@ -300,7 +300,7 @@ impl TcpTun {
                     loop {
                         use std::io::{Error, ErrorKind::BrokenPipe};
                         let tcp_socket_creation = tokio::select! {
-                            v = async { socket_creation_rx.try_recv() } => v.map_err(|e| Error::new(BrokenPipe, e))?,
+                            v = socket_creation_rx.recv() => v.ok_or(Error::new(BrokenPipe, "socket_creation_rx closed"))?,
                             _ = manager_notify.cancelled() => break,
                         };
                         let TcpSocketCreation {
@@ -460,7 +460,7 @@ impl TcpTun {
                                 .poll_delay(before_poll, &socket_set)
                                 .unwrap_or(SmolDuration::from_millis(5));
                             if next_duration != SmolDuration::ZERO {
-                                std::thread::park_timeout(Duration::from(next_duration));
+                                tokio::time::sleep(Duration::from(next_duration)).await;
                             }
                         }
                     }
