@@ -10,7 +10,6 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     task::{Context, Poll, Waker},
-    thread::{self, JoinHandle, Thread},
     time::Duration,
 };
 
@@ -63,20 +62,6 @@ struct TcpSocketControl {
     send_state: TcpSocketState,
 }
 
-struct ManagerNotify {
-    thread: Thread,
-}
-
-impl ManagerNotify {
-    fn new(thread: Thread) -> ManagerNotify {
-        ManagerNotify { thread }
-    }
-
-    fn notify(&self) {
-        self.thread.unpark();
-    }
-}
-
 struct TcpSocketManager {
     device: VirtTunDevice,
     iface: Interface,
@@ -94,7 +79,7 @@ struct TcpSocketCreation {
 
 struct TcpConnection {
     control: SharedTcpConnectionControl,
-    manager_notify: Arc<ManagerNotify>,
+    manager_notify: ::tokio_util::sync::CancellationToken,
 }
 
 impl Drop for TcpConnection {
@@ -109,7 +94,7 @@ impl Drop for TcpConnection {
             control.send_state = TcpSocketState::Close;
         }
 
-        self.manager_notify.notify();
+        self.manager_notify.cancel();
     }
 }
 
@@ -117,7 +102,7 @@ impl TcpConnection {
     fn new(
         socket: TcpSocket<'static>,
         socket_creation_tx: &mpsc::UnboundedSender<TcpSocketCreation>,
-        manager_notify: Arc<ManagerNotify>,
+        manager_notify: ::tokio_util::sync::CancellationToken,
         tcp_opts: &TcpSocketOpts,
     ) -> impl Future<Output = TcpConnection> + use<> {
         let send_buffer_size = tcp_opts.send_buffer_size.unwrap_or(DEFAULT_TCP_SEND_BUFFER_SIZE);
@@ -174,7 +159,7 @@ impl AsyncRead for TcpConnection {
         buf.advance(n);
 
         if n > 0 {
-            self.manager_notify.notify();
+            self.manager_notify.cancel();
         }
         Ok(()).into()
     }
@@ -204,7 +189,7 @@ impl AsyncWrite for TcpConnection {
         let n = control.send_buffer.enqueue_slice(buf);
 
         if n > 0 {
-            self.manager_notify.notify();
+            self.manager_notify.cancel();
         }
         Ok(n).into()
     }
@@ -231,17 +216,16 @@ impl AsyncWrite for TcpConnection {
             }
         }
 
-        self.manager_notify.notify();
+        self.manager_notify.cancel();
         Poll::Pending
     }
 }
 
 pub struct TcpTun {
     context: Arc<ServiceContext>,
-    manager_handle: Option<JoinHandle<()>>,
-    manager_notify: Arc<ManagerNotify>,
+    manager_handle: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
+    manager_notify: ::tokio_util::sync::CancellationToken,
     manager_socket_creation_tx: mpsc::UnboundedSender<TcpSocketCreation>,
-    manager_running: Arc<AtomicBool>,
     balancer: PingBalancer,
     iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
     iface_tx: mpsc::UnboundedSender<Vec<u8>>,
@@ -250,9 +234,12 @@ pub struct TcpTun {
 
 impl Drop for TcpTun {
     fn drop(&mut self) {
-        self.manager_running.store(false, Ordering::Relaxed);
-        self.manager_notify.notify();
-        let _ = self.manager_handle.take().unwrap().join();
+        self.manager_notify.cancel();
+        if let Some(handle) = self.manager_handle.take() {
+            if let Err(e) = tokio::runtime::Handle::current().block_on(handle) {
+                log::error!("TcpTun::poll_task_loop error: {:?}", e);
+            }
+        }
     }
 }
 
@@ -293,14 +280,13 @@ impl TcpTun {
             socket_creation_rx: manager_socket_creation_rx,
         };
 
-        let manager_running = Arc::new(AtomicBool::new(true));
+        let manager_notify = ::tokio_util::sync::CancellationToken::new();
 
         let manager_handle = {
-            let manager_running = manager_running.clone();
+            let manager_notify = manager_notify.clone();
 
-            thread::Builder::new()
-                .name("smoltcp-poll".to_owned())
-                .spawn(move || {
+            tokio::spawn(async move {
+                {
                     let TcpSocketManager {
                         ref mut device,
                         ref mut iface,
@@ -311,12 +297,17 @@ impl TcpTun {
 
                     let mut socket_set = SocketSet::new(vec![]);
 
-                    while manager_running.load(Ordering::Relaxed) {
-                        while let Ok(TcpSocketCreation {
+                    loop {
+                        use std::io::{Error, ErrorKind::BrokenPipe};
+                        let tcp_socket_creation = tokio::select! {
+                            v = async { socket_creation_rx.try_recv() } => v.map_err(|e| Error::new(BrokenPipe, e))?,
+                            _ = manager_notify.cancelled() => break,
+                        };
+                        let TcpSocketCreation {
                             control,
                             socket,
                             socket_created_tx: socket_create_tx,
-                        }) = socket_creation_rx.try_recv()
+                        } = tcp_socket_creation;
                         {
                             let handle = socket_set.add(socket);
                             let _ = socket_create_tx.send(());
@@ -469,24 +460,22 @@ impl TcpTun {
                                 .poll_delay(before_poll, &socket_set)
                                 .unwrap_or(SmolDuration::from_millis(5));
                             if next_duration != SmolDuration::ZERO {
-                                thread::park_timeout(Duration::from(next_duration));
+                                std::thread::park_timeout(Duration::from(next_duration));
                             }
                         }
                     }
 
                     trace!("VirtDevice::poll thread exited");
-                })
-                .unwrap()
+                    Ok(())
+                }
+            })
         };
-
-        let manager_notify = Arc::new(ManagerNotify::new(manager_handle.thread().clone()));
 
         TcpTun {
             context,
             manager_handle: Some(manager_handle),
             manager_notify,
             manager_socket_creation_tx,
-            manager_running,
             balancer,
             iface_rx,
             iface_tx,
@@ -551,7 +540,7 @@ impl TcpTun {
 
         // Wake up and poll the interface.
         self.iface_tx_avail.store(true, Ordering::Release);
-        self.manager_notify.notify();
+        self.manager_notify.cancel();
     }
 
     pub async fn recv_packet(&mut self) -> Vec<u8> {

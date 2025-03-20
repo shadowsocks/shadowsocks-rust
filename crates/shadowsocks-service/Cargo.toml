@@ -81,7 +81,7 @@ local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local"]
 # Enable Tun interface protocol for sslocal
-local-tun = ["local", "etherparse", "tun", "smoltcp"]
+local-tun = ["local", "etherparse", "tun", "smoltcp", "tokio-util"]
 # Enable Fake DNS
 local-fake-dns = ["local", "trust-dns", "rocksdb", "bson"]
 # sslocal support online URL (SIP008 Online Configuration Delivery)
@@ -148,6 +148,7 @@ tokio = { version = "1.38", features = [
     "time",
 ] }
 tokio-native-tls = { version = "0.3", optional = true }
+tokio-util = { version = "0.7", optional = true }
 native-tls = { version = "0.2.8", optional = true, features = ["alpn"] }
 webpki-roots = { version = "0.26", optional = true }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
