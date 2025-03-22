@@ -3472,6 +3472,7 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "tokio-rustls",
+ "tokio-util",
  "trait-variant",
  "tun",
  "webpki-roots",
