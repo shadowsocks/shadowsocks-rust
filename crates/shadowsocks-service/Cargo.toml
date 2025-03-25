@@ -185,6 +185,7 @@ smoltcp = { version = "0.12", optional = true, default-features = false, feature
     "log",
     "medium-ip",
     "proto-ipv4",
+    "proto-ipv4-fragmentation",
     "proto-ipv6",
     "socket-icmp",
     "socket-udp",

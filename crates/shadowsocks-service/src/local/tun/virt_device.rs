@@ -64,6 +64,7 @@ impl Device for VirtTunDevice {
                 buffer,
                 phantom_device: PhantomData,
             };
+            self.in_buf_avail.store(true, Ordering::Release);
             let tx = VirtTxToken(self);
             return Some((rx, tx));
         }
