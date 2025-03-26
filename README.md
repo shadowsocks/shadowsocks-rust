@@ -125,94 +125,48 @@ systemctl restart snap.shadowsocks-rust.sslocal-daemon.service
 systemctl status snap.shadowsocks-rust.sslocal-daemon.service
 ```
 
-## A step-by-step guide to installing via `snap` 
-### ▍1. Intro
+#### Step-by-step guide for using snap
 
-For those who are not familiar with `snap`, here is a step-by-step guide to deploying Shadowsocks-Rust.   
-- ​this guide was tested on `Ubuntu 20.04 LTS`. It should also work on other Linux images with minor adjustments.
-___
-### ▍2. Environment Configuration
+Tested on `Ubuntu 20.04 LTS`.
 
-2.1 (Optional) Obtain Root Privileges
-```sh
-# (Optional, as I have included "sudo" in almost all of the codes)
-sudo -i  # elevate to root user
-```
+- Install Core Dependencies
 
-2.2 Install Core Dependencies
 ```sh
 # update apt
-sudo apt update && sudo apt upgrade -y
-# install snap package manager  
-sudo apt install snapd -y
-# install core snap components         
-sudo snap install core            
+apt update && apt upgrade -y
+# install snap package manager
+apt install snapd -y
+# install core snap components
+snap install core
 ```
-___
-### ▍3. Service Installation
 
-3.1 Install Shadowsocks-RUST
+- Service Installation
+
 ```sh
-sudo snap install shadowsocks-rust
+snap install shadowsocks-rust
 ```
 
-**3.2 ⚠️IMPORTANT: start ssserver-daemon before writing the config.json file**
+- Run service
+
+⚠️IMPORTANT: start `ssserver-daemon` before modifying the `config.json` file.
+
 ```sh
 snap start --enable shadowsocks-rust.ssserver-daemon
 # alternativety, "sudo systemctl start snap.shadowsocks-rust.ssserver-daemon" can also be used to initiate the service.
 ```
 
-3.3 write config.json file
-```sh
-# in Ubuntu/Debian, the config.json file is located at /var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/
-sudo nano /var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/config.json
-```
+Edit `config.json` file in `/var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/config.json`.
 
-3.4 example config.json file. Copy & paste the following, save & exit
-```jsonc
-{
-    "server": "0.0.0.0",  
-    "server_port": 12345, // personal choice from 1025 to 65535
-    "method": "aes-128-gcm", // always use AEAD cipher
-    "password": "a_very_long_complex_password",  // use a non-dictionary based password
-    "mode": "tcp_and_udp",
-    "fast_open": false, 
-    "timeout": 300 // optional 
-}
-```
+- Register systemctl service
 
-3.5 start ssserver-daemon and enable auto-start
 ```sh
 # start ssserver-daemon
-sudo systemctl start snap.shadowsocks-rust.ssserver-daemon
+systemctl start snap.shadowsocks-rust.ssserver-daemon
 # (Optional) enable auto-start after reboot
-sudo systemctl enable snap.shadowsocks-rust.ssserver-daemon
+systemctl enable snap.shadowsocks-rust.ssserver-daemon
 # (Optional) check if auto-start is enabled
 snap services shadowsocks-rust
 ```
-
-3.6 Testing
-```sh
-# check service status. Green "Active" means it is up and running.
-sudo systemctl status snap.shadowsocks-rust.ssserver-daemon
-```
-
-3.7 (Optional) Troubleshooting
-```sh
-# if red "Active: failed" appears, use the following to debug
-journalctl -u snap.shadowsocks-rust.ssserver-daemon.service -b
-```
-
-3.8 (Optional) Configuration Reload
-```sh
-# restart Shadowsocks-Rust service if config.json file is updated
-sudo systemctl restart shadowsocks-rust.ssserver-daemon.service  # 
-```
-
-Done. See you on the free Internet!
-___
-
-
 
 ### **Download release**
 
