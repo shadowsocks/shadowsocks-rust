@@ -237,9 +237,9 @@ impl Drop for TcpTun {
         self.manager_running.cancel();
         self.manager_notify.notify_one();
         if let Some(handle) = self.manager_handle.take() {
-            if let Err(e) = tokio::runtime::Handle::current().block_on(handle) {
-                log::error!("TcpTun smoltcp-poll error: {:?}", e);
-            }
+            log::debug!("TcpTun::drop, waiting for manager thread to exit");
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            handle.abort();
         }
     }
 }
