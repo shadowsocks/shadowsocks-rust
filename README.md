@@ -125,6 +125,8 @@ systemctl restart snap.shadowsocks-rust.sslocal-daemon.service
 systemctl status snap.shadowsocks-rust.sslocal-daemon.service
 ```
 
+Default configuration file path probably is `/var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/config.json`.
+
 ### **Download release**
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
@@ -302,7 +304,7 @@ Create a ShadowSocks' configuration file. Example
 
 Detailed explanation of the configuration file could be found in [shadowsocks' documentation](https://github.com/shadowsocks/shadowsocks/wiki). (Link to original project, not maintained anymore !)
 
-> :warning: For snap installations, configuration file is most probably located in `/var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/config.json` (see https://github.com/shadowsocks/shadowsocks-rust/issues/621 / https://github.com/shadowsocks/shadowsocks-rust/issues/1146)
+> :warning: For snap installations, configuration file is most probably located in `/var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/config.json` (see <https://github.com/shadowsocks/shadowsocks-rust/issues/621> / <https://github.com/shadowsocks/shadowsocks-rust/issues/1146>)
 
 In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one server. You can also disable individual servers.
 
