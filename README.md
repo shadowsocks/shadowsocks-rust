@@ -124,15 +124,12 @@ systemctl restart snap.shadowsocks-rust.sslocal-daemon.service
 # ... and show service status
 systemctl status snap.shadowsocks-rust.sslocal-daemon.service
 ```
-## A step-by-step snap install guide
 
+## A step-by-step guide to installing via `snap` 
 ### ▍1. Intro
-I have been using SS-Libev(server) on my Google VPS for a long time. Since SS-Libev was discontinued and future development had moved to SS-Rust, thought I'd give it a try. 
 
-During deployment of SS-Rust with snap, like many issues posted, accessing config.json wasn't straightforward as SS-Libev. After spending a long time troubleshooting and finally made it work, I thought I could share my experience, and hence this guide.
-
-Here is a step-by-step guide to deploy Shadowsocks-Rust for newbies like me. See you on the free Internet!  
-- ​this guide was performed on `Ubuntu 20.04 LTS`. It should also work on other linux images with minor modification of the codes.
+For those who are not familiar with `snap`, here is a step-by-step guide to deploying Shadowsocks-Rust.   
+- ​this guide was tested on `Ubuntu 20.04 LTS`. It should also work on other Linux images with minor adjustments.
 ___
 ### ▍2. Environment Configuration
 
@@ -159,21 +156,20 @@ ___
 sudo snap install shadowsocks-rust
 ```
 
-==**3.2 IMPORTANT**==: start shadowsocks-rust-ssserver-daemon before writing the config.json file**
+**3.2 ⚠️IMPORTANT: start ssserver-daemon before writing the config.json file**
 ```sh
 snap start --enable shadowsocks-rust.ssserver-daemon
 # alternativety, "sudo systemctl start snap.shadowsocks-rust.ssserver-daemon" can also be used to initiate the service.
-# note: unlike SS-libev, in SS-RUST, the config.json file is somehow not created/inaccessible before ssserver-daemon starts. Hence, ssserver-daemon should be initiated before modifying config.json. Furthermore, it is recommended to use the full service name (i.e. snap.shadowsocks-rust.ssserver-daemon).
 ```
 
 3.3 write config.json file
 ```sh
-# in Ubuntu/Debian the config.json file is located at /var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/
+# in Ubuntu/Debian, the config.json file is located at /var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/
 sudo nano /var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/config.json
 ```
 
 3.4 example config.json file. Copy & paste the following, save & exit
-```json
+```jsonc
 {
     "server": "0.0.0.0",  
     "server_port": 12345, // personal choice from 1025 to 65535
@@ -197,7 +193,7 @@ snap services shadowsocks-rust
 
 3.6 Testing
 ```sh
-# check service status
+# check service status. Green "Active" means it is up and running.
 sudo systemctl status snap.shadowsocks-rust.ssserver-daemon
 ```
 
@@ -212,25 +208,9 @@ journalctl -u snap.shadowsocks-rust.ssserver-daemon.service -b
 # restart Shadowsocks-Rust service if config.json file is updated
 sudo systemctl restart shadowsocks-rust.ssserver-daemon.service  # 
 ```
+
+Done. See you on the free Internet!
 ___
-### ▍4. Firewall Configuration 
-
-- Note: I used UFW to configure firewall
-
-4.1 Set Up UFW
-```sh
-sudo apt update && sudo apt install -y ufw  # install ufw
-sudo ufw allow ssh  
-sudo ufw allow 38383  # open designated port
-sudo ufw enable            # Activate firewall
-```
-
-4.2 (Optional) Port Forwarding 
-```sh
-## GFW reportly blocks specific ports rather than IP addresses. To maintain service availability, a simple solution would be redirecting TCP/UDP traffic from ports 12000-12010 (or other numbers) to 38383, then update the correcsponding port on client.
-
-sudo iptables -t nat -A PREROUTING -p tcp --dport 12000:12010 -j REDIRECT --to-port 38383
-sudo iptables -t nat -A PREROUTING -p udp --dport 12000:12010 -j REDIRECT --to-port 38383
 
 
 
