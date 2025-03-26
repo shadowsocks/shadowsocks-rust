@@ -4,6 +4,7 @@
 use std::os::unix::io::RawFd;
 use std::{
     io::{self, ErrorKind},
+    mem,
     net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -41,7 +42,7 @@ cfg_if! {
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
-use self::{ip_packet::IpPacket, tcp::TcpTun, udp::UdpTun};
+use self::{ip_packet::IpPacket, tcp::TcpTun, udp::UdpTun, virt_device::TokenBuffer};
 
 mod ip_packet;
 mod tcp;
@@ -191,7 +192,16 @@ impl Tun {
 
         let address_broadcast = address_net.broadcast();
 
-        let mut packet_buffer = vec![0u8; 65536].into_boxed_slice();
+        let create_packet_buffer = || {
+            const PACKET_BUFFER_SIZE: usize = 65536;
+            let mut packet_buffer = TokenBuffer::with_capacity(PACKET_BUFFER_SIZE);
+            unsafe {
+                packet_buffer.set_len(PACKET_BUFFER_SIZE);
+            }
+            packet_buffer
+        };
+
+        let mut packet_buffer = create_packet_buffer();
         let mut udp_cleanup_timer = time::interval(self.udp_cleanup_interval);
 
         loop {
@@ -200,10 +210,14 @@ impl Tun {
                 n = self.device.read(&mut packet_buffer) => {
                     let n = n?;
 
-                    let packet = &mut packet_buffer[..n];
-                    trace!("[TUN] received IP packet {:?}", ByteStr::new(packet));
+                    let mut packet_buffer = mem::replace(&mut packet_buffer, create_packet_buffer());
+                    unsafe {
+                        packet_buffer.set_len(n);
+                    }
 
-                    if let Err(err) = self.handle_tun_frame(&address_broadcast, packet).await {
+                    trace!("[TUN] received IP packet {:?}", ByteStr::new(&packet_buffer));
+
+                    if let Err(err) = self.handle_tun_frame(&address_broadcast, packet_buffer).await {
                         error!("[TUN] handle IP frame failed, error: {}", err);
                     }
                 }
@@ -254,11 +268,15 @@ impl Tun {
         }
     }
 
-    async fn handle_tun_frame(&mut self, device_broadcast_addr: &IpAddr, frame: &[u8]) -> smoltcp::wire::Result<()> {
-        let packet = match IpPacket::new_checked(frame)? {
+    async fn handle_tun_frame(
+        &mut self,
+        device_broadcast_addr: &IpAddr,
+        frame: TokenBuffer,
+    ) -> smoltcp::wire::Result<()> {
+        let packet = match IpPacket::new_checked(frame.as_ref())? {
             Some(packet) => packet,
             None => {
-                warn!("unrecognized IP packet {:?}", ByteStr::new(frame));
+                warn!("unrecognized IP packet {:?}", ByteStr::new(&frame));
                 return Ok(());
             }
         };

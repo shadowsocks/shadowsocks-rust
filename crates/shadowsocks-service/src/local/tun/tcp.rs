@@ -40,7 +40,7 @@ use crate::{
     net::utils::to_ipv4_mapped,
 };
 
-use super::virt_device::VirtTunDevice;
+use super::virt_device::{TokenBuffer, VirtTunDevice};
 
 // NOTE: Default buffer could contain 5 AEAD packets
 const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = (0x3FFFu32 * 5).next_power_of_two();
@@ -243,8 +243,8 @@ pub struct TcpTun {
     manager_socket_creation_tx: mpsc::UnboundedSender<TcpSocketCreation>,
     manager_running: Arc<AtomicBool>,
     balancer: PingBalancer,
-    iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-    iface_tx: mpsc::UnboundedSender<Vec<u8>>,
+    iface_rx: mpsc::UnboundedReceiver<TokenBuffer>,
+    iface_tx: mpsc::UnboundedSender<TokenBuffer>,
     iface_tx_avail: Arc<AtomicBool>,
 }
 
@@ -551,8 +551,8 @@ impl TcpTun {
         Ok(())
     }
 
-    pub async fn drive_interface_state(&mut self, frame: &[u8]) {
-        if self.iface_tx.send(frame.to_vec()).is_err() {
+    pub async fn drive_interface_state(&mut self, frame: TokenBuffer) {
+        if self.iface_tx.send(frame).is_err() {
             panic!("interface send channel closed unexpectedly");
         }
 
@@ -561,7 +561,7 @@ impl TcpTun {
         self.manager_notify.notify();
     }
 
-    pub async fn recv_packet(&mut self) -> Vec<u8> {
+    pub async fn recv_packet(&mut self) -> TokenBuffer {
         match self.iface_rx.recv().await {
             Some(v) => v,
             None => unreachable!("channel closed unexpectedly"),
