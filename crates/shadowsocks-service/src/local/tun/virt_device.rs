@@ -105,8 +105,7 @@ impl phy::TxToken for VirtTxToken<'_> {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        let mut buffer = TokenBuffer::new();
-        buffer.reserve(len);
+        let mut buffer = TokenBuffer::with_capacity(len);
         unsafe {
             buffer.set_len(len);
         }
@@ -143,10 +142,6 @@ impl Drop for TokenBuffer {
 }
 
 impl TokenBuffer {
-    pub fn new() -> TokenBuffer {
-        TokenBuffer::with_capacity(0)
-    }
-
     pub fn with_capacity(cap: usize) -> TokenBuffer {
         let mut list = TOKEN_BUFFER_LIST.lock().unwrap();
         if let Some(buffer) = list.pop() {
