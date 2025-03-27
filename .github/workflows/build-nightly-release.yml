@@ -20,12 +20,12 @@ jobs:
             toolchain: stable
           - target: aarch64-unknown-linux-musl
             toolchain: stable
-          - target: mips-unknown-linux-musl
-            toolchain: nightly
-          - target: mipsel-unknown-linux-musl
-            toolchain: nightly
-          - target: mips64el-unknown-linux-muslabi64
-            toolchain: nightly
+          #- target: mips-unknown-linux-gnu
+          #  toolchain: nightly
+          #- target: mipsel-unknown-linux-gnu
+          #  toolchain: nightly
+          #- target: mips64el-unknown-linux-gnuabi64
+          #  toolchain: nightly
 
     steps:
       - name: Free Disk Space (Ubuntu)
