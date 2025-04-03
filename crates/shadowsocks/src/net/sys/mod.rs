@@ -28,10 +28,21 @@ fn set_common_sockopt_for_connect(addr: SocketAddr, socket: &TcpSocket, opts: &C
             (SocketAddr::V4(..), SocketAddr::V4(..)) => {
                 socket.bind(baddr)?;
             }
+            (SocketAddr::V4(v4baddr), SocketAddr::V6(..)) => {
+                socket.bind(SocketAddr::new(v4baddr.ip().to_ipv6_mapped().into(), v4baddr.port()))?;
+            }
             (SocketAddr::V6(..), SocketAddr::V6(..)) => {
                 socket.bind(baddr)?;
             }
-            _ => {}
+            (SocketAddr::V6(v6baddr), SocketAddr::V4(..)) => match v6baddr.ip().to_ipv4_mapped() {
+                Some(v4baddr) => socket.bind(SocketAddr::new(v4baddr.into(), v6baddr.port()))?,
+                None => {
+                    return Err(io::Error::new(
+                        ErrorKind::InvalidInput,
+                        "bind_local_addr is not a valid IPv4-mapped IPv6 address",
+                    ));
+                }
+            },
         }
     }
 
