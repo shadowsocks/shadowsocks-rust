@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     io::{self, ErrorKind},
     mem,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream as StdTcpStream},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream as StdTcpStream},
     os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
     pin::Pin,
     ptr,
@@ -23,7 +23,7 @@ use tokio_tfo::TfoStream;
 
 use crate::net::{
     AcceptOpts, AddrFamily, ConnectOpts,
-    sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack, io::Error},
+    sys::{io::Error, set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
     udp::{BatchRecvMessage, BatchSendMessage},
 };
 
@@ -359,16 +359,15 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
         (AddrFamily::Ipv4, Some(SocketAddr::V6(addr))) => {
             // Map IPv6 bind_local_addr to IPv4 if AF is IPv4
             match addr.ip().to_ipv4_mapped() {
-                Some(addr) => SocketAddr::new(IpAddr::from(addr), 0),
+                Some(addr) => SocketAddr::new(addr.into(), 0),
                 None => return Err(Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
             }
-        },
+        }
         (AddrFamily::Ipv6, Some(SocketAddr::V6(addr))) => addr.into(),
         (AddrFamily::Ipv6, Some(SocketAddr::V4(addr))) => {
             // Map IPv4 bind_local_addr to IPv6 if AF is IPv6
-            let ip_addr: IpAddr = addr.ip().to_ipv6_mapped().into();
-            SocketAddr::new(ip_addr, 0)
-        },
+            SocketAddr::new(addr.ip().to_ipv6_mapped().into(), 0)
+        }
         (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
