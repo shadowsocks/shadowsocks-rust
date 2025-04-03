@@ -359,10 +359,7 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
         (AddrFamily::Ipv4, Some(SocketAddr::V6(addr))) => {
             // Map IPv6 bind_local_addr to IPv4 if AF is IPv4
             match addr.ip().to_ipv4_mapped() {
-                Some(addr) => {
-                    let ip_addr: IpAddr = addr.into();
-                    SocketAddr::new(ip_addr, 0)
-                },
+                Some(addr) => SocketAddr::new(IpAddr::from(addr), 0),
                 None => return Err(Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
             }
         },
