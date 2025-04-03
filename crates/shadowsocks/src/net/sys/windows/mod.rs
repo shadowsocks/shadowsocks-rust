@@ -475,7 +475,7 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, opts: &ConnectOpts) -> i
                     let ip_addr: IpAddr = addr.into();
                     SocketAddr::new(ip_addr, 0)
                 },
-                None => return Err(Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
+                None => return Err(io::Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
             }
         },
         (AddrFamily::Ipv6, Some(SocketAddr::V6(addr))) => addr.into(),
