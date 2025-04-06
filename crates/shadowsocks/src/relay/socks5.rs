@@ -478,7 +478,7 @@ fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
         "domain name length must be smaller than 256"
     );
     buf.put_u8(dnaddr.len() as u8);
-    buf.put_slice(dnaddr[..].as_bytes());
+    buf.put_slice(dnaddr.as_bytes());
     buf.put_u16(port);
 }
 
@@ -837,7 +837,7 @@ impl UdpAssociateHeader {
     }
 }
 
-/// Username/Password Authentication Inittial Negociation
+/// Username/Password Authentication Initial Negotiation
 ///
 /// https://datatracker.ietf.org/doc/html/rfc1929
 ///
@@ -880,7 +880,7 @@ impl PasswdAuthRequest {
         let mut ver_buf = [0u8; 1];
         let _ = r.read_exact(&mut ver_buf).await?;
 
-        // The only valid subnegociation version
+        // The only valid subnegotiation version
         if ver_buf[0] != 0x01 {
             return Err(Error::UnsupportedPasswdAuthVersion(ver_buf[0]));
         }

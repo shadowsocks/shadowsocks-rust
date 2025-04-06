@@ -21,10 +21,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - if: ${{ runner.os == 'Windows' }}
         uses: ilammy/setup-nasm@v1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust
         run: |
           rustup set profile minimal
