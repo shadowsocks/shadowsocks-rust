@@ -1,6 +1,5 @@
 use std::{
-    io,
-    io::ErrorKind,
+    io::{self, ErrorKind},
     mem,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
@@ -22,7 +21,7 @@ use tokio_tfo::TfoStream;
 
 use crate::net::{
     AcceptOpts, AddrFamily, ConnectOpts,
-    sys::{io::Error, set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
+    sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
     udp::{BatchRecvMessage, BatchSendMessage},
 };
 
@@ -293,7 +292,7 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
             // Map IPv6 bind_local_addr to IPv4 if AF is IPv4
             match addr.ip().to_ipv4_mapped() {
                 Some(addr) => SocketAddr::new(addr.into(), 0),
-                None => return Err(Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
+                None => return Err(io::Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
             }
         }
         (AddrFamily::Ipv6, Some(SocketAddr::V6(addr))) => addr.into(),

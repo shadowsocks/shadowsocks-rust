@@ -1,6 +1,5 @@
 use std::{
-    io,
-    io::ErrorKind,
+    io::{self, ErrorKind},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::{Deref, DerefMut},
     os::fd::AsRawFd,
@@ -16,7 +15,7 @@ use tokio::{
 
 use crate::net::{
     AcceptOpts, AddrFamily, ConnectOpts,
-    sys::{ErrorKind, io::Error, set_common_sockopt_after_connect, set_common_sockopt_for_connect},
+    sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect},
 };
 
 /// A wrapper of `TcpStream`
@@ -87,7 +86,7 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
             // Map IPv6 bind_local_addr to IPv4 if AF is IPv4
             match addr.ip().to_ipv4_mapped() {
                 Some(addr) => SocketAddr::new(IpAddr::from(addr), 0),
-                None => return Err(Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
+                None => return Err(io::Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
             }
         }
         (AddrFamily::Ipv6, Some(SocketAddr::V6(addr))) => addr.into(),
