@@ -56,7 +56,7 @@ impl TcpStream {
         // This is a workaround for VPNService
         #[cfg(target_os = "android")]
         if !addr.ip().is_loopback() {
-            use std::{io::ErrorKind, time::Duration};
+            use std::time::Duration;
             use tokio::time;
 
             if let Some(ref path) = opts.vpn_protect_path {
@@ -332,7 +332,7 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
     // This is a workaround for VPNService
     #[cfg(target_os = "android")]
     {
-        use std::{io::ErrorKind, time::Duration};
+        use std::time::Duration;
         use tokio::time;
 
         if let Some(ref path) = config.vpn_protect_path {
@@ -397,10 +397,7 @@ fn set_bindtodevice<S: AsRawFd>(socket: &S, iface: &str) -> io::Result<()> {
 
 cfg_if! {
     if #[cfg(target_os = "android")] {
-        use std::{
-            io::ErrorKind,
-            path::Path,
-        };
+        use std::path::Path;
         use tokio::io::AsyncReadExt;
 
         use super::uds::UnixStream;
