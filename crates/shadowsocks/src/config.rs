@@ -394,6 +394,10 @@ pub enum ServerConfigError {
     /// Key length mismatch
     #[error("invalid key length for {0}, expecting {1} bytes, but found {2} bytes")]
     InvalidKeyLength(CipherKind, usize, usize),
+
+    /// User Key (ipsk) length mismatch
+    #[error("invalid user key length for {0}, expecting {1} bytes, but found {2} bytes")]
+    InvalidUserKeyLength(CipherKind, usize, usize),
 }
 
 /// Configuration for a server
@@ -538,6 +542,22 @@ where
         for ipsk in split_iter {
             match USER_KEY_BASE64_ENGINE.decode(ipsk) {
                 Ok(v) => {
+                    // Double check identity key's length
+                    match method {
+                        CipherKind::AEAD2022_BLAKE3_AES_128_GCM => {
+                            // AES-128
+                            if v.len() != 16 {
+                                return Err(ServerConfigError::InvalidUserKeyLength(method, 16, v.len()));
+                            }
+                        }
+                        CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
+                            // AES-256
+                            if v.len() != 32 {
+                                return Err(ServerConfigError::InvalidUserKeyLength(method, 32, v.len()));
+                            }
+                        }
+                        _ => unreachable!("{} doesn't support EIH", method),
+                    }
                     identity_keys.push(Bytes::from(v));
                 }
                 Err(err) => {
