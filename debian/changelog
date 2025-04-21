@@ -1,3 +1,16 @@
+shadowsocks-rust (1.23.1) unstable; urgency=medium
+
+  ## Features
+
+  - #1922 `local-tun`: Enable congestion control algorithm for TCP connections
+  - #1923 `local-tun`: Disable TCP package receive checksum for improving performance
+  - `local-tun`: Buffer for receiving/sending packets from/to `tun` device are cached globally
+
+  ## Bug Fixes
+
+  - #1929 `outbound_bind_addr` for UDP sockets failed to `bind()` if it is an IPv4 address
+  - Double check IPSK key length (AEAD-2022) when reading from configuration file
+
 shadowsocks-rust (1.23.0) unstable; urgency=medium
 
   ## Features, Breaking Changes
