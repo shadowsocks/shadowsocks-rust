@@ -144,7 +144,8 @@ impl Drop for TokenBuffer {
 impl TokenBuffer {
     pub fn with_capacity(cap: usize) -> TokenBuffer {
         let mut list = TOKEN_BUFFER_LIST.lock().unwrap();
-        if let Some(buffer) = list.pop() {
+        if let Some(mut buffer) = list.pop() {
+            buffer.reserve(cap);
             return TokenBuffer { buffer };
         }
         TokenBuffer {
