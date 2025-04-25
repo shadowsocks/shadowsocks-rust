@@ -10,5 +10,8 @@ cfg_if! {
                         target_os = "openbsd"))] {
         mod bsd;
         pub use self::bsd::*;
+    } else {
+        mod not_supported;
+        pub use self::not_supported::*;
     }
 }

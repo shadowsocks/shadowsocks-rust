@@ -33,10 +33,10 @@ cfg_if! {
             create_as_async, AsyncDevice, Configuration as TunConfiguration, AbstractDevice, Error as TunError, Layer,
         };
     } else {
-        use tun::{AbstractDevice, Configuration as TunConfiguration, Error as TunError, Layer};
-
         mod fake_tun;
-        use self::fake_tun::{create_as_async, AsyncDevice};
+        use self::fake_tun::{
+            AbstractDevice, AsyncDevice, Configuration as TunConfiguration, Error as TunError, Layer, create_as_async,
+        };
     }
 }
 

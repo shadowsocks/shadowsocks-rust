@@ -12,6 +12,7 @@ cfg_if! {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 pub fn set_ipv6_only<S>(socket: &S, ipv6_only: bool) -> io::Result<()>
 where
     S: std::os::unix::io::AsRawFd,

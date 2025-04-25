@@ -1,4 +1,8 @@
-use std::{io, net::SocketAddr};
+use std::{
+    io,
+    net::SocketAddr,
+    task::{Context, Poll},
+};
 
 use crate::{
     config::RedirType,
