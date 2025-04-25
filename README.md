@@ -131,9 +131,9 @@ Default configuration file path probably is `/var/snap/shadowsocks-rust/common/e
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
 
-- `build-windows`: Build for `x86_64-pc-windows-msvc`
-- `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
-- `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`, ... (statically linked)
+- Most of them are built with [cross](https://github.com/cross-rs/cross). Build environment details could be found in its README, such as glibc's version.
+- `x86_64-apple-darwin`, `aarch64-apple-darwin` are built in github's `macos-latest` image. Information could be found in [here](https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners).
+- `x86_64-pc-windows-msvc` is built in github's `windows-latest` image. Information could be found in [here](https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners).
 
 ### **Docker**
 
