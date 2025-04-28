@@ -99,8 +99,8 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "Unicode-3.0",
-    "Unicode-DFS-2016",
     "MPL-2.0",
+    "CDLA-Permissive-2.0",
     "CC0-1.0",
     "0BSD",
 ]
@@ -116,7 +116,6 @@ exceptions = [
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
     { allow = ["WTFPL"], crate = "tun" },
-    { allow = ["LicenseRef-ring"], crate = "ring" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
