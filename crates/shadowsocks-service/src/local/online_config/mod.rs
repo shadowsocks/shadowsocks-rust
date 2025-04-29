@@ -3,6 +3,7 @@
 //! Online Configuration Delivery URL (https://shadowsocks.org/doc/sip008.html)
 
 use std::{
+    collections::HashSet,
     io,
     sync::Arc,
     time::{Duration, Instant},
@@ -29,6 +30,7 @@ pub struct OnlineConfigServiceBuilder {
     config_url: String,
     balancer: PingBalancer,
     config_update_interval: Duration,
+    allowed_plugins: Option<HashSet<String>>,
 }
 
 impl OnlineConfigServiceBuilder {
@@ -39,12 +41,26 @@ impl OnlineConfigServiceBuilder {
             config_url,
             balancer,
             config_update_interval: Duration::from_secs(3600),
+            allowed_plugins: None,
         }
     }
 
     /// Set update interval. Default is 3600s
     pub fn set_update_interval(&mut self, update_interval: Duration) {
         self.config_update_interval = update_interval;
+    }
+
+    /// Allowed plugins (whitelist) from SIP008 server
+    pub fn set_allowed_plugins<V, S>(&mut self, allowed_plugins: V)
+    where
+        V: Iterator<Item = S>,
+        S: Into<String>,
+    {
+        let mut allowed_plugins_set = HashSet::new();
+        for plugin in allowed_plugins {
+            allowed_plugins_set.insert(plugin.into());
+        }
+        self.allowed_plugins = Some(allowed_plugins_set);
     }
 
     /// Build OnlineConfigService
@@ -55,6 +71,7 @@ impl OnlineConfigServiceBuilder {
             config_url: self.config_url,
             config_update_interval: self.config_update_interval,
             balancer: self.balancer,
+            allowed_plugins: self.allowed_plugins,
         };
 
         // Run once after creation.
@@ -70,6 +87,7 @@ pub struct OnlineConfigService {
     config_url: String,
     config_update_interval: Duration,
     balancer: PingBalancer,
+    allowed_plugins: Option<HashSet<String>>,
 }
 
 impl OnlineConfigService {
@@ -195,6 +213,24 @@ impl OnlineConfigService {
         }
 
         let after_read_time = Instant::now();
+
+        // Check plugin whitelist
+        if let Some(ref allowed_plugins) = self.allowed_plugins {
+            for server in &online_config.server {
+                if let Some(ref plugin) = server.config.plugin() {
+                    if !allowed_plugins.contains(&plugin.plugin) {
+                        error!(
+                            "server-loader task found not allowed plugin: {}, url: {}",
+                            plugin.plugin, self.config_url
+                        );
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("not allowed plugin: {}", plugin.plugin),
+                        ));
+                    }
+                }
+            }
+        }
 
         // Merge with static servers
         let server_len = online_config.server.len();

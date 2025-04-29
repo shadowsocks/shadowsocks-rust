@@ -413,7 +413,10 @@ struct SSServerExtConfig {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SSOnlineConfig {
     config_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     update_interval: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_plugins: Option<Vec<String>>,
 }
 
 /// Server config type
@@ -1289,6 +1292,8 @@ pub struct OnlineConfig {
     pub config_url: String,
     /// Update interval, 3600s by default
     pub update_interval: Option<Duration>,
+    /// Allowed plugins
+    pub allowed_plugins: Option<Vec<String>>,
 }
 
 /// Configuration
@@ -2453,6 +2458,7 @@ impl Config {
             nconfig.online_config = Some(OnlineConfig {
                 config_url: online_config.config_url,
                 update_interval: online_config.update_interval.map(Duration::from_secs),
+                allowed_plugins: online_config.allowed_plugins,
             });
         }
 
@@ -3195,6 +3201,7 @@ impl fmt::Display for Config {
             jconf.online_config = Some(SSOnlineConfig {
                 config_url: online_config.config_url.clone(),
                 update_interval: online_config.update_interval.as_ref().map(Duration::as_secs),
+                allowed_plugins: online_config.allowed_plugins.clone(),
             });
         }
 

@@ -933,6 +933,7 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
             config.online_config = Some(OnlineConfig {
                 config_url: online_config_url.clone(),
                 update_interval: online_config_update_interval.map(Duration::from_secs),
+                allowed_plugins: None,
             });
         }
 
