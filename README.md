@@ -837,7 +837,12 @@ Example configuration:
     "online_config": {
         "config_url": "https://path-to-online-sip008-configuration",
         // Optional. Seconds between each update to config_url. Default to 3600s
-        "update_interval": 3600
+        "update_interval": 3600,
+        // Optional. Whitelist of plugins
+        // SECURITY: To avoid executing untrusted commands loaded from config_url
+        "allowed_plugins": [
+            "v2ray-plugin"
+        ]
     },
 
     // Service configurations
