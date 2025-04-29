@@ -570,6 +570,12 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                     .action(ArgAction::Set)
                     .value_parser(clap::value_parser!(u64))
                     .help("SIP008 Online Configuration Delivery update interval in seconds, 3600 by default"),
+            )
+            .arg(
+                Arg::new("ONLINE_CONFIG_ALLOWED_PLUGIN")
+                    .long("online-config-allowed-plugin")
+                    .action(ArgAction::Set)
+                    .help("SIP008 Online Configuration Delivery allowed plugin list"),
             );
     }
 
@@ -930,10 +936,16 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
             use shadowsocks_service::config::OnlineConfig;
 
             let online_config_update_interval = matches.get_one::<u64>("ONLINE_CONFIG_UPDATE_INTERVAL").cloned();
+
+            let mut allowed_plugins = None;
+            if let Some(plugins) = matches.get_many::<String>("ONLINE_CONFIG_ALLOWED_PLUGIN") {
+                allowed_plugins = Some(plugins.collect());
+            }
+
             config.online_config = Some(OnlineConfig {
                 config_url: online_config_url.clone(),
                 update_interval: online_config_update_interval.map(Duration::from_secs),
-                allowed_plugins: None,
+                allowed_plugins,
             });
         }
 
