@@ -574,7 +574,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
             .arg(
                 Arg::new("ONLINE_CONFIG_ALLOWED_PLUGIN")
                     .long("online-config-allowed-plugin")
-                    .action(ArgAction::Set)
+                    .action(ArgAction::Append)
                     .help("SIP008 Online Configuration Delivery allowed plugin list"),
             );
     }
