@@ -939,7 +939,7 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
 
             let mut allowed_plugins = None;
             if let Some(plugins) = matches.get_many::<String>("ONLINE_CONFIG_ALLOWED_PLUGIN") {
-                allowed_plugins = Some(plugins.collect());
+                allowed_plugins = Some(plugins.cloned().collect());
             }
 
             config.online_config = Some(OnlineConfig {
