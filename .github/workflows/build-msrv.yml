@@ -22,7 +22,7 @@ jobs:
         uses: jlumbroso/free-disk-space@main
       - if: ${{ matrix.platform == 'ubuntu-latest' }}
         name: Install LLVM and Clang
-        run: sudo apt install -y clang
+        run: sudo apt update && sudo apt install -y clang
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - if: ${{ runner.os == 'Windows' }}

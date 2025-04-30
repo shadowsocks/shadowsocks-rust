@@ -76,7 +76,7 @@ jobs:
         uses: jlumbroso/free-disk-space@main
 
       - name: Install LLVM and Clang
-        run: sudo apt install -y clang
+        run: sudo apt update && sudo apt install -y clang
 
       - uses: actions/checkout@v4
 

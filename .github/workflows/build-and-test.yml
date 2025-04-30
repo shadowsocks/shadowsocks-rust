@@ -26,7 +26,7 @@ jobs:
         uses: ilammy/setup-nasm@v1
       - if: ${{ matrix.platform == 'ubuntu-latest' }}
         name: Install LLVM and Clang
-        run: sudo apt install -y clang
+        run: sudo apt update && sudo apt install -y clang
       - name: Install Rust
         run: |
           rustup set profile minimal
