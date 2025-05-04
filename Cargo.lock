@@ -4858,9 +4858,9 @@ dependencies = [
 
 [[package]]
 name = "xdg"
-version = "2.5.2"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "213b7324336b53d2414b2db8537e56544d981803139155afa84f76eeebb7a546"
+checksum = "4729c337a4dcf08d997720dc77cb69e1fb62284eee87fd6e3f5035d63b18414b"
 
 [[package]]
 name = "yoke"
