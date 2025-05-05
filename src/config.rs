@@ -54,7 +54,8 @@ pub fn get_default_config_path(config_file: &str) -> Option<PathBuf> {
     // UNIX systems, XDG Base Directory
     // https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
     #[cfg(unix)]
-    if let Ok(base_directories) = xdg::BaseDirectories::with_prefix("shadowsocks-rust") {
+    {
+        let base_directories = xdg::BaseDirectories::with_prefix("shadowsocks-rust");
         // $XDG_CONFIG_HOME/shadowsocks-rust/config.json
         // for dir in $XDG_CONFIG_DIRS; $dir/shadowsocks-rust/config.json
         for filename in &config_files {
@@ -67,12 +68,13 @@ pub fn get_default_config_path(config_file: &str) -> Option<PathBuf> {
     // UNIX global configuration file
     #[cfg(unix)]
     {
+        let mut global_config_path = PathBuf::from("/etc/shadowsocks-rust");
         for filename in &config_files {
-            let path_str = "/etc/shadowsocks-rust/".to_owned() + filename;
-            let global_config_path = Path::new(&path_str);
+            global_config_path.push(filename);
             if global_config_path.exists() {
                 return Some(global_config_path.to_path_buf());
             }
+            global_config_path.pop();
         }
     }
 
