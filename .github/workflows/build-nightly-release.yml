@@ -26,6 +26,24 @@ jobs:
           #  toolchain: nightly
           #- target: mips64el-unknown-linux-gnuabi64
           #  toolchain: nightly
+          - target: x86_64-unknown-freebsd
+            toolchain: stable
+          - target: x86_64-unknown-netbsd
+            toolchain: stable
+          - target: loongarch64-unknown-linux-gnu
+            toolchain: stable
+          - target: loongarch64-unknown-linux-musl
+            toolchain: stable
+          - target: powerpc-unknown-linux-gnu
+            toolchain: stable
+          - target: powerpc64-unknown-linux-gnu
+            toolchain: stable
+          - target: powerpc64le-unknown-linux-gnu
+            toolchain: stable
+          - target: riscv64gc-unknown-linux-gnu
+            toolchain: stable
+          - target: riscv64gc-unknown-linux-musl
+            toolchain: stable
 
     steps:
       - name: Free Disk Space (Ubuntu)
