@@ -226,7 +226,7 @@ qrcode = { version = "0.14", default-features = false, optional = true }
 sysexits = "0.9"
 build-time = "0.1"
 directories = "6.0"
-xdg = "2.5"
+xdg = "3.0"
 rpassword = "7.3"
 libc = { version = "0.2", features = ["extra_traits"] }
 rand = "0.9"
