@@ -2018,19 +2018,7 @@ impl Config {
                     }
                 }
 
-                let server_instance = ServerInstanceConfig {
-                    config: nsvr,
-                    acl: None,
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
-                    outbound_fwmark: config.outbound_fwmark,
-                    #[cfg(target_os = "freebsd")]
-                    outbound_user_cookie: config.outbound_user_cookie,
-                    outbound_bind_addr,
-                    outbound_bind_interface: config.outbound_bind_interface.clone(),
-                    outbound_udp_allow_fragmentation: config.outbound_udp_allow_fragmentation,
-                };
-
-                nconfig.server.push(server_instance);
+                nconfig.server.push(ServerInstanceConfig::with_server_config(nsvr));
             }
             (None, None, None, Some(_)) if config_type.is_manager() => {
                 // Set the default method for manager
@@ -2214,17 +2202,7 @@ impl Config {
                     }
                 }
 
-                let mut server_instance = ServerInstanceConfig {
-                    config: nsvr,
-                    acl: None,
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
-                    outbound_fwmark: config.outbound_fwmark,
-                    #[cfg(target_os = "freebsd")]
-                    outbound_user_cookie: config.outbound_user_cookie,
-                    outbound_bind_addr,
-                    outbound_bind_interface: config.outbound_bind_interface.clone(),
-                    outbound_udp_allow_fragmentation: config.outbound_udp_allow_fragmentation,
-                };
+                let mut server_instance = ServerInstanceConfig::with_server_config(nsvr);
 
                 if let Some(acl_path) = svr.acl {
                     let acl = match AccessControl::load_from_file(&acl_path) {
