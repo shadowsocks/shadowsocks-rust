@@ -64,6 +64,8 @@ pub async fn run(config: Config) -> io::Result<()> {
     let mut connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
+        #[cfg(target_os = "freebsd")]
+        user_cookie: config.outbound_user_cookie,
 
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
@@ -120,6 +122,11 @@ pub async fn run(config: Config) -> io::Result<()> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(fwmark) = inst.outbound_fwmark {
             connect_opts.fwmark = Some(fwmark);
+        }
+
+        #[cfg(target_os = "freebsd")]
+        if let Some(user_cookie) = inst.outbound_user_cookie {
+            connect_opts.user_cookie = Some(user_cookie);
         }
 
         if let Some(bind_local_addr) = inst.outbound_bind_addr {

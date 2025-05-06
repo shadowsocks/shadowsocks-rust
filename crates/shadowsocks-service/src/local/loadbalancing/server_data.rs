@@ -101,6 +101,11 @@ impl ServerIdent {
             connect_opts.fwmark = Some(fwmark);
         }
 
+        #[cfg(target_os = "freebsd")]
+        if let Some(user_cookie) = svr_cfg.outbound_user_cookie {
+            connect_opts.user_cookie = Some(user_cookie);
+        }
+
         if let Some(bind_local_addr) = svr_cfg.outbound_bind_addr {
             connect_opts.bind_local_addr = Some(SocketAddr::new(bind_local_addr, 0));
         }

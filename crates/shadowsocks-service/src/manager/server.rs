@@ -386,6 +386,8 @@ impl Manager {
             acl: None, // Set with --acl command line argument
             #[cfg(any(target_os = "linux", target_os = "android"))]
             outbound_fwmark: None,
+            #[cfg(target_os = "freebsd")]
+            outbound_user_cookie: None,
             outbound_bind_addr: None,
             outbound_bind_interface: None,
             outbound_udp_allow_fragmentation: None,

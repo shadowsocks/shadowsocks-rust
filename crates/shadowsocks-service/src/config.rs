@@ -400,6 +400,10 @@ struct SSServerExtConfig {
     outbound_fwmark: Option<u32>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg(target_os = "freebsd")]
+    outbound_user_cookie: Option<u32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     outbound_bind_addr: Option<IpAddr>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1247,6 +1251,8 @@ pub struct ServerInstanceConfig {
     /// Server's outbound fwmark / address / interface to support split tunnel
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub outbound_fwmark: Option<u32>,
+    #[cfg(target_os = "freebsd")]
+    pub outbound_user_cookie: Option<u32>,
     pub outbound_bind_addr: Option<IpAddr>,
     pub outbound_bind_interface: Option<String>,
     pub outbound_udp_allow_fragmentation: Option<bool>,
@@ -1260,6 +1266,8 @@ impl ServerInstanceConfig {
             acl: None,
             #[cfg(any(target_os = "linux", target_os = "android"))]
             outbound_fwmark: None,
+            #[cfg(target_os = "freebsd")]
+            outbound_user_cookie: None,
             outbound_bind_addr: None,
             outbound_bind_interface: None,
             outbound_udp_allow_fragmentation: None,
@@ -2015,6 +2023,8 @@ impl Config {
                     acl: None,
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     outbound_fwmark: config.outbound_fwmark,
+                    #[cfg(target_os = "freebsd")]
+                    outbound_user_cookie: config.outbound_user_cookie,
                     outbound_bind_addr,
                     outbound_bind_interface: config.outbound_bind_interface.clone(),
                     outbound_udp_allow_fragmentation: config.outbound_udp_allow_fragmentation,
@@ -2209,6 +2219,8 @@ impl Config {
                     acl: None,
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     outbound_fwmark: config.outbound_fwmark,
+                    #[cfg(target_os = "freebsd")]
+                    outbound_user_cookie: config.outbound_user_cookie,
                     outbound_bind_addr,
                     outbound_bind_interface: config.outbound_bind_interface.clone(),
                     outbound_udp_allow_fragmentation: config.outbound_udp_allow_fragmentation,
@@ -2232,6 +2244,11 @@ impl Config {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 if let Some(outbound_fwmark) = svr.outbound_fwmark {
                     server_instance.outbound_fwmark = Some(outbound_fwmark);
+                }
+
+                #[cfg(target_os = "freebsd")]
+                if let Some(outbound_user_cookie) = svr.outbound_user_cookie {
+                    server_instance.outbound_user_cookie = Some(outbound_user_cookie);
                 }
 
                 if let Some(outbound_bind_addr) = svr.outbound_bind_addr {
@@ -3063,6 +3080,8 @@ impl fmt::Display for Config {
                             .and_then(|a| a.file_path().to_str().map(ToOwned::to_owned)),
                         #[cfg(any(target_os = "linux", target_os = "android"))]
                         outbound_fwmark: inst.outbound_fwmark,
+                        #[cfg(target_os = "freebsd")]
+                        outbound_user_cookie: inst.outbound_user_cookie,
                         outbound_bind_addr: inst.outbound_bind_addr,
                         outbound_bind_interface: inst.outbound_bind_interface.clone(),
                         outbound_udp_allow_fragmentation: inst.outbound_udp_allow_fragmentation,

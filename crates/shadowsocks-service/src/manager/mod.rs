@@ -36,6 +36,8 @@ pub async fn run(config: Config) -> io::Result<()> {
     let mut connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
+        #[cfg(target_os = "freebsd")]
+        user_cookie: config.outbound_user_cookie,
 
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
