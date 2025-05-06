@@ -149,7 +149,7 @@ tokio = { version = "1.38", features = [
 ] }
 tokio-native-tls = { version = "0.3", optional = true }
 native-tls = { version = "0.2.8", optional = true, features = ["alpn"] }
-webpki-roots = { version = "0.26", optional = true }
+webpki-roots = { version = "1.0", optional = true }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
     "logging",
     "tls12",
