@@ -3399,7 +3399,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.23.2"
+version = "1.23.3"
 dependencies = [
  "base64",
  "build-time",
@@ -3440,7 +3440,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-service"
-version = "1.23.2"
+version = "1.23.3"
 dependencies = [
  "arc-swap",
  "brotli",

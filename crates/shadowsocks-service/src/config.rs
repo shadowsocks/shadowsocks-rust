@@ -2006,18 +2006,6 @@ impl Config {
                     nsvr.set_timeout(timeout);
                 }
 
-                let mut outbound_bind_addr: Option<IpAddr> = None;
-
-                if let Some(ref bind_addr) = config.outbound_bind_addr {
-                    match bind_addr.parse::<IpAddr>() {
-                        Ok(b) => outbound_bind_addr = Some(b),
-                        Err(..) => {
-                            let err = Error::new(ErrorKind::Invalid, "invalid outbound_bind_addr", None);
-                            return Err(err);
-                        }
-                    }
-                }
-
                 nconfig.server.push(ServerInstanceConfig::with_server_config(nsvr));
             }
             (None, None, None, Some(_)) if config_type.is_manager() => {
@@ -2188,18 +2176,6 @@ impl Config {
                     weight.set_tcp_weight(tcp_weight);
                     weight.set_udp_weight(udp_weight);
                     nsvr.set_weight(weight);
-                }
-
-                let mut outbound_bind_addr: Option<IpAddr> = None;
-
-                if let Some(ref bind_addr) = config.outbound_bind_addr {
-                    match bind_addr.parse::<IpAddr>() {
-                        Ok(b) => outbound_bind_addr = Some(b),
-                        Err(..) => {
-                            let err = Error::new(ErrorKind::Invalid, "invalid outbound_bind_addr", None);
-                            return Err(err);
-                        }
-                    }
                 }
 
                 let mut server_instance = ServerInstanceConfig::with_server_config(nsvr);
