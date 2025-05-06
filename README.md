@@ -272,12 +272,18 @@ Requirements:
 ./build/build-release
 ```
 
-Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be packaged in
+Then `sslocal`, `ssserver`, `ssmanager`, `ssservice` and `ssurl` will be packaged in
 
 - `./build/shadowsocks-${VERSION}-stable.x86_64-unknown-linux-musl.tar.xz`
 - `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
 
 Read `Cargo.toml` for more details.
+
+For Linux with low GLIBC versions, set `CROSS_CONFIG` to CentOS based image:
+
+```bash
+export CROSS_CONFIG=Cross-centos.toml
+```
 
 ## Getting Started
 
