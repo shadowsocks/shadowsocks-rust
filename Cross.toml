@@ -36,5 +36,7 @@ build-std = ["std", "panic_abort", "proc_macro"]
 
 [target.x86_64-unknown-linux-gnu]
 image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main-centos"
-[target.aarch64-unknown-linux-gnu]
-image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main-centos"
+# GCC 4.8.2 doesn't support ACLE
+# https://github.com/briansmith/ring/issues/1728
+# [target.aarch64-unknown-linux-gnu]
+# image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main-centos"
