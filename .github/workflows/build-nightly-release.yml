@@ -93,6 +93,10 @@ jobs:
             #compile_cargo_flags="-Z build-std=std,panic_abort,proc_macro"
           fi
 
+          if [[ "$compile_target" == "x86_64-unknown-linux-gnu" ]]; then
+            export CROSS_CONFIG="${{ github.workspace }}/Cross-centos.toml"
+          fi
+
           cd build
           ./build-release -t ${{ matrix.platform.target }} $compile_features $compile_compress $compile_nightly $compile_cargo_flags
 
