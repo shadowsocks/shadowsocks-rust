@@ -594,10 +594,16 @@ fn should_forward_by_query(context: &ServiceContext, balancer: &PingBalancer, qu
         if let ServerAddr::DomainName(dn, ..) = svr_cfg.addr() {
             // Convert domain name to `Name`
             // Ignore it if error occurs
-            if let Ok(name) = Name::from_str(dn) {
+            if let Ok(mut name) = Name::from_str(dn) {
                 // cmp will handle FQDN in case insensitive way
                 if let Ordering::Equal = query.name().cmp(&name) {
                     // It seems that query is for this server, just bypass it to local resolver
+                    trace!("DNS querying name {} of server {:?}", query.name(), svr_cfg);
+                    return Some(false);
+                }
+                // test it again with fqdn set
+                name.set_fqdn(true);
+                if let Ordering::Equal = query.name().cmp(&name) {
                     trace!("DNS querying name {} of server {:?}", query.name(), svr_cfg);
                     return Some(false);
                 }
