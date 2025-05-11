@@ -1,3 +1,13 @@
+shadowsocks-rust (1.23.3) unstable; urgency=medium
+
+  ## Features
+
+  - #1943 `online-config`: SIP008 online configuration supports adding plugin whitelist (see README for details)
+
+  ## Bug Fixes
+
+  - Build feature `--full` won't report errors for targets that are not supported by `local-tun` and `local-redir`.
+
 shadowsocks-rust (1.23.2) unstable; urgency=medium
 
   ## Bug Fixes
