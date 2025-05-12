@@ -1,3 +1,9 @@
+shadowsocks-rust (1.23.4) unstable; urgency=medium
+
+  ## Bug Fixes
+
+  - shadowsocks/shadowsocks-android#3185 `local-dns`: Fixed skipping remote resolver for remote servers' names
+
 shadowsocks-rust (1.23.3) unstable; urgency=medium
 
   ## Features

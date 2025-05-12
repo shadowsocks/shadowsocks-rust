@@ -3384,7 +3384,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.23.3"
+version = "1.23.4"
 dependencies = [
  "base64",
  "build-time",
@@ -3425,7 +3425,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-service"
-version = "1.23.3"
+version = "1.23.4"
 dependencies = [
  "arc-swap",
  "brotli",
@@ -3716,9 +3716,9 @@ checksum = "3b7ad73e635dd232c2c2106d59269f59a61de421cc6b95252d2d932094ff1f40"
 
 [[package]]
 name = "tempfile"
-version = "3.19.1"
+version = "3.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7437ac7763b9b123ccf33c338a5cc1bac6f69b45a136c19bdd8a65e3916435bf"
+checksum = "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
 dependencies = [
  "fastrand",
  "getrandom 0.3.3",
