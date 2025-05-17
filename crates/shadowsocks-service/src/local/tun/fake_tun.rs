@@ -82,7 +82,7 @@ impl Configuration {
 /// tun Error type
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("not implementated")]
+    #[error("not implemented")]
     NotImplemented,
 
     #[error(transparent)]
@@ -152,17 +152,17 @@ pub struct FakeQueue;
 
 impl Read for FakeQueue {
     fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
+        Err(io::Error::other("not implemented"))
     }
 }
 
 impl Write for FakeQueue {
     fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
+        Err(io::Error::other("not implemented"))
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
+        Err(io::Error::other("not implemented"))
     }
 }
 
@@ -232,17 +232,17 @@ impl AbstractDevice for FakeDevice {
 
 impl Read for FakeDevice {
     fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
+        Err(io::Error::other("not implemented"))
     }
 }
 
 impl Write for FakeDevice {
     fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
+        Err(io::Error::other("not implemented"))
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
+        Err(io::Error::other("not implemented"))
     }
 }
 
@@ -276,21 +276,21 @@ impl DerefMut for AsyncDevice {
 
 impl AsyncRead for AsyncDevice {
     fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented")).into()
+        Err(io::Error::other("not implemented")).into()
     }
 }
 
 impl AsyncWrite for AsyncDevice {
     fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, _buf: &[u8]) -> Poll<io::Result<usize>> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented")).into()
+        Err(io::Error::other("not implemented")).into()
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented")).into()
+        Err(io::Error::other("not implemented")).into()
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented")).into()
+        Err(io::Error::other("not implemented")).into()
     }
 }
 

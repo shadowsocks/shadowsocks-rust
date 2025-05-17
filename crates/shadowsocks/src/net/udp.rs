@@ -78,8 +78,7 @@ pub struct BatchRecvMessage<'a> {
 
 #[inline]
 fn make_mtu_error(packet_size: usize, mtu: usize) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::Other,
+    io::Error::other(
         format!("UDP packet {} > MTU {}", packet_size, mtu),
     )
 }

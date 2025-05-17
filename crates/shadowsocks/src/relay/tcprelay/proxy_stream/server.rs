@@ -111,7 +111,7 @@ where
     /// This method should be called only once after accepted.
     pub async fn handshake(&mut self) -> io::Result<Address> {
         if self.has_handshaked {
-            return Err(io::Error::new(io::ErrorKind::Other, "stream is already handshaked"));
+            return Err(io::Error::other("stream is already handshaked"));
         }
 
         self.has_handshaked = true;
@@ -131,8 +131,7 @@ where
                 if chunk_count == 1 && chunk_remaining == 0 {
                     // Header is the end of the data chunk, so no payload is in the first chunk, and padding == 0.
                     // REJECT insecure clients.
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Err(io::Error::other(
                         "no payload in first data chunk, and padding is 0",
                     ));
                 } else if chunk_count > 1 {
@@ -154,7 +153,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         if !self.has_handshaked {
-            return Err(io::Error::new(io::ErrorKind::Other, "stream is not handshaked yet")).into();
+            return Err(io::Error::other("stream is not handshaked yet")).into();
         }
 
         let this = self.project();

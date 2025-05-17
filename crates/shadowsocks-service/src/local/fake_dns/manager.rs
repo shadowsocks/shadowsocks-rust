@@ -33,7 +33,7 @@ impl From<FakeDnsError> for io::Error {
     fn from(value: FakeDnsError) -> Self {
         match value {
             FakeDnsError::IoError(e) => e,
-            FakeDnsError::RocksDBError(e) => io::Error::new(io::ErrorKind::Other, e),
+            FakeDnsError::RocksDBError(e) => io::Error::other(e),
         }
     }
 }

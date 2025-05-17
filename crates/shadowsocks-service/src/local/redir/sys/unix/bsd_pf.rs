@@ -339,8 +339,7 @@ impl PacketFilter {
                                 actual_dst_addr
                             }
                             _ => {
-                                return Err(io::Error::new(
-                                    ErrorKind::Other,
+                                return Err(io::Error::other(
                                     format!("state.af_gwy {} is not a valid address family", state.af_gwy),
                                 ));
                             }
@@ -352,8 +351,7 @@ impl PacketFilter {
             }
         }
 
-        Err(io::Error::new(
-            ErrorKind::Other,
+        Err(io::Error::other(
             format!("natlook UDP binding {}, {} not found", bind_addr, peer_addr),
         ))
     }

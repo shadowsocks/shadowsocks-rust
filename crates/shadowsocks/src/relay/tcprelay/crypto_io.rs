@@ -206,6 +206,7 @@ impl DecryptedReader {
 }
 
 /// Writer for writing encrypted data stream into shadowsocks' tunnel
+#[allow(clippy::large_enum_variant)]
 pub enum EncryptedWriter {
     None,
     #[cfg(feature = "aead-cipher")]

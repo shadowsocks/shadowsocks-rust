@@ -296,7 +296,7 @@ where
             .await
         {
             Ok(s) => s,
-            Err(err) => return Err(io::Error::new(ErrorKind::Other, err)),
+            Err(err) => return Err(io::Error::other(err)),
         };
 
         tokio::spawn(async move {
@@ -328,7 +328,7 @@ where
                 .await
             {
                 Ok(s) => s,
-                Err(err) => return Err(io::Error::new(ErrorKind::Other, err)),
+                Err(err) => return Err(io::Error::other(err)),
             };
 
             tokio::spawn(async move {
@@ -347,7 +347,7 @@ where
                 .await
             {
                 Ok(s) => s,
-                Err(err) => return Err(io::Error::new(ErrorKind::Other, err)),
+                Err(err) => return Err(io::Error::other(err)),
             };
 
             tokio::spawn(async move {

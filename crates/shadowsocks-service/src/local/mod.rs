@@ -1,7 +1,7 @@
 //! Shadowsocks Local Server
 
 use std::{
-    io::{self, ErrorKind},
+    io,
     net::SocketAddr,
     sync::Arc,
     time::Duration,
@@ -278,7 +278,7 @@ impl Server {
                 ProtocolType::Socks => {
                     let client_addr = match local_config.addr {
                         Some(a) => a,
-                        None => return Err(io::Error::new(ErrorKind::Other, "socks requires local address")),
+                        None => return Err(io::Error::other("socks requires local address")),
                     };
 
                     let mut server_builder = SocksBuilder::with_context(context.clone(), client_addr, balancer);
@@ -314,7 +314,7 @@ impl Server {
                 ProtocolType::Tunnel => {
                     let client_addr = match local_config.addr {
                         Some(a) => a,
-                        None => return Err(io::Error::new(ErrorKind::Other, "tunnel requires local address")),
+                        None => return Err(io::Error::other("tunnel requires local address")),
                     };
 
                     let forward_addr = local_config.forward_addr.expect("tunnel requires forward address");
@@ -349,7 +349,7 @@ impl Server {
                 ProtocolType::Http => {
                     let client_addr = match local_config.addr {
                         Some(a) => a,
-                        None => return Err(io::Error::new(ErrorKind::Other, "http requires local address")),
+                        None => return Err(io::Error::other("http requires local address")),
                     };
 
                     #[allow(unused_mut)]
@@ -367,7 +367,7 @@ impl Server {
                 ProtocolType::Redir => {
                     let client_addr = match local_config.addr {
                         Some(a) => a,
-                        None => return Err(io::Error::new(ErrorKind::Other, "redir requires local address")),
+                        None => return Err(io::Error::other("redir requires local address")),
                     };
 
                     let mut server_builder = RedirBuilder::with_context(context.clone(), client_addr, balancer);
@@ -391,7 +391,7 @@ impl Server {
                 ProtocolType::Dns => {
                     let client_addr = match local_config.addr {
                         Some(a) => a,
-                        None => return Err(io::Error::new(ErrorKind::Other, "dns requires local address")),
+                        None => return Err(io::Error::other("dns requires local address")),
                     };
 
                     let mut server_builder = {
@@ -502,7 +502,7 @@ impl Server {
                 ProtocolType::FakeDns => {
                     let client_addr = match local_config.addr {
                         Some(a) => a,
-                        None => return Err(io::Error::new(ErrorKind::Other, "dns requires local address")),
+                        None => return Err(io::Error::other("dns requires local address")),
                     };
 
                     let mut builder = FakeDnsBuilder::new(client_addr);

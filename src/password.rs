@@ -22,5 +22,5 @@ pub fn read_server_password(server_name: &str) -> io::Result<String> {
         return Ok(pwd);
     }
 
-    Err(io::Error::new(io::ErrorKind::Other, "no server password found"))
+    Err(io::Error::other("no server password found"))
 }

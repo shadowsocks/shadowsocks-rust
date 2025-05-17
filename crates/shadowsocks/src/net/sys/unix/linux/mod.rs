@@ -420,7 +420,7 @@ cfg_if! {
             stream.read_exact(&mut response).await?;
 
             if response[0] == 0xFF {
-                return Err(io::Error::new(ErrorKind::Other, "protect() failed"));
+                return Err(io::Error::other("protect() failed"));
             }
 
             Ok(())

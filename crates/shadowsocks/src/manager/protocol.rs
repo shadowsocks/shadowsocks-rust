@@ -2,7 +2,7 @@
 
 use std::{
     collections::HashMap,
-    io::{self, ErrorKind},
+    io,
     str,
     string::ToString,
 };
@@ -375,6 +375,6 @@ pub enum Error {
 
 impl From<Error> for io::Error {
     fn from(err: Error) -> io::Error {
-        io::Error::new(ErrorKind::Other, err.to_string())
+        io::Error::other(err.to_string())
     }
 }
