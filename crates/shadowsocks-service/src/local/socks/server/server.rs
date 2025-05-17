@@ -180,7 +180,7 @@ impl SocksTcpHandler {
             0x04 => {
                 if self.socks5_auth.auth_required() {
                     error!("SOCKS4 disabled when authentication is configured");
-                    Err(io::Error::new(ErrorKind::Other, "SOCKS4 unsupported"))
+                    Err(io::Error::other("SOCKS4 unsupported"))
                 } else {
                     let handler = Socks4TcpHandler::new(self.context, self.balancer, self.mode);
                     handler.handle_socks4_client(self.stream, self.peer_addr).await
@@ -202,14 +202,14 @@ impl SocksTcpHandler {
             b'G' | b'g' | b'H' | b'h' | b'P' | b'p' | b'D' | b'd' | b'C' | b'c' | b'O' | b'o' | b'T' | b't' => {
                 if self.socks5_auth.auth_required() {
                     error!("HTTP disabled when authentication is configured");
-                    Err(io::Error::new(ErrorKind::Other, "HTTP unsupported"))
+                    Err(io::Error::other("HTTP unsupported"))
                 } else {
                     // GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH
                     match self.http_handler.serve_connection(self.stream, self.peer_addr).await {
                         Ok(..) => Ok(()),
                         Err(err) => {
                             error!("HTTP connection {} handler failed with error: {}", self.peer_addr, err);
-                            Err(io::Error::new(ErrorKind::Other, err))
+                            Err(io::Error::other(err))
                         }
                     }
                 }
@@ -217,7 +217,7 @@ impl SocksTcpHandler {
 
             version => {
                 error!("unsupported socks version {:x}", version);
-                let err = io::Error::new(ErrorKind::Other, "unsupported socks version");
+                let err = io::Error::other("unsupported socks version");
                 Err(err)
             }
         }

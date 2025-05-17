@@ -64,7 +64,7 @@ impl From<ProxySocketError> for io::Error {
     fn from(e: ProxySocketError) -> io::Error {
         match e {
             ProxySocketError::IoError(e) => e,
-            _ => io::Error::new(ErrorKind::Other, e),
+            _ => io::Error::other(e),
         }
     }
 }

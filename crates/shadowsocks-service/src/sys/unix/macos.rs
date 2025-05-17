@@ -20,8 +20,7 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
     let cname = match CString::new(name) {
         Ok(n) => n,
         Err(..) => {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!("activate socket name \"{}\" contains NUL bytes", name),
             ));
         }

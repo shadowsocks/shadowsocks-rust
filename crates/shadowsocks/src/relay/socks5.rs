@@ -176,7 +176,7 @@ impl From<Error> for io::Error {
     fn from(err: Error) -> io::Error {
         match err {
             Error::IoError(err) => err,
-            e => io::Error::new(ErrorKind::Other, e),
+            e => io::Error::other(e),
         }
     }
 }
@@ -213,14 +213,14 @@ impl Address {
     /// read from a cursor
     pub fn read_cursor<T: AsRef<[u8]>>(cur: &mut io::Cursor<T>) -> Result<Address, Error> {
         if cur.remaining() < 2 {
-            return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+            return Err(io::Error::other("invalid buf").into());
         }
 
         let atyp = cur.get_u8();
         match atyp {
             consts::SOCKS5_ADDR_TYPE_IPV4 => {
                 if cur.remaining() < 4 + 2 {
-                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+                    return Err(io::Error::other("invalid buf").into());
                 }
                 let addr = Ipv4Addr::from(cur.get_u32());
                 let port = cur.get_u16();
@@ -228,7 +228,7 @@ impl Address {
             }
             consts::SOCKS5_ADDR_TYPE_IPV6 => {
                 if cur.remaining() < 16 + 2 {
-                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+                    return Err(io::Error::other("invalid buf").into());
                 }
                 let addr = Ipv6Addr::from(cur.get_u128());
                 let port = cur.get_u16();

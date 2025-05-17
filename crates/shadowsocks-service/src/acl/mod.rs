@@ -7,7 +7,7 @@ use std::{
     collections::HashSet,
     fmt,
     fs::File,
-    io::{self, BufRead, BufReader, Error, ErrorKind},
+    io::{self, BufRead, BufReader, Error},
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
     str,
@@ -256,8 +256,7 @@ impl ParsingRules {
             // Remove the last `.` of FQDN
             Ok(str.trim_end_matches('.'))
         } else {
-            Err(Error::new(
-                ErrorKind::Other,
+            Err(Error::other(
                 format!("{} parsing error: Unicode not allowed here `{}`", self.name, str),
             ))
         }
@@ -269,7 +268,7 @@ impl ParsingRules {
             .size_limit(REGEX_SIZE_LIMIT)
             .unicode(false)
             .build()
-            .map_err(|err| Error::new(ErrorKind::Other, format!("{name} regex error: {err}")))
+            .map_err(|err| Error::other(format!("{name} regex error: {err}")))
     }
 
     fn into_rules(self) -> io::Result<Rules> {

@@ -77,7 +77,7 @@ impl From<ProtocolError> for io::Error {
     fn from(e: ProtocolError) -> io::Error {
         match e {
             ProtocolError::IoError(err) => err,
-            _ => io::Error::new(ErrorKind::Other, e),
+            _ => io::Error::other(e),
         }
     }
 }

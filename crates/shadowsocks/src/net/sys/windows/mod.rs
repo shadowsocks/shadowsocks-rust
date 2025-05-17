@@ -220,8 +220,7 @@ fn find_adapter_interface_index(addr: &SocketAddr, iface: &str) -> io::Result<Op
                 }
                 ERROR_NO_DATA => return Ok(None),
                 _ => {
-                    let err = io::Error::new(
-                        ErrorKind::Other,
+                    let err = io::Error::other(
                         format!("GetAdaptersAddresses failed with error: {}", ret),
                     );
                     return Err(err);

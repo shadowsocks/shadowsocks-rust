@@ -234,8 +234,7 @@ where
                         let sent_nonce = this.stream.sent_nonce();
                         let sent_nonce = if sent_nonce.is_empty() { None } else { Some(sent_nonce) };
                         if sent_nonce != this.stream.received_request_nonce() {
-                            return Err(io::Error::new(
-                                ErrorKind::Other,
+                            return Err(io::Error::other(
                                 "received TCP response header with unmatched salt",
                             ))
                             .into();

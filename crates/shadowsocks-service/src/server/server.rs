@@ -2,7 +2,7 @@
 
 use std::{
     collections::HashMap,
-    io::{self, ErrorKind},
+    io,
     sync::Arc,
     time::Duration,
 };
@@ -255,7 +255,7 @@ impl Server {
             error!("servers exited with error: {}", err);
         }
 
-        let err = io::Error::new(ErrorKind::Other, "server exited unexpectedly");
+        let err = io::Error::other("server exited unexpectedly");
         Err(err)
     }
 }

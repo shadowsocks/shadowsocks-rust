@@ -114,7 +114,7 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, _config: &ConnectO
 
 /// Enable TCP Fast Open
 pub fn set_tcp_fastopen<S: AsRawFd>(_: &S) -> io::Result<()> {
-    let err = io::Error::new(ErrorKind::Other, "TFO is not supported in this platform");
+    let err = io::Error::other("TFO is not supported in this platform");
     Err(err)
 }
 

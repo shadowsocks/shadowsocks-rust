@@ -116,7 +116,7 @@ impl OnlineConfigService {
             Ok(r) => r,
             Err(err) => {
                 error!("server-loader task failed to make hyper::Request, error: {}", err);
-                return Err(io::Error::new(io::ErrorKind::Other, err));
+                return Err(io::Error::other(err));
             }
         };
 
@@ -124,7 +124,7 @@ impl OnlineConfigService {
             Ok(r) => r,
             Err(err) => {
                 error!("server-loader task failed to get {}, error: {}", self.config_url, err);
-                return Err(io::Error::new(io::ErrorKind::Other, err));
+                return Err(io::Error::other(err));
             }
         };
 
@@ -139,8 +139,7 @@ impl OnlineConfigService {
                 self.config_url,
                 rsp.status()
             );
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!("status: {}", rsp.status()),
             ));
         }
@@ -182,7 +181,7 @@ impl OnlineConfigService {
                 Ok(ce) => ce,
                 Err(..) => {
                     error!("unrecognized Content-Encoding: {:?}", ce);
-                    return Err(io::Error::new(io::ErrorKind::Other, "unrecognized Content-Encoding"));
+                    return Err(io::Error::other("unrecognized Content-Encoding"));
                 }
             },
         };
@@ -190,7 +189,7 @@ impl OnlineConfigService {
         let body = read_body(content_encoding, &mut rsp).await?;
         let parsed_body = match String::from_utf8(body) {
             Ok(b) => b,
-            Err(..) => return Err(io::Error::new(io::ErrorKind::Other, "body contains non-utf8 bytes")),
+            Err(..) => return Err(io::Error::other("body contains non-utf8 bytes")),
         };
 
         let online_config = match Config::load_from_str(&parsed_body, ConfigType::OnlineConfig) {
@@ -200,7 +199,7 @@ impl OnlineConfigService {
                     "server-loader task failed to load from url: {}, error: {}",
                     self.config_url, err
                 );
-                return Err(io::Error::new(io::ErrorKind::Other, err));
+                return Err(io::Error::other(err));
             }
         };
 
@@ -209,7 +208,7 @@ impl OnlineConfigService {
                 "server-loader task failed to load from url: {}, error: {}",
                 self.config_url, err
             );
-            return Err(io::Error::new(io::ErrorKind::Other, err));
+            return Err(io::Error::other(err));
         }
 
         let after_read_time = Instant::now();
@@ -223,8 +222,7 @@ impl OnlineConfigService {
                             "server-loader task found not allowed plugin: {}, url: {}",
                             plugin.plugin, self.config_url
                         );
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
+                        return Err(io::Error::other(
                             format!("not allowed plugin: {}", plugin.plugin),
                         ));
                     }

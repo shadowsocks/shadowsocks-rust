@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     future::Future,
-    io::{self, ErrorKind},
+    io,
     mem,
     net::{IpAddr, SocketAddr},
     pin::Pin,
@@ -525,7 +525,7 @@ impl TcpTun {
             socket.set_congestion_control(CongestionControl::Cubic);
 
             if let Err(err) = socket.listen(dst_addr) {
-                return Err(io::Error::new(ErrorKind::Other, format!("listen error: {:?}", err)));
+                return Err(io::Error::other(format!("listen error: {:?}", err)));
             }
 
             debug!("created TCP connection for {} <-> {}", src_addr, dst_addr);

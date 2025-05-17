@@ -3,7 +3,7 @@
 use std::{
     collections::HashMap,
     fs::OpenOptions,
-    io::{self, ErrorKind, Read},
+    io::{self, Read},
     path::Path,
 };
 
@@ -68,7 +68,7 @@ impl Socks5AuthConfig {
 
         let jconf: SSSocks5AuthConfig = match json5::from_str(&content) {
             Ok(c) => c,
-            Err(err) => return Err(io::Error::new(ErrorKind::Other, err)),
+            Err(err) => return Err(io::Error::other(err)),
         };
 
         let mut passwd = Socks5AuthPasswdConfig::new();

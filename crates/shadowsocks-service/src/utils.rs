@@ -2,7 +2,7 @@
 
 use std::{
     future::Future,
-    io::{self, ErrorKind},
+    io,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -30,7 +30,7 @@ impl Future for ServerHandle {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match ready!(Pin::new(&mut self.0).poll(cx)) {
             Ok(res) => res.into(),
-            Err(err) => Err(io::Error::new(ErrorKind::Other, err)).into(),
+            Err(err) => Err(io::Error::other(err)).into(),
         }
     }
 }

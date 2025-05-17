@@ -2,7 +2,7 @@
 
 use std::{
     cell::RefCell,
-    io::{self, ErrorKind},
+    io,
     marker::PhantomData,
     net::{SocketAddr, SocketAddrV6},
     sync::Arc,
@@ -180,7 +180,7 @@ where
 
     fn try_send(&self, data: (Address, Bytes)) -> io::Result<()> {
         if self.sender.try_send(data).is_err() {
-            let err = io::Error::new(ErrorKind::Other, "udp relay channel full");
+            let err = io::Error::other("udp relay channel full");
             return Err(err);
         }
         Ok(())
@@ -546,7 +546,7 @@ where
                 // Reopen a new session is not perfect, because the remote target will receive packets from a different address.
                 // For most application protocol, like QUIC, it is fine to change client address.
                 //
-                // But it will happen only when a client continously send 18446744073709551616 packets without renewing the socket.
+                // But it will happen only when a client continuously send 18446744073709551616 packets without renewing the socket.
 
                 let new_session_id = generate_client_session_id();
 
