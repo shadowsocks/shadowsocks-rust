@@ -233,7 +233,7 @@ impl Manager {
         }
     }
 
-    /// Add a server programatically
+    /// Add a server programmatically
     pub async fn add_server(&self, svr_cfg: ServerConfig) {
         match self.svr_cfg.server_mode {
             ManagerServerMode::Builtin => self.add_server_builtin(svr_cfg).await,
@@ -540,8 +540,7 @@ impl Manager {
                             user.password
                         );
 
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
+                        return Err(io::Error::other(
                             "users[].password must be encoded with base64",
                         ));
                     }

@@ -54,7 +54,7 @@ where
     while let Some(data) = body_stream.next().await {
         match data {
             Ok(data) => raw_body.extend_from_slice(data.as_ref()),
-            Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
+            Err(err) => return Err(io::Error::other(err)),
         }
     }
 

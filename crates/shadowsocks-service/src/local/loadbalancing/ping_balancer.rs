@@ -165,8 +165,7 @@ impl PingBalancerBuilder {
     pub async fn build(self) -> io::Result<PingBalancer> {
         if let Some(intv) = self.check_best_interval {
             if intv > self.check_interval {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Err(io::Error::other(
                     "check_interval must be >= check_best_interval",
                 ));
             }
@@ -274,7 +273,7 @@ impl PingBalancerContext {
                     check_fut.push(plugin.wait_started(Duration::from_secs(3)));
                 }
 
-                // Run all of them simutaneously
+                // Run all of them simultaneously
                 let _ = future::join_all(check_fut).await;
 
                 let plugin_abortable = tokio::spawn(async move {

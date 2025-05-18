@@ -409,7 +409,7 @@ impl From<Error> for io::Error {
     fn from(err: Error) -> io::Error {
         match err {
             Error::IoError(err) => err,
-            e => io::Error::new(ErrorKind::Other, e),
+            e => io::Error::other(e),
         }
     }
 }

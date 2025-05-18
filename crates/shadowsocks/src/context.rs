@@ -111,7 +111,7 @@ impl Context {
             }
             ReplayAttackPolicy::Reject => {
                 if self.replay_protector.check_nonce_and_set(method, nonce) {
-                    let err = io::Error::new(io::ErrorKind::Other, "detected repeated nonce (iv/salt)");
+                    let err = io::Error::other("detected repeated nonce (iv/salt)");
                     Err(err)
                 } else {
                     Ok(())

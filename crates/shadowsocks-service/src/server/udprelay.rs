@@ -2,7 +2,7 @@
 
 use std::{
     cell::RefCell,
-    io::{self, ErrorKind},
+    io,
     net::SocketAddr,
     sync::Arc,
     time::Duration,
@@ -238,7 +238,7 @@ impl UdpServer {
                 }
 
                 peer_addr_opt = self.keepalive_rx.recv() => {
-                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectly");
+                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectedly");
                     self.assoc_map.keep_alive(&peer_addr);
                 }
 
@@ -346,7 +346,7 @@ impl UdpServer {
                 let xcontrol = match control {
                     None => {
                         error!("control is required for session based NAT, from {}", peer_addr);
-                        return Err(io::Error::new(ErrorKind::Other, "control data missing in packet"));
+                        return Err(io::Error::other("control data missing in packet"));
                     }
                     Some(ref c) => c,
                 };
@@ -418,7 +418,7 @@ impl UdpAssociation {
 
     fn try_send(&self, data: UdpAssociationSendMessage) -> io::Result<()> {
         if self.sender.try_send(data).is_err() {
-            let err = io::Error::new(ErrorKind::Other, "udp relay channel full");
+            let err = io::Error::other("udp relay channel full");
             return Err(err);
         }
         Ok(())
