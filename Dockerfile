@@ -36,7 +36,7 @@ RUN case "$TARGETARCH" in \
     && RUSTFLAGS="-C linker=$CC" CC=$CC cargo build --target "$RUST_TARGET" --release --features "full" \
     && mv target/$RUST_TARGET/release/ss* target/release/
 
-FROM alpine:3.21 AS sslocal
+FROM alpine:3.22 AS sslocal
 
 # NOTE: Please be careful to change the path of these binaries, refer to #1149 for more information.
 COPY --from=builder /root/shadowsocks-rust/target/release/sslocal /usr/bin/
@@ -46,7 +46,7 @@ COPY --from=builder /root/shadowsocks-rust/docker/docker-entrypoint.sh /usr/bin/
 ENTRYPOINT [ "docker-entrypoint.sh" ]
 CMD [ "sslocal", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
 
-FROM alpine:3.21 AS ssserver
+FROM alpine:3.22 AS ssserver
 
 COPY --from=builder /root/shadowsocks-rust/target/release/ssserver /usr/bin/
 COPY --from=builder /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
