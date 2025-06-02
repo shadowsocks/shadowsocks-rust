@@ -206,7 +206,7 @@ nix = { version = "0.30", features = ["ioctl"] }
 windows-sys = { version = "0.59", features = ["Win32_Networking_WinSock"] }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos", target_os = "linux", target_os = "android", target_os = "windows", target_os = "freebsd"))'.dependencies]
-tun = { version = "0.7", optional = true, features = ["async"] }
+tun = { version = "0.8", optional = true, features = ["async"] }
 
 [dev-dependencies]
 byteorder = "1.5"
