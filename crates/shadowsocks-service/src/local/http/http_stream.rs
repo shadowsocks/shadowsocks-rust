@@ -61,15 +61,14 @@ impl ProxyHttpStream {
     #[cfg(feature = "local-http-rustls")]
     pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
         use log::warn;
-        use once_cell::sync::Lazy;
         use rustls_native_certs::CertificateResult;
-        use std::sync::Arc;
+        use std::sync::{Arc, LazyLock};
         use tokio_rustls::{
             TlsConnector,
             rustls::{ClientConfig, RootCertStore, pki_types::ServerName},
         };
 
-        static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
+        static TLS_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
             let mut config = ClientConfig::builder()
                 .with_root_certificates({
                     // Load WebPKI roots (Mozilla's root certificates)

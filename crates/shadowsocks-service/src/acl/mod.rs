@@ -11,12 +11,12 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
     str,
+    sync::LazyLock,
 };
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
 use log::{trace, warn};
-use once_cell::sync::Lazy;
 use regex::bytes::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 
 use shadowsocks::{context::Context, relay::socks5::Address};
@@ -190,7 +190,7 @@ impl ParsingRules {
     }
 
     fn add_regex_rule(&mut self, mut rule: String) {
-        static TREE_SET_RULE_EQUIV: Lazy<Regex> = Lazy::new(|| {
+        static TREE_SET_RULE_EQUIV: LazyLock<Regex> = LazyLock::new(|| {
             RegexBuilder::new(
                 r#"^(?:(?:\((?:\?:)?\^\|\\\.\)|(?:\^\.(?:\+|\*))?\\\.)((?:[\w-]+(?:\\\.)?)+)|\^((?:[\w-]+(?:\\\.)?)+))\$?$"#,
             )

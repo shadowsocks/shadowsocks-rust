@@ -1,8 +1,11 @@
 //! A TCP listener for accepting shadowsocks' client connection
 
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{
+    io,
+    net::SocketAddr,
+    sync::{Arc, LazyLock},
+};
 
-use once_cell::sync::Lazy;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -26,7 +29,7 @@ pub struct ProxyListener {
     user_manager: Option<Arc<ServerUserManager>>,
 }
 
-static DEFAULT_ACCEPT_OPTS: Lazy<AcceptOpts> = Lazy::new(Default::default);
+static DEFAULT_ACCEPT_OPTS: LazyLock<AcceptOpts> = LazyLock::new(Default::default);
 
 impl ProxyListener {
     /// Create a `ProxyListener` binding to a specific address
