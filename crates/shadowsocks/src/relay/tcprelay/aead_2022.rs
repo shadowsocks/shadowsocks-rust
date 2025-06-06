@@ -8,7 +8,7 @@
 //! +--------+--------+--------+--------+--------+--------+--------+--------+--------+
 //! | ATYP   | ADDRESS ... (Variable Length ...)
 //! +--------+--------+--------+--------+--------+--------+--------+--------+--------+
-//! | PORT (BE)       | Padding Length | Padding (Variable Length ...)
+//! | PORT (BE)       | Padding Length  | Padding (Variable Length ...)
 //! +--------+--------+--------+--------+--------+--------+--------+--------+--------+
 //!
 //! TCP Request Header (after encryption, *ciphertext*)

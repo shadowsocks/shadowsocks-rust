@@ -5,13 +5,12 @@ use std::{
     mem,
     ops::{Deref, DerefMut},
     sync::{
-        Arc, Mutex,
+        Arc, LazyLock, Mutex,
         atomic::{AtomicBool, Ordering},
     },
 };
 
 use bytes::BytesMut;
-use once_cell::sync::Lazy;
 use smoltcp::{
     phy::{self, Device, DeviceCapabilities},
     time::Instant,
@@ -111,16 +110,16 @@ impl phy::TxToken for VirtTxToken<'_> {
         }
 
         let result = f(&mut buffer);
-        self.0.out_buf.send(buffer).expect("channel closed unexpectly");
+        self.0.out_buf.send(buffer).expect("channel closed unexpectedly");
         result
     }
 }
 
-// Maximun number of TokenBuffer cached globally.
+// Maximum number of TokenBuffer cached globally.
 //
 // Each of them has capacity 65536 (defined in tun/mod.rs), so 64 * 65536 = 4MB.
 const TOKEN_BUFFER_LIST_MAX_SIZE: usize = 64;
-static TOKEN_BUFFER_LIST: Lazy<Mutex<Vec<BytesMut>>> = Lazy::new(|| Mutex::new(Vec::new()));
+static TOKEN_BUFFER_LIST: LazyLock<Mutex<Vec<BytesMut>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 pub struct TokenBuffer {
     buffer: BytesMut,

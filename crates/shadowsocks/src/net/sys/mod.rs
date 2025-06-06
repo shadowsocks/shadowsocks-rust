@@ -1,11 +1,11 @@
 use std::{
     io::{self, ErrorKind},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::LazyLock,
 };
 
 use cfg_if::cfg_if;
 use log::{debug, warn};
-use once_cell::sync::Lazy;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::TcpSocket;
 
@@ -151,7 +151,7 @@ pub struct IpStackCapabilities {
     pub support_ipv4_mapped_ipv6: bool,
 }
 
-static IP_STACK_CAPABILITIES: Lazy<IpStackCapabilities> = Lazy::new(|| {
+static IP_STACK_CAPABILITIES: LazyLock<IpStackCapabilities> = LazyLock::new(|| {
     // Reference Implementation: https://github.com/golang/go/blob/master/src/net/ipsock_posix.go
 
     let mut caps = IpStackCapabilities {

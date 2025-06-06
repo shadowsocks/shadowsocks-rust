@@ -5,12 +5,12 @@ use std::{
     mem,
     net::SocketAddr,
     ptr,
+    sync::LazyLock,
 };
 
 use cfg_if::cfg_if;
 use log::trace;
 use nix::ioctl_readwrite;
-use once_cell::sync::Lazy;
 use socket2::{Protocol, SockAddr};
 
 use super::pfvar::{PF_OUT, in_addr, in6_addr, pfioc_natlook, sockaddr_in, sockaddr_in6};
@@ -365,7 +365,7 @@ impl Drop for PacketFilter {
     }
 }
 
-pub static PF: Lazy<PacketFilter> = Lazy::new(|| match PacketFilter::open() {
+pub static PF: LazyLock<PacketFilter> = LazyLock::new(|| match PacketFilter::open() {
     Ok(pf) => pf,
     Err(err) if err.kind() == ErrorKind::PermissionDenied => {
         panic!("open /dev/pf permission denied, consider restart with root user");

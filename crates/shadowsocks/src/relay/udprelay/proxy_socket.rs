@@ -7,7 +7,7 @@ use std::os::windows::io::{AsRawSocket, AsSocket, BorrowedSocket, IntoRawSocket,
 use std::{
     io::{self, ErrorKind},
     net::SocketAddr,
-    sync::Arc,
+    sync::{Arc, LazyLock},
     task::{Context, Poll, ready},
     time::Duration,
 };
@@ -15,7 +15,6 @@ use std::{
 use byte_string::ByteStr;
 use bytes::{Bytes, BytesMut};
 use log::{info, trace, warn};
-use once_cell::sync::Lazy;
 use tokio::{io::ReadBuf, time};
 
 use crate::{
@@ -34,8 +33,8 @@ use super::{
     },
 };
 
-static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
-static DEFAULT_SOCKET_CONTROL: Lazy<UdpSocketControlData> = Lazy::new(UdpSocketControlData::default);
+static DEFAULT_CONNECT_OPTS: LazyLock<ConnectOpts> = LazyLock::new(Default::default);
+static DEFAULT_SOCKET_CONTROL: LazyLock<UdpSocketControlData> = LazyLock::new(UdpSocketControlData::default);
 
 /// UDP socket type, defining whether the socket is used in Client or Server
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

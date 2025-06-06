@@ -3,6 +3,7 @@
 use std::{
     io::{self, ErrorKind},
     pin::Pin,
+    sync::LazyLock,
     task::{self, Poll},
 };
 
@@ -10,7 +11,6 @@ use bytes::{BufMut, BytesMut};
 use cfg_if::cfg_if;
 use futures::ready;
 use log::trace;
-use once_cell::sync::Lazy;
 use pin_project::pin_project;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
@@ -55,7 +55,7 @@ pub struct ProxyClientStream<S> {
     context: SharedContext,
 }
 
-static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
+static DEFAULT_CONNECT_OPTS: LazyLock<ConnectOpts> = LazyLock::new(Default::default);
 
 impl ProxyClientStream<OutboundTcpStream> {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
