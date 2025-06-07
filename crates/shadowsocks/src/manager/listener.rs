@@ -20,10 +20,10 @@ pub struct ManagerListener {
 
 impl ManagerListener {
     /// Create a `ManagerDatagram` binding to requested `bind_addr`
-    pub async fn bind(context: &Context, bind_addr: &ManagerAddr) -> io::Result<ManagerListener> {
+    pub async fn bind(context: &Context, bind_addr: &ManagerAddr) -> io::Result<Self> {
         ManagerDatagram::bind(context, bind_addr)
             .await
-            .map(|socket| ManagerListener { socket })
+            .map(|socket| Self { socket })
     }
 
     pub async fn recv_from(&mut self) -> Result<(ManagerRequest, ManagerSocketAddr), Error> {

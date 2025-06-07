@@ -33,8 +33,8 @@ pub struct ShadowDnsRuntimeProvider {
 }
 
 impl ShadowDnsRuntimeProvider {
-    fn new(connect_opts: ConnectOpts) -> ShadowDnsRuntimeProvider {
-        ShadowDnsRuntimeProvider {
+    fn new(connect_opts: ConnectOpts) -> Self {
+        Self {
             handle: TokioHandle::default(),
             connect_opts,
         }

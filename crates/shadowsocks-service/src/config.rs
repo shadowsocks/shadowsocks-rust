@@ -444,23 +444,23 @@ pub enum ConfigType {
 impl ConfigType {
     /// Check if it is local server type
     pub fn is_local(self) -> bool {
-        self == ConfigType::Local
+        self == Self::Local
     }
 
     /// Check if it is remote server type
     pub fn is_server(self) -> bool {
-        self == ConfigType::Server
+        self == Self::Server
     }
 
     /// Check if it is manager server type
     pub fn is_manager(self) -> bool {
-        self == ConfigType::Manager
+        self == Self::Manager
     }
 
     /// Check if it is online config type (SIP008)
     #[cfg(feature = "local-online-config")]
     pub fn is_online_config(self) -> bool {
-        self == ConfigType::OnlineConfig
+        self == Self::OnlineConfig
     }
 }
 
@@ -512,8 +512,8 @@ cfg_if! {
             cfg_if! {
                 if #[cfg(any(target_os = "linux", target_os = "android"))] {
                     /// Default TCP transparent proxy solution on this platform
-                    pub const fn tcp_default() -> RedirType {
-                        RedirType::Redirect
+                    pub const fn tcp_default() -> Self {
+                        Self::Redirect
                     }
 
                     /// Available TCP transparent proxy types
@@ -524,8 +524,8 @@ cfg_if! {
                     }
 
                     /// Default UDP transparent proxy solution on this platform
-                    pub const fn udp_default() -> RedirType {
-                        RedirType::TProxy
+                    pub const fn udp_default() -> Self {
+                        Self::TProxy
                     }
 
                     /// Available UDP transparent proxy types
@@ -635,20 +635,20 @@ cfg_if! {
 
             /// Check if transparent proxy is supported on this platform
             pub fn is_supported(self) -> bool {
-                self != RedirType::NotSupported
+                self != Self::NotSupported
             }
 
             /// Name of redirect type (transparent proxy type)
             pub const fn name(self) -> &'static str {
                 match self {
                     // Dummy, shouldn't be used in any useful situations
-                    RedirType::NotSupported => "not_supported",
+                    Self::NotSupported => "not_supported",
 
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    RedirType::Redirect => "redirect",
+                    Self::Redirect => "redirect",
 
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    RedirType::TProxy => "tproxy",
+                    Self::TProxy => "tproxy",
 
                     #[cfg(any(
                         target_os = "freebsd",
@@ -683,13 +683,13 @@ cfg_if! {
         impl FromStr for RedirType {
             type Err = InvalidRedirType;
 
-            fn from_str(s: &str) -> Result<RedirType, InvalidRedirType> {
+            fn from_str(s: &str) -> Result<Self, InvalidRedirType> {
                 match s {
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    "redirect" => Ok(RedirType::Redirect),
+                    "redirect" => Ok(Self::Redirect),
 
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    "tproxy" => Ok(RedirType::TProxy),
+                    "tproxy" => Ok(Self::TProxy),
 
                     #[cfg(any(
                         target_os = "freebsd",
@@ -725,8 +725,8 @@ pub enum ManagerServerHost {
 }
 
 impl Default for ManagerServerHost {
-    fn default() -> ManagerServerHost {
-        ManagerServerHost::Ip(Ipv4Addr::UNSPECIFIED.into())
+    fn default() -> Self {
+        Self::Ip(Ipv4Addr::UNSPECIFIED.into())
     }
 }
 
@@ -735,8 +735,8 @@ impl FromStr for ManagerServerHost {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse::<IpAddr>() {
-            Ok(s) => Ok(ManagerServerHost::Ip(s)),
-            Err(..) => Ok(ManagerServerHost::Domain(s.to_owned())),
+            Ok(s) => Ok(Self::Ip(s)),
+            Err(..) => Ok(Self::Domain(s.to_owned())),
         }
     }
 }
@@ -766,11 +766,11 @@ impl Display for ManagerServerModeError {
 impl FromStr for ManagerServerMode {
     type Err = ManagerServerModeError;
 
-    fn from_str(s: &str) -> Result<ManagerServerMode, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "builtin" => Ok(ManagerServerMode::Builtin),
+            "builtin" => Ok(Self::Builtin),
             #[cfg(unix)]
-            "standalone" => Ok(ManagerServerMode::Standalone),
+            "standalone" => Ok(Self::Standalone),
             _ => Err(ManagerServerModeError),
         }
     }
@@ -779,9 +779,9 @@ impl FromStr for ManagerServerMode {
 impl Display for ManagerServerMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ManagerServerMode::Builtin => f.write_str("builtin"),
+            Self::Builtin => f.write_str("builtin"),
             #[cfg(unix)]
-            ManagerServerMode::Standalone => f.write_str("standalone"),
+            Self::Standalone => f.write_str("standalone"),
         }
     }
 }
@@ -815,8 +815,8 @@ pub struct ManagerConfig {
 
 impl ManagerConfig {
     /// Create a ManagerConfig with default options
-    pub fn new(addr: ManagerAddr) -> ManagerConfig {
-        ManagerConfig {
+    pub fn new(addr: ManagerAddr) -> Self {
+        Self {
             addr,
             method: None,
             plugin: None,
@@ -858,19 +858,19 @@ impl ProtocolType {
     /// As string representation
     pub fn as_str(&self) -> &'static str {
         match *self {
-            ProtocolType::Socks => "socks",
+            Self::Socks => "socks",
             #[cfg(feature = "local-http")]
-            ProtocolType::Http => "http",
+            Self::Http => "http",
             #[cfg(feature = "local-tunnel")]
-            ProtocolType::Tunnel => "tunnel",
+            Self::Tunnel => "tunnel",
             #[cfg(feature = "local-redir")]
-            ProtocolType::Redir => "redir",
+            Self::Redir => "redir",
             #[cfg(feature = "local-dns")]
-            ProtocolType::Dns => "dns",
+            Self::Dns => "dns",
             #[cfg(feature = "local-tun")]
-            ProtocolType::Tun => "tun",
+            Self::Tun => "tun",
             #[cfg(feature = "local-fake-dns")]
-            ProtocolType::FakeDns => "fake-dns",
+            Self::FakeDns => "fake-dns",
         }
     }
 
@@ -909,19 +909,19 @@ impl FromStr for ProtocolType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "socks" => Ok(ProtocolType::Socks),
+            "socks" => Ok(Self::Socks),
             #[cfg(feature = "local-http")]
-            "http" => Ok(ProtocolType::Http),
+            "http" => Ok(Self::Http),
             #[cfg(feature = "local-tunnel")]
-            "tunnel" => Ok(ProtocolType::Tunnel),
+            "tunnel" => Ok(Self::Tunnel),
             #[cfg(feature = "local-redir")]
-            "redir" => Ok(ProtocolType::Redir),
+            "redir" => Ok(Self::Redir),
             #[cfg(feature = "local-dns")]
-            "dns" => Ok(ProtocolType::Dns),
+            "dns" => Ok(Self::Dns),
             #[cfg(feature = "local-tun")]
-            "tun" => Ok(ProtocolType::Tun),
+            "tun" => Ok(Self::Tun),
             #[cfg(feature = "local-fake-dns")]
-            "fake-dns" => Ok(ProtocolType::FakeDns),
+            "fake-dns" => Ok(Self::FakeDns),
             _ => Err(ProtocolTypeError),
         }
     }
@@ -1054,7 +1054,7 @@ pub struct LocalConfig {
 
 impl LocalConfig {
     /// Create a new `LocalConfig`
-    pub fn new(protocol: ProtocolType) -> LocalConfig {
+    pub fn new(protocol: ProtocolType) -> Self {
         // DNS server runs in `TcpAndUdp` mode by default to maintain backwards compatibility
         // see https://github.com/shadowsocks/shadowsocks-rust/issues/1281
         let mode = match protocol {
@@ -1063,7 +1063,7 @@ impl LocalConfig {
             _ => Mode::TcpOnly,
         };
 
-        LocalConfig {
+        Self {
             addr: None,
 
             protocol,
@@ -1120,8 +1120,8 @@ impl LocalConfig {
     }
 
     /// Create a new `LocalConfig` with listen address
-    pub fn new_with_addr(addr: ServerAddr, protocol: ProtocolType) -> LocalConfig {
-        let mut config = LocalConfig::new(protocol);
+    pub fn new_with_addr(addr: ServerAddr, protocol: ProtocolType) -> Self {
+        let mut config = Self::new(protocol);
         config.addr = Some(addr);
         config
     }
@@ -1260,8 +1260,8 @@ pub struct ServerInstanceConfig {
 
 impl ServerInstanceConfig {
     /// Create with `ServerConfig`
-    pub fn with_server_config(config: ServerConfig) -> ServerInstanceConfig {
-        ServerInstanceConfig {
+    pub fn with_server_config(config: ServerConfig) -> Self {
+        Self {
             config,
             acl: None,
             #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1286,8 +1286,8 @@ pub struct LocalInstanceConfig {
 
 impl LocalInstanceConfig {
     /// Create with `LocalConfig`
-    pub fn with_local_config(config: LocalConfig) -> LocalInstanceConfig {
-        LocalInstanceConfig { config, acl: None }
+    pub fn with_local_config(config: LocalConfig) -> Self {
+        Self { config, acl: None }
     }
 }
 
@@ -1435,8 +1435,8 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Error {
-        Error { kind, desc, detail }
+    pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Self {
+        Self { kind, desc, detail }
     }
 }
 
@@ -1479,8 +1479,8 @@ impl Display for Error {
 
 impl Config {
     /// Creates an empty configuration
-    pub fn new(config_type: ConfigType) -> Config {
-        Config {
+    pub fn new(config_type: ConfigType) -> Self {
+        Self {
             server: Vec::new(),
             local: Vec::new(),
 
@@ -1536,8 +1536,8 @@ impl Config {
         }
     }
 
-    fn load_from_ssconfig(config: SSConfig, config_type: ConfigType) -> Result<Config, Error> {
-        let mut nconfig = Config::new(config_type);
+    fn load_from_ssconfig(config: SSConfig, config_type: ConfigType) -> Result<Self, Error> {
+        let mut nconfig = Self::new(config_type);
 
         // Client
         //
@@ -2495,11 +2495,11 @@ impl Config {
 
         impl DnsProtocol {
             fn enable_tcp(&self) -> bool {
-                matches!(*self, DnsProtocol::Tcp | DnsProtocol::Both)
+                matches!(*self, Self::Tcp | Self::Both)
             }
 
             fn enable_udp(&self) -> bool {
-                matches!(*self, DnsProtocol::Udp | DnsProtocol::Both)
+                matches!(*self, Self::Udp | Self::Both)
             }
         }
 
@@ -2563,20 +2563,20 @@ impl Config {
     }
 
     /// Load Config from a `str`
-    pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
+    pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Self, Error> {
         let c = json5::from_str::<SSConfig>(s)?;
-        Config::load_from_ssconfig(c, config_type)
+        Self::load_from_ssconfig(c, config_type)
     }
 
     /// Load Config from a File
-    pub fn load_from_file<P: AsRef<Path>>(filename: P, config_type: ConfigType) -> Result<Config, Error> {
+    pub fn load_from_file<P: AsRef<Path>>(filename: P, config_type: ConfigType) -> Result<Self, Error> {
         let filename = filename.as_ref();
 
         let mut reader = OpenOptions::new().read(true).open(filename)?;
         let mut content = String::new();
         reader.read_to_string(&mut content)?;
 
-        let mut config = Config::load_from_str(&content[..], config_type)?;
+        let mut config = Self::load_from_str(&content[..], config_type)?;
 
         // Record the path of the configuration for auto-reloading
         config.config_path = Some(filename.to_owned());

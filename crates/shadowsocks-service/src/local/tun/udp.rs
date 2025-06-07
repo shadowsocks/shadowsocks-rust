@@ -31,7 +31,7 @@ impl UdpTun {
         balancer: PingBalancer,
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
-    ) -> (UdpTun, Duration, mpsc::Receiver<SocketAddr>) {
+    ) -> (Self, Duration, mpsc::Receiver<SocketAddr>) {
         let (tun_tx, tun_rx) = mpsc::channel(64);
         let (manager, cleanup_interval, keepalive_rx) = UdpAssociationManager::new(
             context,
@@ -41,7 +41,7 @@ impl UdpTun {
             balancer,
         );
 
-        (UdpTun { tun_rx, manager }, cleanup_interval, keepalive_rx)
+        (Self { tun_rx, manager }, cleanup_interval, keepalive_rx)
     }
 
     pub async fn handle_packet(
@@ -87,8 +87,8 @@ struct UdpTunInboundWriter {
 }
 
 impl UdpTunInboundWriter {
-    fn new(tun_tx: mpsc::Sender<BytesMut>) -> UdpTunInboundWriter {
-        UdpTunInboundWriter { tun_tx }
+    fn new(tun_tx: mpsc::Sender<BytesMut>) -> Self {
+        Self { tun_tx }
     }
 }
 

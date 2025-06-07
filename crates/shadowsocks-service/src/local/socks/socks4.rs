@@ -43,16 +43,16 @@ impl Command {
     #[inline]
     fn as_u8(self) -> u8 {
         match self {
-            Command::Connect => consts::SOCKS4_COMMAND_CONNECT,
-            Command::Bind => consts::SOCKS4_COMMAND_BIND,
+            Self::Connect => consts::SOCKS4_COMMAND_CONNECT,
+            Self::Bind => consts::SOCKS4_COMMAND_BIND,
         }
     }
 
     #[inline]
-    fn from_u8(code: u8) -> Option<Command> {
+    fn from_u8(code: u8) -> Option<Self> {
         match code {
-            consts::SOCKS4_COMMAND_CONNECT => Some(Command::Connect),
-            consts::SOCKS4_COMMAND_BIND => Some(Command::Bind),
+            consts::SOCKS4_COMMAND_CONNECT => Some(Self::Connect),
+            consts::SOCKS4_COMMAND_BIND => Some(Self::Bind),
             _ => None,
         }
     }
@@ -77,22 +77,22 @@ impl ResultCode {
     #[inline]
     fn as_u8(self) -> u8 {
         match self {
-            ResultCode::RequestGranted => consts::SOCKS4_RESULT_REQUEST_GRANTED,
-            ResultCode::RequestRejectedOrFailed => consts::SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED,
-            ResultCode::RequestRejectedCannotConnect => consts::SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT,
-            ResultCode::RequestRejectedDifferentUserId => consts::SOCKS4_RESULT_REQUEST_REJECTED_DIFFERENT_USER_ID,
-            ResultCode::Other(c) => c,
+            Self::RequestGranted => consts::SOCKS4_RESULT_REQUEST_GRANTED,
+            Self::RequestRejectedOrFailed => consts::SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED,
+            Self::RequestRejectedCannotConnect => consts::SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT,
+            Self::RequestRejectedDifferentUserId => consts::SOCKS4_RESULT_REQUEST_REJECTED_DIFFERENT_USER_ID,
+            Self::Other(c) => c,
         }
     }
 
     #[inline]
-    fn from_u8(code: u8) -> ResultCode {
+    fn from_u8(code: u8) -> Self {
         match code {
-            consts::SOCKS4_RESULT_REQUEST_GRANTED => ResultCode::RequestGranted,
-            consts::SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED => ResultCode::RequestRejectedOrFailed,
-            consts::SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT => ResultCode::RequestRejectedCannotConnect,
-            consts::SOCKS4_RESULT_REQUEST_REJECTED_DIFFERENT_USER_ID => ResultCode::RequestRejectedDifferentUserId,
-            code => ResultCode::Other(code),
+            consts::SOCKS4_RESULT_REQUEST_GRANTED => Self::RequestGranted,
+            consts::SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED => Self::RequestRejectedOrFailed,
+            consts::SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT => Self::RequestRejectedCannotConnect,
+            consts::SOCKS4_RESULT_REQUEST_REJECTED_DIFFERENT_USER_ID => Self::RequestRejectedDifferentUserId,
+            code => Self::Other(code),
         }
     }
 }
@@ -100,15 +100,15 @@ impl ResultCode {
 impl fmt::Display for ResultCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            ResultCode::RequestGranted => f.write_str("request granted"),
-            ResultCode::RequestRejectedOrFailed => f.write_str("request rejected or failed"),
-            ResultCode::RequestRejectedCannotConnect => {
+            Self::RequestGranted => f.write_str("request granted"),
+            Self::RequestRejectedOrFailed => f.write_str("request rejected or failed"),
+            Self::RequestRejectedCannotConnect => {
                 f.write_str("request rejected because SOCKS server cannot connect to identd on the client")
             }
-            ResultCode::RequestRejectedDifferentUserId => {
+            Self::RequestRejectedDifferentUserId => {
                 f.write_str("request rejected because the client program and identd report different user-ids")
             }
-            ResultCode::Other(code) => write!(f, "other result code {code}"),
+            Self::Other(code) => write!(f, "other result code {code}"),
         }
     }
 }
@@ -126,8 +126,8 @@ impl fmt::Debug for Address {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
+            Self::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Self::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
@@ -136,41 +136,41 @@ impl fmt::Display for Address {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
+            Self::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Self::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
 
 impl From<SocketAddrV4> for Address {
-    fn from(s: SocketAddrV4) -> Address {
-        Address::SocketAddress(s)
+    fn from(s: SocketAddrV4) -> Self {
+        Self::SocketAddress(s)
     }
 }
 
 impl From<(String, u16)> for Address {
-    fn from((dn, port): (String, u16)) -> Address {
-        Address::DomainNameAddress(dn, port)
+    fn from((dn, port): (String, u16)) -> Self {
+        Self::DomainNameAddress(dn, port)
     }
 }
 
 impl From<(&str, u16)> for Address {
-    fn from((dn, port): (&str, u16)) -> Address {
-        Address::DomainNameAddress(dn.to_owned(), port)
+    fn from((dn, port): (&str, u16)) -> Self {
+        Self::DomainNameAddress(dn.to_owned(), port)
     }
 }
 
-impl From<&Address> for Address {
-    fn from(addr: &Address) -> Address {
+impl From<&Self> for Address {
+    fn from(addr: &Self) -> Self {
         addr.clone()
     }
 }
 
 impl From<Address> for socks5::Address {
-    fn from(addr: Address) -> socks5::Address {
+    fn from(addr: Address) -> Self {
         match addr {
-            Address::SocketAddress(a) => socks5::Address::SocketAddress(SocketAddr::V4(a)),
-            Address::DomainNameAddress(d, p) => socks5::Address::DomainNameAddress(d, p),
+            Address::SocketAddress(a) => Self::SocketAddress(SocketAddr::V4(a)),
+            Address::DomainNameAddress(d, p) => Self::DomainNameAddress(d, p),
         }
     }
 }
@@ -201,7 +201,7 @@ pub struct HandshakeRequest {
 
 impl HandshakeRequest {
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<HandshakeRequest, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncBufRead + Unpin,
     {
@@ -250,7 +250,7 @@ impl HandshakeRequest {
             Address::SocketAddress(SocketAddrV4::new(ip, port))
         };
 
-        Ok(HandshakeRequest {
+        Ok(Self {
             cd: command,
             dst,
             user_id,
@@ -327,12 +327,12 @@ pub struct HandshakeResponse {
 
 impl HandshakeResponse {
     /// Create a response with code
-    pub fn new(code: ResultCode) -> HandshakeResponse {
-        HandshakeResponse { cd: code }
+    pub fn new(code: ResultCode) -> Self {
+        Self { cd: code }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<HandshakeResponse, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -349,7 +349,7 @@ impl HandshakeResponse {
 
         // DSTPORT, DSTIP are ignored
 
-        Ok(HandshakeResponse { cd: result_code })
+        Ok(Self { cd: result_code })
     }
 
     /// Write data into a writer
@@ -364,7 +364,7 @@ impl HandshakeResponse {
 
     /// Writes to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        let HandshakeResponse { ref cd } = *self;
+        let Self { ref cd } = *self;
 
         buf.put_slice(&[
             // VN: Result Code's version, must be 0
@@ -406,10 +406,10 @@ pub enum Error {
 }
 
 impl From<Error> for io::Error {
-    fn from(err: Error) -> io::Error {
+    fn from(err: Error) -> Self {
         match err {
             Error::IoError(err) => err,
-            e => io::Error::other(e),
+            e => Self::other(e),
         }
     }
 }

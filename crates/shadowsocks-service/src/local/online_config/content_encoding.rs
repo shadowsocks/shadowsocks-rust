@@ -26,15 +26,15 @@ impl<'a> TryFrom<&'a HeaderValue> for ContentEncoding {
 
     fn try_from(value: &'a HeaderValue) -> Result<Self, Self::Error> {
         if value == HeaderValue::from_static("identity") {
-            Ok(ContentEncoding::Identity)
+            Ok(Self::Identity)
         } else if value == HeaderValue::from_static("deflate") {
-            Ok(ContentEncoding::Deflate)
+            Ok(Self::Deflate)
         } else if value == HeaderValue::from_static("gzip") {
-            Ok(ContentEncoding::Gzip)
+            Ok(Self::Gzip)
         } else if value == HeaderValue::from_static("br") {
-            Ok(ContentEncoding::Br)
+            Ok(Self::Br)
         } else if value == HeaderValue::from_static("zstd") {
-            Ok(ContentEncoding::Zstd)
+            Ok(Self::Zstd)
         } else {
             Err(ContentEncodingError)
         }

@@ -79,13 +79,13 @@ pub struct ManagerBuilder {
 
 impl ManagerBuilder {
     /// Create a new manager server builder from configuration
-    pub fn new(svr_cfg: ManagerConfig) -> ManagerBuilder {
-        ManagerBuilder::with_context(svr_cfg, Context::new_shared(ServerType::Server))
+    pub fn new(svr_cfg: ManagerConfig) -> Self {
+        Self::with_context(svr_cfg, Context::new_shared(ServerType::Server))
     }
 
     /// Create a new manager server builder with context and configuration
-    pub(crate) fn with_context(svr_cfg: ManagerConfig, context: SharedContext) -> ManagerBuilder {
-        ManagerBuilder {
+    pub(crate) fn with_context(svr_cfg: ManagerConfig, context: SharedContext) -> Self {
+        Self {
             context,
             svr_cfg,
             connect_opts: ConnectOpts::default(),

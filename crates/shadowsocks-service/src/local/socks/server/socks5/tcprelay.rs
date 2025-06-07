@@ -44,8 +44,8 @@ impl Socks5TcpHandler {
         balancer: PingBalancer,
         mode: Mode,
         auth: Arc<Socks5AuthConfig>,
-    ) -> Socks5TcpHandler {
-        Socks5TcpHandler {
+    ) -> Self {
+        Self {
             context,
             udp_associate_addr,
             balancer,

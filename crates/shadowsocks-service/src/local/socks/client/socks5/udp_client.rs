@@ -20,11 +20,11 @@ pub struct Socks5UdpClient {
 
 impl Socks5UdpClient {
     /// Create a new UDP associate client binds to a specific address
-    pub async fn bind<A>(addrs: A) -> io::Result<Socks5UdpClient>
+    pub async fn bind<A>(addrs: A) -> io::Result<Self>
     where
         A: ToSocketAddrs,
     {
-        Ok(Socks5UdpClient {
+        Ok(Self {
             socket: UdpSocket::bind(addrs).await?,
             assoc_client: None,
         })

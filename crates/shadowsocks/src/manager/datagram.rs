@@ -26,9 +26,9 @@ impl ManagerSocketAddr {
     /// Check if it is unnamed (not binded to any valid address), only valid for `UnixSocketAddr`
     pub fn is_unnamed(&self) -> bool {
         match *self {
-            ManagerSocketAddr::SocketAddr(..) => false,
+            Self::SocketAddr(..) => false,
             #[cfg(unix)]
-            ManagerSocketAddr::UnixSocketAddr(ref s) => s.is_unnamed(),
+            Self::UnixSocketAddr(ref s) => s.is_unnamed(),
         }
     }
 }
@@ -36,9 +36,9 @@ impl ManagerSocketAddr {
 impl fmt::Display for ManagerSocketAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            ManagerSocketAddr::SocketAddr(ref saddr) => fmt::Display::fmt(saddr, f),
+            Self::SocketAddr(ref saddr) => fmt::Display::fmt(saddr, f),
             #[cfg(unix)]
-            ManagerSocketAddr::UnixSocketAddr(ref saddr) => fmt::Debug::fmt(saddr, f),
+            Self::UnixSocketAddr(ref saddr) => fmt::Debug::fmt(saddr, f),
         }
     }
 }
@@ -55,16 +55,16 @@ pub enum ManagerDatagram {
 
 impl ManagerDatagram {
     /// Create a `ManagerDatagram` binding to requested `bind_addr`
-    pub async fn bind(context: &Context, bind_addr: &ManagerAddr) -> io::Result<ManagerDatagram> {
+    pub async fn bind(context: &Context, bind_addr: &ManagerAddr) -> io::Result<Self> {
         match *bind_addr {
-            ManagerAddr::SocketAddr(ref saddr) => Ok(ManagerDatagram::UdpDatagram(
+            ManagerAddr::SocketAddr(ref saddr) => Ok(Self::UdpDatagram(
                 ShadowUdpSocket::listen(saddr).await?.into(),
             )),
             ManagerAddr::DomainName(ref dname, port) => {
                 let (_, socket) =
                     lookup_then!(context, dname, port, |saddr| { ShadowUdpSocket::listen(&saddr).await })?;
 
-                Ok(ManagerDatagram::UdpDatagram(socket.into()))
+                Ok(Self::UdpDatagram(socket.into()))
             }
             #[cfg(unix)]
             ManagerAddr::UnixSocketAddr(ref path) => {
@@ -73,7 +73,7 @@ impl ManagerDatagram {
                 // Remove it first incase it is already exists
                 let _ = fs::remove_file(path);
 
-                Ok(ManagerDatagram::UnixDatagram(UnixDatagram::bind(path)?))
+                Ok(Self::UnixDatagram(UnixDatagram::bind(path)?))
             }
         }
     }
@@ -83,14 +83,14 @@ impl ManagerDatagram {
         context: &Context,
         bind_addr: &ManagerAddr,
         connect_opts: &ConnectOpts,
-    ) -> io::Result<ManagerDatagram> {
+    ) -> io::Result<Self> {
         match *bind_addr {
-            ManagerAddr::SocketAddr(sa) => ManagerDatagram::connect_socket_addr(sa, connect_opts).await,
+            ManagerAddr::SocketAddr(sa) => Self::connect_socket_addr(sa, connect_opts).await,
 
             ManagerAddr::DomainName(ref dname, port) => {
                 // Try connect to all socket addresses
                 lookup_then!(context, dname, port, |addr| {
-                    ManagerDatagram::connect_socket_addr(addr, connect_opts).await
+                    Self::connect_socket_addr(addr, connect_opts).await
                 })
                 .map(|(_, d)| d)
             }
@@ -101,34 +101,34 @@ impl ManagerDatagram {
             ManagerAddr::UnixSocketAddr(ref path) => {
                 let dgram = UnixDatagram::unbound()?;
                 dgram.connect(path)?;
-                Ok(ManagerDatagram::UnixDatagram(dgram))
+                Ok(Self::UnixDatagram(dgram))
             }
         }
     }
 
-    async fn connect_socket_addr(sa: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<ManagerDatagram> {
+    async fn connect_socket_addr(sa: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<Self> {
         let socket = ShadowUdpSocket::connect_with_opts(&sa, connect_opts).await?;
-        Ok(ManagerDatagram::UdpDatagram(socket.into()))
+        Ok(Self::UdpDatagram(socket.into()))
     }
 
     /// Receives data from the socket.
     pub async fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match *self {
-            ManagerDatagram::UdpDatagram(ref mut udp) => udp.recv(buf).await,
+            Self::UdpDatagram(ref mut udp) => udp.recv(buf).await,
             #[cfg(unix)]
-            ManagerDatagram::UnixDatagram(ref mut unix) => unix.recv(buf).await,
+            Self::UnixDatagram(ref mut unix) => unix.recv(buf).await,
         }
     }
 
     /// Receives data from the socket.
     pub async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, ManagerSocketAddr)> {
         match *self {
-            ManagerDatagram::UdpDatagram(ref mut udp) => {
+            Self::UdpDatagram(ref mut udp) => {
                 let (s, addr) = udp.recv_from(buf).await?;
                 Ok((s, ManagerSocketAddr::SocketAddr(addr)))
             }
             #[cfg(unix)]
-            ManagerDatagram::UnixDatagram(ref mut unix) => {
+            Self::UnixDatagram(ref mut unix) => {
                 let (s, addr) = unix.recv_from(buf).await?;
                 Ok((s, ManagerSocketAddr::UnixSocketAddr(addr)))
             }
@@ -138,16 +138,16 @@ impl ManagerDatagram {
     /// Sends data to the socket
     pub async fn send(&mut self, buf: &[u8]) -> io::Result<usize> {
         match *self {
-            ManagerDatagram::UdpDatagram(ref mut udp) => udp.send(buf).await,
+            Self::UdpDatagram(ref mut udp) => udp.send(buf).await,
             #[cfg(unix)]
-            ManagerDatagram::UnixDatagram(ref mut unix) => unix.send(buf).await,
+            Self::UnixDatagram(ref mut unix) => unix.send(buf).await,
         }
     }
 
     /// Sends data to the socket to the specified address.
     pub async fn send_to(&mut self, buf: &[u8], target: &ManagerSocketAddr) -> io::Result<usize> {
         match *self {
-            ManagerDatagram::UdpDatagram(ref mut udp) => match *target {
+            Self::UdpDatagram(ref mut udp) => match *target {
                 ManagerSocketAddr::SocketAddr(ref saddr) => udp.send_to(buf, saddr).await,
                 #[cfg(unix)]
                 ManagerSocketAddr::UnixSocketAddr(..) => {
@@ -156,7 +156,7 @@ impl ManagerDatagram {
                 }
             },
             #[cfg(unix)]
-            ManagerDatagram::UnixDatagram(ref mut unix) => match *target {
+            Self::UnixDatagram(ref mut unix) => match *target {
                 ManagerSocketAddr::UnixSocketAddr(ref saddr) => match saddr.as_pathname() {
                     Some(paddr) => unix.send_to(buf, paddr).await,
                     None => {
@@ -175,7 +175,7 @@ impl ManagerDatagram {
     /// Sends data on the socket to the specified manager address
     pub async fn send_to_manager(&mut self, buf: &[u8], context: &Context, target: &ManagerAddr) -> io::Result<usize> {
         match *self {
-            ManagerDatagram::UdpDatagram(ref mut udp) => match *target {
+            Self::UdpDatagram(ref mut udp) => match *target {
                 ManagerAddr::SocketAddr(ref saddr) => udp.send_to(buf, saddr).await,
                 ManagerAddr::DomainName(ref dname, port) => {
                     let (_, n) = lookup_then!(context, dname, port, |saddr| { udp.send_to(buf, saddr).await })?;
@@ -188,7 +188,7 @@ impl ManagerDatagram {
                 }
             },
             #[cfg(unix)]
-            ManagerDatagram::UnixDatagram(ref mut unix) => match *target {
+            Self::UnixDatagram(ref mut unix) => match *target {
                 ManagerAddr::UnixSocketAddr(ref paddr) => unix.send_to(buf, paddr).await,
                 ManagerAddr::SocketAddr(..) | ManagerAddr::DomainName(..) => {
                     let err = io::Error::new(ErrorKind::InvalidInput, "unix datagram requires path address target");
@@ -201,9 +201,9 @@ impl ManagerDatagram {
     /// Returns the local address that this socket is bound to.
     pub fn local_addr(&self) -> io::Result<ManagerSocketAddr> {
         match *self {
-            ManagerDatagram::UdpDatagram(ref socket) => socket.local_addr().map(ManagerSocketAddr::SocketAddr),
+            Self::UdpDatagram(ref socket) => socket.local_addr().map(ManagerSocketAddr::SocketAddr),
             #[cfg(unix)]
-            ManagerDatagram::UnixDatagram(ref dgram) => dgram.local_addr().map(ManagerSocketAddr::UnixSocketAddr),
+            Self::UnixDatagram(ref dgram) => dgram.local_addr().map(ManagerSocketAddr::UnixSocketAddr),
         }
     }
 }

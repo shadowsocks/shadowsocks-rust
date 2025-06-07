@@ -28,8 +28,8 @@ impl TunnelTcpServerBuilder {
         client_config: ServerAddr,
         balancer: PingBalancer,
         forward_addr: Address,
-    ) -> TunnelTcpServerBuilder {
-        TunnelTcpServerBuilder {
+    ) -> Self {
+        Self {
             context,
             client_config,
             balancer,

@@ -40,8 +40,8 @@ impl fmt::Debug for ReplayProtector {
 impl ReplayProtector {
     /// Create a new ReplayProtector
     #[allow(unused_variables)]
-    pub fn new(config_type: ServerType) -> ReplayProtector {
-        ReplayProtector {
+    pub fn new(config_type: ServerType) -> Self {
+        Self {
             #[cfg(feature = "security-replay-attack-detect")]
             nonce_ppbloom: spin::Mutex::new(PingPongBloom::new(config_type)),
             #[cfg(feature = "aead-cipher-2022")]

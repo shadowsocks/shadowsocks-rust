@@ -38,8 +38,8 @@ impl HttpService {
         peer_addr: SocketAddr,
         http_client: HttpClient<body::Incoming>,
         balancer: PingBalancer,
-    ) -> HttpService {
-        HttpService {
+    ) -> Self {
+        Self {
             context,
             peer_addr,
             http_client,

@@ -66,22 +66,22 @@ pub enum DnsClient {
 
 impl DnsClient {
     /// Connect to local provided TCP DNS server
-    pub async fn connect_tcp_local(ns: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<DnsClient> {
+    pub async fn connect_tcp_local(ns: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<Self> {
         let stream = ShadowTcpStream::connect_with_opts(&ns, connect_opts).await?;
-        Ok(DnsClient::TcpLocal { stream })
+        Ok(Self::TcpLocal { stream })
     }
 
     /// Connect to local provided UDP DNS server
-    pub async fn connect_udp_local(ns: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<DnsClient> {
+    pub async fn connect_udp_local(ns: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<Self> {
         let socket = ShadowUdpSocket::connect_with_opts(&ns, connect_opts).await?.into();
-        Ok(DnsClient::UdpLocal { socket })
+        Ok(Self::UdpLocal { socket })
     }
 
     #[cfg(unix)]
     /// Connect to local provided Unix Domain Socket DNS server, in TCP-like protocol
-    pub async fn connect_unix_stream<P: AsRef<Path>>(path: &P) -> io::Result<DnsClient> {
+    pub async fn connect_unix_stream<P: AsRef<Path>>(path: &P) -> io::Result<Self> {
         let stream = UnixStream::connect(path).await?;
-        Ok(DnsClient::UnixStream { stream })
+        Ok(Self::UnixStream { stream })
     }
 
     /// Connect to remote DNS server through proxy in TCP
@@ -91,12 +91,12 @@ impl DnsClient {
         ns: &Address,
         connect_opts: &ConnectOpts,
         flow_stat: Arc<FlowStat>,
-    ) -> io::Result<DnsClient> {
+    ) -> io::Result<Self> {
         let stream = ProxyClientStream::connect_with_opts_map(context, svr_cfg, ns, connect_opts, |s| {
             MonProxyStream::from_stream(s, flow_stat)
         })
         .await?;
-        Ok(DnsClient::TcpRemote { stream })
+        Ok(Self::TcpRemote { stream })
     }
 
     /// Connect to remote DNS server through proxy in UDP
@@ -106,13 +106,13 @@ impl DnsClient {
         ns: Address,
         connect_opts: &ConnectOpts,
         flow_stat: Arc<FlowStat>,
-    ) -> io::Result<DnsClient> {
+    ) -> io::Result<Self> {
         let socket = ProxySocket::connect_with_opts(context.clone(), svr_cfg, connect_opts).await?;
         let socket = MonProxySocket::from_socket(socket, flow_stat.clone());
         let mut control = UdpSocketControlData::default();
         control.client_session_id = generate_client_session_id();
         control.packet_id = 0; // AEAD-2022 Packet ID starts from 1
-        Ok(DnsClient::UdpRemote {
+        Ok(Self::UdpRemote {
             socket,
             ns,
             control,
@@ -143,8 +143,8 @@ impl DnsClient {
         trace!("DNS lookup {:?}", msg);
 
         match *self {
-            DnsClient::TcpLocal { ref mut stream } => stream_query(stream, msg).await,
-            DnsClient::UdpLocal { ref socket } => {
+            Self::TcpLocal { ref mut stream } => stream_query(stream, msg).await,
+            Self::UdpLocal { ref socket } => {
                 let bytes = msg.to_vec()?;
                 socket.send(&bytes).await?;
 
@@ -154,9 +154,9 @@ impl DnsClient {
                 Message::from_vec(&recv_buf[..n])
             }
             #[cfg(unix)]
-            DnsClient::UnixStream { ref mut stream } => stream_query(stream, msg).await,
-            DnsClient::TcpRemote { ref mut stream } => stream_query(stream, msg).await,
-            DnsClient::UdpRemote {
+            Self::UnixStream { ref mut stream } => stream_query(stream, msg).await,
+            Self::TcpRemote { ref mut stream } => stream_query(stream, msg).await,
+            Self::UdpRemote {
                 ref mut socket,
                 ref ns,
                 ref mut control,
@@ -258,12 +258,12 @@ impl DnsClient {
         }
 
         match *self {
-            DnsClient::TcpLocal { ref mut stream } => check_peekable(stream),
-            DnsClient::UdpLocal { .. } => true,
+            Self::TcpLocal { ref mut stream } => check_peekable(stream),
+            Self::UdpLocal { .. } => true,
             #[cfg(unix)]
-            DnsClient::UnixStream { ref mut stream } => check_peekable(stream),
-            DnsClient::TcpRemote { ref mut stream } => check_peekable(stream.get_mut().get_mut()),
-            DnsClient::UdpRemote { .. } => true,
+            Self::UnixStream { ref mut stream } => check_peekable(stream),
+            Self::TcpRemote { ref mut stream } => check_peekable(stream.get_mut().get_mut()),
+            Self::UdpRemote { .. } => true,
         }
     }
 }

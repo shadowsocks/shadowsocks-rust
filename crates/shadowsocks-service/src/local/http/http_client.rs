@@ -106,7 +106,7 @@ pub struct HttpClient<B> {
 
 impl<B> Clone for HttpClient<B> {
     fn clone(&self) -> Self {
-        HttpClient {
+        Self {
             cache_conn: self.cache_conn.clone(),
         }
     }
@@ -119,7 +119,7 @@ where
     B::Error: Into<Box<dyn ::std::error::Error + Send + Sync>>,
 {
     fn default() -> Self {
-        HttpClient::new()
+        Self::new()
     }
 }
 
@@ -130,8 +130,8 @@ where
     B::Error: Into<Box<dyn ::std::error::Error + Send + Sync>>,
 {
     /// Create a new HttpClient
-    pub fn new() -> HttpClient<B> {
-        HttpClient {
+    pub fn new() -> Self {
+        Self {
             cache_conn: Arc::new(Mutex::new(LruCache::with_expiry_duration(CONNECTION_EXPIRE_DURATION))),
         }
     }
@@ -260,7 +260,7 @@ where
         host: Address,
         domain: &str,
         balancer: Option<&PingBalancer>,
-    ) -> io::Result<HttpConnection<B>> {
+    ) -> io::Result<Self> {
         if *scheme != Scheme::HTTP && *scheme != Scheme::HTTPS {
             return Err(io::Error::new(ErrorKind::InvalidInput, "invalid scheme"));
         }
@@ -268,9 +268,9 @@ where
         let (stream, _) = connect_host(context, &host, balancer).await?;
 
         if *scheme == Scheme::HTTP {
-            HttpConnection::connect_http_http1(scheme, host, stream).await
+            Self::connect_http_http1(scheme, host, stream).await
         } else if *scheme == Scheme::HTTPS {
-            HttpConnection::connect_https(scheme, host, domain, stream).await
+            Self::connect_https(scheme, host, domain, stream).await
         } else {
             unreachable!()
         }
@@ -280,7 +280,7 @@ where
         scheme: &Scheme,
         host: Address,
         stream: AutoProxyClientStream,
-    ) -> io::Result<HttpConnection<B>> {
+    ) -> io::Result<Self> {
         trace!(
             "HTTP making new HTTP/1.1 connection to host: {}, scheme: {}",
             host, scheme
@@ -305,7 +305,7 @@ where
             }
         });
 
-        Ok(HttpConnection::Http1(send_request))
+        Ok(Self::Http1(send_request))
     }
 
     async fn connect_https(
@@ -313,7 +313,7 @@ where
         host: Address,
         domain: &str,
         stream: AutoProxyClientStream,
-    ) -> io::Result<HttpConnection<B>> {
+    ) -> io::Result<Self> {
         trace!("HTTP making new TLS connection to host: {}, scheme: {}", host, scheme);
 
         // TLS handshake, check alpn for h2 support.
@@ -337,7 +337,7 @@ where
                 }
             });
 
-            Ok(HttpConnection::Http2(send_request))
+            Ok(Self::Http2(send_request))
         } else {
             // HTTP/1.x TLS
             let (send_request, connection) = match http1::Builder::new()
@@ -356,14 +356,14 @@ where
                 }
             });
 
-            Ok(HttpConnection::Http1(send_request))
+            Ok(Self::Http1(send_request))
         }
     }
 
     #[inline]
     pub async fn send_request(&mut self, mut req: Request<B>) -> Result<Response<body::Incoming>, HttpClientError> {
         match self {
-            HttpConnection::Http1(r) => {
+            Self::Http1(r) => {
                 if !matches!(
                     req.version(),
                     HttpVersion::HTTP_09 | HttpVersion::HTTP_10 | HttpVersion::HTTP_11
@@ -394,7 +394,7 @@ where
 
                 r.send_request(req).await.map_err(Into::into)
             }
-            HttpConnection::Http2(r) => {
+            Self::Http2(r) => {
                 if !matches!(req.version(), HttpVersion::HTTP_2) {
                     trace!("HTTP client changed Request.version to HTTP/2 from {:?}", req.version());
 
@@ -408,8 +408,8 @@ where
 
     pub fn is_closed(&self) -> bool {
         match self {
-            HttpConnection::Http1(r) => r.is_closed(),
-            HttpConnection::Http2(r) => r.is_closed(),
+            Self::Http1(r) => r.is_closed(),
+            Self::Http2(r) => r.is_closed(),
         }
     }
 }

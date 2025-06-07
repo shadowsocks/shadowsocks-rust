@@ -58,12 +58,12 @@ pub enum ServerType {
 impl ServerType {
     /// Check if it is `Local`
     pub fn is_local(self) -> bool {
-        self == ServerType::Local
+        self == Self::Local
     }
 
     /// Check if it is `Server`
     pub fn is_server(self) -> bool {
-        self == ServerType::Server
+        self == Self::Server
     }
 }
 
@@ -78,22 +78,22 @@ pub enum Mode {
 impl Mode {
     /// Check if UDP is enabled
     pub fn enable_udp(self) -> bool {
-        matches!(self, Mode::UdpOnly | Mode::TcpAndUdp)
+        matches!(self, Self::UdpOnly | Self::TcpAndUdp)
     }
 
     /// Check if TCP is enabled
     pub fn enable_tcp(self) -> bool {
-        matches!(self, Mode::TcpOnly | Mode::TcpAndUdp)
+        matches!(self, Self::TcpOnly | Self::TcpAndUdp)
     }
 
     /// Merge with another Mode
-    pub fn merge(&self, mode: Mode) -> Mode {
+    pub fn merge(&self, mode: Self) -> Self {
         let me = *self as u8;
         let fm = mode as u8;
         match me | fm {
-            0x01 => Mode::TcpOnly,
-            0x02 => Mode::UdpOnly,
-            0x03 => Mode::TcpAndUdp,
+            0x01 => Self::TcpOnly,
+            0x02 => Self::UdpOnly,
+            0x03 => Self::TcpAndUdp,
             _ => unreachable!(),
         }
     }
@@ -101,9 +101,9 @@ impl Mode {
     /// String representation of Mode
     pub fn as_str(&self) -> &'static str {
         match *self {
-            Mode::TcpOnly => "tcp_only",
-            Mode::TcpAndUdp => "tcp_and_udp",
-            Mode::UdpOnly => "udp_only",
+            Self::TcpOnly => "tcp_only",
+            Self::TcpAndUdp => "tcp_and_udp",
+            Self::UdpOnly => "udp_only",
         }
     }
 }
@@ -119,9 +119,9 @@ impl FromStr for Mode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "tcp_only" => Ok(Mode::TcpOnly),
-            "tcp_and_udp" => Ok(Mode::TcpAndUdp),
-            "udp_only" => Ok(Mode::UdpOnly),
+            "tcp_only" => Ok(Self::TcpOnly),
+            "tcp_and_udp" => Ok(Self::TcpAndUdp),
+            "udp_only" => Ok(Self::UdpOnly),
             _ => Err(()),
         }
     }
@@ -206,14 +206,14 @@ pub struct ServerWeight {
 
 impl Default for ServerWeight {
     fn default() -> Self {
-        ServerWeight::new()
+        Self::new()
     }
 }
 
 impl ServerWeight {
     /// Creates a default weight for server, which will have 1.0 for both TCP and UDP
-    pub fn new() -> ServerWeight {
-        ServerWeight {
+    pub fn new() -> Self {
+        Self {
             tcp_weight: 1.0,
             udp_weight: 1.0,
         }
@@ -262,7 +262,7 @@ impl Debug for ServerUser {
 
 impl ServerUser {
     /// Create a user
-    pub fn new<N, K>(name: N, key: K) -> ServerUser
+    pub fn new<N, K>(name: N, key: K) -> Self
     where
         N: Into<String>,
         K: Into<Bytes>,
@@ -273,7 +273,7 @@ impl ServerUser {
         let hash = blake3::hash(&key);
         let identity_hash = Bytes::from(hash.as_bytes()[0..16].to_owned());
 
-        ServerUser {
+        Self {
             name,
             key,
             identity_hash,
@@ -281,12 +281,12 @@ impl ServerUser {
     }
 
     /// Create a user from encoded key
-    pub fn with_encoded_key<N>(name: N, key: &str) -> Result<ServerUser, ServerUserError>
+    pub fn with_encoded_key<N>(name: N, key: &str) -> Result<Self, ServerUserError>
     where
         N: Into<String>,
     {
         let key = USER_KEY_BASE64_ENGINE.decode(key)?;
-        Ok(ServerUser::new(name, key))
+        Ok(Self::new(name, key))
     }
 
     /// Name of the user
@@ -335,8 +335,8 @@ pub struct ServerUserManager {
 
 impl ServerUserManager {
     /// Create a new manager
-    pub fn new() -> ServerUserManager {
-        ServerUserManager { users: HashMap::new() }
+    pub fn new() -> Self {
+        Self { users: HashMap::new() }
     }
 
     /// Add a new user
@@ -366,8 +366,8 @@ impl ServerUserManager {
 }
 
 impl Default for ServerUserManager {
-    fn default() -> ServerUserManager {
-        ServerUserManager::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -579,14 +579,14 @@ where
 
 impl ServerConfig {
     /// Create a new `ServerConfig`
-    pub fn new<A, P>(addr: A, password: P, method: CipherKind) -> Result<ServerConfig, ServerConfigError>
+    pub fn new<A, P>(addr: A, password: P, method: CipherKind) -> Result<Self, ServerConfigError>
     where
         A: Into<ServerAddr>,
         P: Into<String>,
     {
         let (password, enc_key, identity_keys) = password_to_keys(method, password)?;
 
-        Ok(ServerConfig {
+        Ok(Self {
             addr: addr.into(),
             password,
             method,
@@ -834,7 +834,7 @@ impl ServerConfig {
     ///
     /// 1. QRCode URL supported by shadowsocks-android, https://github.com/shadowsocks/shadowsocks-android/issues/51
     /// 2. Plain userinfo:password format supported by go2-shadowsocks2
-    pub fn from_url(encoded: &str) -> Result<ServerConfig, UrlParseError> {
+    pub fn from_url(encoded: &str) -> Result<Self, UrlParseError> {
         let parsed = Url::parse(encoded).map_err(UrlParseError::from)?;
 
         if parsed.scheme() != "ss" {
@@ -863,7 +863,7 @@ impl ServerConfig {
 
             decoded_body.insert_str(0, "ss://");
             // Parse it like ss://method:password@host:port
-            return ServerConfig::from_url(&decoded_body);
+            return Self::from_url(&decoded_body);
         }
 
         let (method, pwd) = match parsed.password() {
@@ -949,7 +949,7 @@ impl ServerConfig {
                 return Err(UrlParseError::InvalidMethod);
             }
         };
-        let mut svrconfig = ServerConfig::new(addr, pwd, method)?;
+        let mut svrconfig = Self::new(addr, pwd, method)?;
 
         if let Some(q) = parsed.query() {
             let query = match serde_urlencoded::from_bytes::<Vec<(String, String)>>(q.as_bytes()) {
@@ -1023,8 +1023,8 @@ pub enum UrlParseError {
 impl FromStr for ServerConfig {
     type Err = UrlParseError;
 
-    fn from_str(s: &str) -> Result<ServerConfig, Self::Err> {
-        ServerConfig::from_url(s)
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_url(s)
     }
 }
 
@@ -1041,16 +1041,16 @@ impl ServerAddr {
     /// Get string representation of domain
     pub fn host(&self) -> String {
         match *self {
-            ServerAddr::SocketAddr(ref s) => s.ip().to_string(),
-            ServerAddr::DomainName(ref dm, _) => dm.clone(),
+            Self::SocketAddr(ref s) => s.ip().to_string(),
+            Self::DomainName(ref dm, _) => dm.clone(),
         }
     }
 
     /// Get port
     pub fn port(&self) -> u16 {
         match *self {
-            ServerAddr::SocketAddr(ref s) => s.port(),
-            ServerAddr::DomainName(_, p) => p,
+            Self::SocketAddr(ref s) => s.port(),
+            Self::DomainName(_, p) => p,
         }
     }
 }
@@ -1068,9 +1068,9 @@ impl Display for ServerAddrError {
 impl FromStr for ServerAddr {
     type Err = ServerAddrError;
 
-    fn from_str(s: &str) -> Result<ServerAddr, ServerAddrError> {
+    fn from_str(s: &str) -> Result<Self, ServerAddrError> {
         match s.parse::<SocketAddr>() {
-            Ok(addr) => Ok(ServerAddr::SocketAddr(addr)),
+            Ok(addr) => Ok(Self::SocketAddr(addr)),
             Err(..) => {
                 let mut sp = s.split(':');
                 match (sp.next(), sp.next()) {
@@ -1079,7 +1079,7 @@ impl FromStr for ServerAddr {
                             return Err(ServerAddrError);
                         }
                         match port.parse::<u16>() {
-                            Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
+                            Ok(port) => Ok(Self::DomainName(dn.to_owned(), port)),
                             Err(..) => Err(ServerAddrError),
                         }
                     }
@@ -1093,8 +1093,8 @@ impl FromStr for ServerAddr {
 impl Display for ServerAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ServerAddr::SocketAddr(ref a) => write!(f, "{a}"),
-            ServerAddr::DomainName(ref d, port) => write!(f, "{d}:{port}"),
+            Self::SocketAddr(ref a) => write!(f, "{a}"),
+            Self::DomainName(ref d, port) => write!(f, "{d}:{port}"),
         }
     }
 }
@@ -1168,49 +1168,49 @@ impl serde::Serialize for ServerAddr {
 }
 
 impl From<SocketAddr> for ServerAddr {
-    fn from(addr: SocketAddr) -> ServerAddr {
-        ServerAddr::SocketAddr(addr)
+    fn from(addr: SocketAddr) -> Self {
+        Self::SocketAddr(addr)
     }
 }
 
 impl<I: Into<String>> From<(I, u16)> for ServerAddr {
-    fn from((dname, port): (I, u16)) -> ServerAddr {
-        ServerAddr::DomainName(dname.into(), port)
+    fn from((dname, port): (I, u16)) -> Self {
+        Self::DomainName(dname.into(), port)
     }
 }
 
 impl From<Address> for ServerAddr {
-    fn from(addr: Address) -> ServerAddr {
+    fn from(addr: Address) -> Self {
         match addr {
-            Address::SocketAddress(sa) => ServerAddr::SocketAddr(sa),
-            Address::DomainNameAddress(dn, port) => ServerAddr::DomainName(dn, port),
+            Address::SocketAddress(sa) => Self::SocketAddr(sa),
+            Address::DomainNameAddress(dn, port) => Self::DomainName(dn, port),
         }
     }
 }
 
 impl From<&Address> for ServerAddr {
-    fn from(addr: &Address) -> ServerAddr {
+    fn from(addr: &Address) -> Self {
         match *addr {
-            Address::SocketAddress(sa) => ServerAddr::SocketAddr(sa),
-            Address::DomainNameAddress(ref dn, port) => ServerAddr::DomainName(dn.clone(), port),
+            Address::SocketAddress(sa) => Self::SocketAddr(sa),
+            Address::DomainNameAddress(ref dn, port) => Self::DomainName(dn.clone(), port),
         }
     }
 }
 
 impl From<ServerAddr> for Address {
-    fn from(addr: ServerAddr) -> Address {
+    fn from(addr: ServerAddr) -> Self {
         match addr {
-            ServerAddr::SocketAddr(sa) => Address::SocketAddress(sa),
-            ServerAddr::DomainName(dn, port) => Address::DomainNameAddress(dn, port),
+            ServerAddr::SocketAddr(sa) => Self::SocketAddress(sa),
+            ServerAddr::DomainName(dn, port) => Self::DomainNameAddress(dn, port),
         }
     }
 }
 
 impl From<&ServerAddr> for Address {
-    fn from(addr: &ServerAddr) -> Address {
+    fn from(addr: &ServerAddr) -> Self {
         match *addr {
-            ServerAddr::SocketAddr(sa) => Address::SocketAddress(sa),
-            ServerAddr::DomainName(ref dn, port) => Address::DomainNameAddress(dn.clone(), port),
+            ServerAddr::SocketAddr(sa) => Self::SocketAddress(sa),
+            ServerAddr::DomainName(ref dn, port) => Self::DomainNameAddress(dn.clone(), port),
         }
     }
 }
@@ -1240,19 +1240,19 @@ impl Display for ManagerAddrError {
 impl FromStr for ManagerAddr {
     type Err = ManagerAddrError;
 
-    fn from_str(s: &str) -> Result<ManagerAddr, ManagerAddrError> {
+    fn from_str(s: &str) -> Result<Self, ManagerAddrError> {
         match s.find(':') {
             Some(pos) => {
                 // Contains a ':' in address, must be IP:Port or Domain:Port
                 match s.parse::<SocketAddr>() {
-                    Ok(saddr) => Ok(ManagerAddr::SocketAddr(saddr)),
+                    Ok(saddr) => Ok(Self::SocketAddr(saddr)),
                     Err(..) => {
                         // Splits into Domain and Port
                         let (sdomain, sport) = s.split_at(pos);
                         let (sdomain, sport) = (sdomain.trim(), sport[1..].trim());
 
                         match sport.parse::<u16>() {
-                            Ok(port) => Ok(ManagerAddr::DomainName(sdomain.to_owned(), port)),
+                            Ok(port) => Ok(Self::DomainName(sdomain.to_owned(), port)),
                             Err(..) => Err(ManagerAddrError),
                         }
                     }
@@ -1261,7 +1261,7 @@ impl FromStr for ManagerAddr {
             #[cfg(unix)]
             None => {
                 // Must be a unix socket path
-                Ok(ManagerAddr::UnixSocketAddr(PathBuf::from(s)))
+                Ok(Self::UnixSocketAddr(PathBuf::from(s)))
             }
             #[cfg(not(unix))]
             None => Err(ManagerAddrError),
@@ -1272,10 +1272,10 @@ impl FromStr for ManagerAddr {
 impl Display for ManagerAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ManagerAddr::SocketAddr(ref saddr) => fmt::Display::fmt(saddr, f),
-            ManagerAddr::DomainName(ref dname, port) => write!(f, "{dname}:{port}"),
+            Self::SocketAddr(ref saddr) => fmt::Display::fmt(saddr, f),
+            Self::DomainName(ref dname, port) => write!(f, "{dname}:{port}"),
             #[cfg(unix)]
-            ManagerAddr::UnixSocketAddr(ref path) => fmt::Display::fmt(&path.display(), f),
+            Self::UnixSocketAddr(ref path) => fmt::Display::fmt(&path.display(), f),
         }
     }
 }
@@ -1349,27 +1349,27 @@ impl serde::Serialize for ManagerAddr {
 }
 
 impl From<SocketAddr> for ManagerAddr {
-    fn from(addr: SocketAddr) -> ManagerAddr {
-        ManagerAddr::SocketAddr(addr)
+    fn from(addr: SocketAddr) -> Self {
+        Self::SocketAddr(addr)
     }
 }
 
 impl<'a> From<(&'a str, u16)> for ManagerAddr {
-    fn from((dname, port): (&'a str, u16)) -> ManagerAddr {
-        ManagerAddr::DomainName(dname.to_owned(), port)
+    fn from((dname, port): (&'a str, u16)) -> Self {
+        Self::DomainName(dname.to_owned(), port)
     }
 }
 
 impl From<(String, u16)> for ManagerAddr {
-    fn from((dname, port): (String, u16)) -> ManagerAddr {
-        ManagerAddr::DomainName(dname, port)
+    fn from((dname, port): (String, u16)) -> Self {
+        Self::DomainName(dname, port)
     }
 }
 
 #[cfg(unix)]
 impl From<PathBuf> for ManagerAddr {
-    fn from(p: PathBuf) -> ManagerAddr {
-        ManagerAddr::UnixSocketAddr(p)
+    fn from(p: PathBuf) -> Self {
+        Self::UnixSocketAddr(p)
     }
 }
 
@@ -1394,10 +1394,10 @@ pub enum ReplayAttackPolicy {
 impl Display for ReplayAttackPolicy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ReplayAttackPolicy::Default => f.write_str("default"),
-            ReplayAttackPolicy::Ignore => f.write_str("ignore"),
-            ReplayAttackPolicy::Detect => f.write_str("detect"),
-            ReplayAttackPolicy::Reject => f.write_str("reject"),
+            Self::Default => f.write_str("default"),
+            Self::Ignore => f.write_str("ignore"),
+            Self::Detect => f.write_str("detect"),
+            Self::Reject => f.write_str("reject"),
         }
     }
 }
@@ -1417,10 +1417,10 @@ impl FromStr for ReplayAttackPolicy {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "default" => Ok(ReplayAttackPolicy::Default),
-            "ignore" => Ok(ReplayAttackPolicy::Ignore),
-            "detect" => Ok(ReplayAttackPolicy::Detect),
-            "reject" => Ok(ReplayAttackPolicy::Reject),
+            "default" => Ok(Self::Default),
+            "ignore" => Ok(Self::Ignore),
+            "detect" => Ok(Self::Detect),
+            "reject" => Ok(Self::Reject),
             _ => Err(ReplayAttackPolicyError),
         }
     }

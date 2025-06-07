@@ -26,8 +26,8 @@ pub struct DnsResolver {
 }
 
 impl DnsResolver {
-    pub fn new(ns: NameServerAddr) -> DnsResolver {
-        DnsResolver {
+    pub fn new(ns: NameServerAddr) -> Self {
+        Self {
             ns,
             client_cache: DnsClientCache::new(5),
             mode: Mode::UdpOnly,

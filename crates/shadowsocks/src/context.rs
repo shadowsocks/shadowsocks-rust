@@ -33,8 +33,8 @@ pub type SharedContext = Arc<Context>;
 
 impl Context {
     /// Create a new `Context` for `Client` or `Server`
-    pub fn new(config_type: ServerType) -> Context {
-        Context {
+    pub fn new(config_type: ServerType) -> Self {
+        Self {
             replay_protector: ReplayProtector::new(config_type),
             replay_policy: ReplayAttackPolicy::Default,
             dns_resolver: Arc::new(DnsResolver::system_resolver()),
@@ -44,7 +44,7 @@ impl Context {
 
     /// Create a new `Context` shared
     pub fn new_shared(config_type: ServerType) -> SharedContext {
-        SharedContext::new(Context::new(config_type))
+        SharedContext::new(Self::new(config_type))
     }
 
     /// Check if nonce exist or not

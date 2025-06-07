@@ -35,8 +35,8 @@ pub struct OnlineConfigServiceBuilder {
 
 impl OnlineConfigServiceBuilder {
     /// Create a Builder
-    pub fn new(context: Arc<ServiceContext>, config_url: String, balancer: PingBalancer) -> OnlineConfigServiceBuilder {
-        OnlineConfigServiceBuilder {
+    pub fn new(context: Arc<ServiceContext>, config_url: String, balancer: PingBalancer) -> Self {
+        Self {
             context,
             config_url,
             balancer,

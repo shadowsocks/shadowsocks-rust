@@ -36,8 +36,8 @@ pub struct DnsClientCache {
 }
 
 impl DnsClientCache {
-    pub fn new(max_client_per_addr: usize) -> DnsClientCache {
-        DnsClientCache {
+    pub fn new(max_client_per_addr: usize) -> Self {
+        Self {
             cache: Mutex::new(HashMap::new()),
             timeout: Duration::from_secs(5),
             retry_count: 1,

@@ -32,13 +32,13 @@ impl FromStr for NameServerAddr {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Ok(ip) = s.parse::<IpAddr>() {
-            return Ok(NameServerAddr::SocketAddr(SocketAddr::new(ip, 53)));
+            return Ok(Self::SocketAddr(SocketAddr::new(ip, 53)));
         }
 
         match s.parse::<SocketAddr>() {
-            Ok(addr) => Ok(NameServerAddr::SocketAddr(addr)),
+            Ok(addr) => Ok(Self::SocketAddr(addr)),
             #[cfg(unix)]
-            Err(..) => Ok(NameServerAddr::UnixSocketAddr(PathBuf::from(s))),
+            Err(..) => Ok(Self::UnixSocketAddr(PathBuf::from(s))),
             #[cfg(not(unix))]
             Err(err) => Err(err),
         }
@@ -48,9 +48,9 @@ impl FromStr for NameServerAddr {
 impl Display for NameServerAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            NameServerAddr::SocketAddr(ref sa) => Display::fmt(sa, f),
+            Self::SocketAddr(ref sa) => Display::fmt(sa, f),
             #[cfg(unix)]
-            NameServerAddr::UnixSocketAddr(ref p) => write!(f, "{}", p.display()),
+            Self::UnixSocketAddr(ref p) => write!(f, "{}", p.display()),
         }
     }
 }

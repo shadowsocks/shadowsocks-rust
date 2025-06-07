@@ -36,7 +36,7 @@ pub struct PingPongBloom {
 }
 
 impl PingPongBloom {
-    pub fn new(ty: ServerType) -> PingPongBloom {
+    pub fn new(ty: ServerType) -> Self {
         let (mut item_count, fp_p) = if ty.is_local() {
             (BF_NUM_ENTRIES_FOR_CLIENT, BF_ERROR_RATE_FOR_CLIENT)
         } else {
@@ -45,7 +45,7 @@ impl PingPongBloom {
 
         item_count /= 2;
 
-        PingPongBloom {
+        Self {
             blooms: [
                 Bloom::new_for_fp_rate(item_count, fp_p).expect("BloomFilter1"),
                 Bloom::new_for_fp_rate(item_count, fp_p).expect("BloomFilter2"),

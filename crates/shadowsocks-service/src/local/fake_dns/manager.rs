@@ -33,7 +33,7 @@ impl From<FakeDnsError> for io::Error {
     fn from(value: FakeDnsError) -> Self {
         match value {
             FakeDnsError::IoError(e) => e,
-            FakeDnsError::RocksDBError(e) => io::Error::other(e),
+            FakeDnsError::RocksDBError(e) => Self::other(e),
         }
     }
 }
@@ -152,7 +152,7 @@ impl FakeDnsManager {
         ipv4_network: Ipv4Net,
         ipv6_network: Ipv6Net,
         expire_duration: Duration,
-    ) -> FakeDnsResult<FakeDnsManager> {
+    ) -> FakeDnsResult<Self> {
         let db_path = db_path.as_ref();
 
         // https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning
@@ -238,7 +238,7 @@ impl FakeDnsManager {
             trace!("FakeDNS database created. {:?}", c);
         }
 
-        Ok(FakeDnsManager {
+        Ok(Self {
             db: Mutex::new(db),
             ipv4_network: Mutex::new(ipv4_network.hosts().cycle()),
             ipv6_network: Mutex::new(ipv6_network.hosts().cycle()),
@@ -279,14 +279,14 @@ impl FakeDnsManager {
         let db = self.db.lock().await;
 
         // ip -> domain_name
-        let ip2name_key = FakeDnsManager::get_ip2name_key(ip);
+        let ip2name_key = Self::get_ip2name_key(ip);
         match db.get(&ip2name_key)? {
             None => Ok(None),
             Some(v) => {
                 // Got ip -> domain_name
 
                 let mut ip_mapping = proto::IpAddrMapping::decode(&v)?;
-                let now = FakeDnsManager::get_current_timestamp();
+                let now = Self::get_current_timestamp();
                 if ip_mapping.expire_time >= now {
                     // Ok. It is not expired yet. Try to extend its expire time.
                     ip_mapping.expire_time = now + self.expire_duration.as_secs() as i64;
@@ -301,7 +301,7 @@ impl FakeDnsManager {
                     };
 
                     {
-                        let name2ip_key = FakeDnsManager::get_name2ip_key(&name);
+                        let name2ip_key = Self::get_name2ip_key(&name);
                         match db.get(&name2ip_key)? {
                             Some(v) => {
                                 let mut domain_name_mapping = proto::DomainNameMapping::decode(&v)?;

@@ -35,8 +35,8 @@ pub struct Socks5AuthConfig {
 
 impl Socks5AuthConfig {
     /// Create a new SOCKS5 Authentication configuration
-    pub fn new() -> Socks5AuthConfig {
-        Socks5AuthConfig {
+    pub fn new() -> Self {
+        Self {
             passwd: Socks5AuthPasswdConfig::new(),
         }
     }
@@ -54,7 +54,7 @@ impl Socks5AuthConfig {
     ///         ]
     ///      }
     /// }
-    pub fn load_from_file<P: AsRef<Path> + ?Sized>(filename: &P) -> io::Result<Socks5AuthConfig> {
+    pub fn load_from_file<P: AsRef<Path> + ?Sized>(filename: &P) -> io::Result<Self> {
         let filename = filename.as_ref();
 
         trace!(
@@ -78,7 +78,7 @@ impl Socks5AuthConfig {
             }
         }
 
-        Ok(Socks5AuthConfig { passwd })
+        Ok(Self { passwd })
     }
 
     /// Check if authentication is required
@@ -88,8 +88,8 @@ impl Socks5AuthConfig {
 }
 
 impl Default for Socks5AuthConfig {
-    fn default() -> Socks5AuthConfig {
-        Socks5AuthConfig::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -103,8 +103,8 @@ pub struct Socks5AuthPasswdConfig {
 
 impl Socks5AuthPasswdConfig {
     /// Create an empty `Passwd` configuration
-    pub fn new() -> Socks5AuthPasswdConfig {
-        Socks5AuthPasswdConfig { passwd: HashMap::new() }
+    pub fn new() -> Self {
+        Self { passwd: HashMap::new() }
     }
 
     /// Add a user with password
@@ -135,7 +135,7 @@ impl Socks5AuthPasswdConfig {
 }
 
 impl Default for Socks5AuthPasswdConfig {
-    fn default() -> Socks5AuthPasswdConfig {
-        Socks5AuthPasswdConfig::new()
+    fn default() -> Self {
+        Self::new()
     }
 }

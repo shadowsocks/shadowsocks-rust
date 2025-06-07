@@ -11,7 +11,7 @@ struct DomainPart {
 
 impl DomainPart {
     fn new() -> Self {
-        DomainPart {
+        Self {
             included: false,
             children: HashMap::new(),
         }
@@ -29,7 +29,7 @@ impl Debug for SubDomainsTree {
 
 impl SubDomainsTree {
     pub fn new() -> Self {
-        SubDomainsTree(HashMap::new())
+        Self(HashMap::new())
     }
 
     pub fn insert(&mut self, value: &str) {

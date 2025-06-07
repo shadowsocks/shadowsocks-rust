@@ -33,9 +33,9 @@ pub enum TcpStream {
 }
 
 impl TcpStream {
-    pub async fn connect(addr: SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
+    pub async fn connect(addr: SocketAddr, opts: &ConnectOpts) -> io::Result<Self> {
         if opts.tcp.mptcp {
-            return TcpStream::connect_mptcp(addr, opts).await;
+            return Self::connect_mptcp(addr, opts).await;
         }
 
         let socket = match addr {
@@ -43,15 +43,15 @@ impl TcpStream {
             SocketAddr::V6(..) => TcpSocket::new_v6()?,
         };
 
-        TcpStream::connect_with_socket(socket, addr, opts).await
+        Self::connect_with_socket(socket, addr, opts).await
     }
 
-    async fn connect_mptcp(addr: SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
+    async fn connect_mptcp(addr: SocketAddr, opts: &ConnectOpts) -> io::Result<Self> {
         let socket = create_mptcp_socket(&addr)?;
-        TcpStream::connect_with_socket(socket, addr, opts).await
+        Self::connect_with_socket(socket, addr, opts).await
     }
 
-    async fn connect_with_socket(socket: TcpSocket, addr: SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
+    async fn connect_with_socket(socket: TcpSocket, addr: SocketAddr, opts: &ConnectOpts) -> io::Result<Self> {
         // Any traffic to localhost should not be protected
         // This is a workaround for VPNService
         #[cfg(target_os = "android")]
@@ -101,40 +101,40 @@ impl TcpStream {
             let stream = socket.connect(addr).await?;
             set_common_sockopt_after_connect(&stream, opts)?;
 
-            return Ok(TcpStream::Standard(stream));
+            return Ok(Self::Standard(stream));
         }
 
         let stream = TfoStream::connect_with_socket(socket, addr).await?;
         set_common_sockopt_after_connect(&stream, opts)?;
 
-        Ok(TcpStream::FastOpen(stream))
+        Ok(Self::FastOpen(stream))
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         match *self {
-            TcpStream::Standard(ref s) => s.local_addr(),
-            TcpStream::FastOpen(ref s) => s.local_addr(),
+            Self::Standard(ref s) => s.local_addr(),
+            Self::FastOpen(ref s) => s.local_addr(),
         }
     }
 
     pub fn peer_addr(&self) -> io::Result<SocketAddr> {
         match *self {
-            TcpStream::Standard(ref s) => s.peer_addr(),
-            TcpStream::FastOpen(ref s) => s.peer_addr(),
+            Self::Standard(ref s) => s.peer_addr(),
+            Self::FastOpen(ref s) => s.peer_addr(),
         }
     }
 
     pub fn nodelay(&self) -> io::Result<bool> {
         match *self {
-            TcpStream::Standard(ref s) => s.nodelay(),
-            TcpStream::FastOpen(ref s) => s.nodelay(),
+            Self::Standard(ref s) => s.nodelay(),
+            Self::FastOpen(ref s) => s.nodelay(),
         }
     }
 
     pub fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
         match *self {
-            TcpStream::Standard(ref s) => s.set_nodelay(nodelay),
-            TcpStream::FastOpen(ref s) => s.set_nodelay(nodelay),
+            Self::Standard(ref s) => s.set_nodelay(nodelay),
+            Self::FastOpen(ref s) => s.set_nodelay(nodelay),
         }
     }
 }
@@ -142,8 +142,8 @@ impl TcpStream {
 impl AsRawFd for TcpStream {
     fn as_raw_fd(&self) -> RawFd {
         match *self {
-            TcpStream::Standard(ref s) => s.as_raw_fd(),
-            TcpStream::FastOpen(ref s) => s.as_raw_fd(),
+            Self::Standard(ref s) => s.as_raw_fd(),
+            Self::FastOpen(ref s) => s.as_raw_fd(),
         }
     }
 }

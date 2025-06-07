@@ -45,8 +45,8 @@ pub struct ProxyServerStream<S> {
 
 impl<S> ProxyServerStream<S> {
     /// Create a `ProxyServerStream` from a connection stream
-    pub fn from_stream(context: SharedContext, stream: S, method: CipherKind, key: &[u8]) -> ProxyServerStream<S> {
-        ProxyServerStream::from_stream_with_user_manager(context, stream, method, key, None)
+    pub fn from_stream(context: SharedContext, stream: S, method: CipherKind, key: &[u8]) -> Self {
+        Self::from_stream_with_user_manager(context, stream, method, key, None)
     }
 
     /// Create a `ProxyServerStream` from a connection stream
@@ -58,7 +58,7 @@ impl<S> ProxyServerStream<S> {
         method: CipherKind,
         key: &[u8],
         user_manager: Option<Arc<ServerUserManager>>,
-    ) -> ProxyServerStream<S> {
+    ) -> Self {
         #[cfg(feature = "aead-cipher-2022")]
         let writer_state = if method.is_aead_2022() {
             ProxyServerStreamWriteState::PrepareHeader(None)
@@ -70,7 +70,7 @@ impl<S> ProxyServerStream<S> {
         let writer_state = ProxyServerStreamWriteState::Established;
 
         const EMPTY_IDENTITY: [Bytes; 0] = [];
-        ProxyServerStream {
+        Self {
             stream: CryptoStream::from_stream_with_identity(
                 &context,
                 stream,

@@ -29,14 +29,14 @@ pub struct FakeDnsBuilder {
 
 impl FakeDnsBuilder {
     /// Create a new Fake DNS server
-    pub fn new(client_addr: ServerAddr) -> FakeDnsBuilder {
+    pub fn new(client_addr: ServerAddr) -> Self {
         let context = ServiceContext::new();
-        FakeDnsBuilder::with_context(Arc::new(context), client_addr)
+        Self::with_context(Arc::new(context), client_addr)
     }
 
     /// Create a new Fake DNS server with context
-    pub fn with_context(context: Arc<ServiceContext>, client_addr: ServerAddr) -> FakeDnsBuilder {
-        FakeDnsBuilder {
+    pub fn with_context(context: Arc<ServiceContext>, client_addr: ServerAddr) -> Self {
+        Self {
             context,
             mode: Mode::TcpAndUdp,
             client_addr,

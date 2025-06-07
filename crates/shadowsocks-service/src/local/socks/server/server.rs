@@ -34,8 +34,8 @@ impl SocksTcpServerBuilder {
         balancer: PingBalancer,
         mode: Mode,
         socks5_auth: Socks5AuthConfig,
-    ) -> SocksTcpServerBuilder {
-        SocksTcpServerBuilder {
+    ) -> Self {
+        Self {
             context,
             client_config,
             udp_associate_addr,

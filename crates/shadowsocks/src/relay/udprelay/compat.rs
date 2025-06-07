@@ -47,11 +47,11 @@ impl DatagramSocket for UdpSocket {
 
 impl DatagramReceive for UdpSocket {
     fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        UdpSocket::poll_recv(self, cx, buf)
+        Self::poll_recv(self, cx, buf)
     }
 
     fn poll_recv_from(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<SocketAddr>> {
-        UdpSocket::poll_recv_from(self, cx, buf)
+        Self::poll_recv_from(self, cx, buf)
     }
 
     fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -61,11 +61,11 @@ impl DatagramReceive for UdpSocket {
 
 impl DatagramSend for UdpSocket {
     fn poll_send(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        UdpSocket::poll_send(self, cx, buf)
+        Self::poll_send(self, cx, buf)
     }
 
     fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<io::Result<usize>> {
-        UdpSocket::poll_send_to(self, cx, buf, target)
+        Self::poll_send_to(self, cx, buf, target)
     }
 
     fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {

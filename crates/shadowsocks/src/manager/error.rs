@@ -16,7 +16,7 @@ pub enum Error {
 }
 
 impl From<Error> for io::Error {
-    fn from(e: Error) -> io::Error {
+    fn from(e: Error) -> Self {
         match e {
             Error::IoError(e) => e,
             Error::ProtocolError(e) => From::from(e),

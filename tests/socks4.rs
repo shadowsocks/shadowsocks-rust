@@ -27,7 +27,7 @@ pub struct Socks4TestServer {
 }
 
 impl Socks4TestServer {
-    pub fn new<S, L>(svr_addr: S, local_addr: L, pwd: &str, method: CipherKind) -> Socks4TestServer
+    pub fn new<S, L>(svr_addr: S, local_addr: L, pwd: &str, method: CipherKind) -> Self
     where
         S: ToSocketAddrs,
         L: ToSocketAddrs,
@@ -35,7 +35,7 @@ impl Socks4TestServer {
         let svr_addr = svr_addr.to_socket_addrs().unwrap().next().unwrap();
         let local_addr = local_addr.to_socket_addrs().unwrap().next().unwrap();
 
-        Socks4TestServer {
+        Self {
             local_addr,
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);

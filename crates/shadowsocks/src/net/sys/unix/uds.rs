@@ -25,8 +25,8 @@ pub struct UnixStream {
 
 impl UnixStream {
     /// Connects to the socket named by `path`.
-    pub async fn connect<P: AsRef<Path>>(path: P) -> io::Result<UnixStream> {
-        TokioUnixStream::connect(path).await.map(|io| UnixStream { io })
+    pub async fn connect<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        TokioUnixStream::connect(path).await.map(|io| Self { io })
     }
 
     fn poll_send_with_fd(&self, cx: &mut Context, buf: &[u8], fds: &[RawFd]) -> Poll<io::Result<usize>> {
@@ -100,8 +100,8 @@ pub struct UnixListener {
 
 impl UnixListener {
     /// Creates a new `UnixListener` bound to the specified socket.
-    pub fn bind<P: AsRef<Path>>(path: P) -> io::Result<UnixListener> {
-        TokioUnixListener::bind(path).map(|io| UnixListener { io })
+    pub fn bind<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        TokioUnixListener::bind(path).map(|io| Self { io })
     }
 
     /// Accepts a new incoming connection to this listener.
