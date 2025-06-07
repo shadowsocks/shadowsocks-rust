@@ -54,8 +54,8 @@ pub enum ServerType {
 impl fmt::Display for ServerType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ServerType::Tcp => f.write_str("TCP"),
-            ServerType::Udp => f.write_str("UDP"),
+            Self::Tcp => f.write_str("TCP"),
+            Self::Udp => f.write_str("UDP"),
         }
     }
 }
@@ -71,8 +71,8 @@ pub struct PingBalancerBuilder {
 }
 
 impl PingBalancerBuilder {
-    pub fn new(context: Arc<ServiceContext>, mode: Mode) -> PingBalancerBuilder {
-        PingBalancerBuilder {
+    pub fn new(context: Arc<ServiceContext>, mode: Mode) -> Self {
+        Self {
             servers: Vec::new(),
             context,
             mode,
@@ -241,7 +241,7 @@ impl PingBalancerContext {
         max_server_rtt: Duration,
         check_interval: Duration,
         check_best_interval: Option<Duration>,
-    ) -> io::Result<(Arc<PingBalancerContext>, PingBalancerContextTask)> {
+    ) -> io::Result<(Arc<Self>, PingBalancerContextTask)> {
         let plugin_abortable = {
             // Start plugins for TCP proxies
 
@@ -305,7 +305,7 @@ impl PingBalancerContext {
 
         let (best_tcp_idx, best_udp_idx) = PingBalancerBuilder::find_best_idx(&servers, mode);
 
-        let balancer_context = PingBalancerContext {
+        let balancer_context = Self {
             servers,
             best_tcp_idx: AtomicUsize::new(best_tcp_idx),
             best_udp_idx: AtomicUsize::new(best_udp_idx),
@@ -360,10 +360,10 @@ impl PingBalancerContext {
 
         for server in self.servers.iter() {
             let svr_cfg = server.server_config();
-            if self.mode.enable_tcp() && PingBalancerContext::check_server_tcp_enabled(svr_cfg) {
+            if self.mode.enable_tcp() && Self::check_server_tcp_enabled(svr_cfg) {
                 tcp_count += 1;
             }
-            if self.mode.enable_udp() && PingBalancerContext::check_server_udp_enabled(svr_cfg) {
+            if self.mode.enable_udp() && Self::check_server_udp_enabled(svr_cfg) {
                 udp_count += 1;
             }
         }
@@ -397,7 +397,7 @@ impl PingBalancerContext {
         for server in servers.iter() {
             let svr_cfg = server.server_config();
 
-            if self.mode.enable_tcp() && PingBalancerContext::check_server_tcp_enabled(svr_cfg) {
+            if self.mode.enable_tcp() && Self::check_server_tcp_enabled(svr_cfg) {
                 let checker = PingChecker {
                     server: server.clone(),
                     server_type: ServerType::Tcp,
@@ -407,7 +407,7 @@ impl PingBalancerContext {
                 vfut_tcp.push(checker.check_update_score());
             }
 
-            if self.mode.enable_udp() && PingBalancerContext::check_server_udp_enabled(svr_cfg) {
+            if self.mode.enable_udp() && Self::check_server_udp_enabled(svr_cfg) {
                 let checker = PingChecker {
                     server: server.clone(),
                     server_type: ServerType::Udp,
@@ -523,7 +523,7 @@ impl PingBalancerContext {
         let mut check_tcp = false;
         let mut check_udp = false;
 
-        if self.mode.enable_tcp() && PingBalancerContext::check_server_tcp_enabled(best_tcp_svr_cfg) {
+        if self.mode.enable_tcp() && Self::check_server_tcp_enabled(best_tcp_svr_cfg) {
             let checker = PingChecker {
                 server: best_tcp_server.clone(),
                 server_type: ServerType::Tcp,
@@ -534,7 +534,7 @@ impl PingBalancerContext {
             check_tcp = true;
         }
 
-        if self.mode.enable_udp() && PingBalancerContext::check_server_udp_enabled(best_udp_svr_cfg) {
+        if self.mode.enable_udp() && Self::check_server_udp_enabled(best_udp_svr_cfg) {
             let checker = PingChecker {
                 server: best_udp_server.clone(),
                 server_type: ServerType::Udp,
@@ -1032,7 +1032,7 @@ struct ServerConfigFormatter<'a> {
 }
 
 impl<'a> ServerConfigFormatter<'a> {
-    fn new(server_config: &'a ServerConfig) -> ServerConfigFormatter<'a> {
+    fn new(server_config: &'a ServerConfig) -> Self {
         ServerConfigFormatter { server_config }
     }
 }

@@ -11,32 +11,32 @@ pub enum IpPacket<T: AsRef<[u8]>> {
 }
 
 impl<T: AsRef<[u8]> + Copy> IpPacket<T> {
-    pub fn new_checked(packet: T) -> smoltcp::wire::Result<Option<IpPacket<T>>> {
+    pub fn new_checked(packet: T) -> smoltcp::wire::Result<Option<Self>> {
         let buffer = packet.as_ref();
         match IpVersion::of_packet(buffer)? {
-            IpVersion::Ipv4 => Ok(Some(IpPacket::Ipv4(Ipv4Packet::new_checked(packet)?))),
-            IpVersion::Ipv6 => Ok(Some(IpPacket::Ipv6(Ipv6Packet::new_checked(packet)?))),
+            IpVersion::Ipv4 => Ok(Some(Self::Ipv4(Ipv4Packet::new_checked(packet)?))),
+            IpVersion::Ipv6 => Ok(Some(Self::Ipv6(Ipv6Packet::new_checked(packet)?))),
         }
     }
 
     pub fn src_addr(&self) -> IpAddr {
         match *self {
-            IpPacket::Ipv4(ref packet) => IpAddr::from(packet.src_addr()),
-            IpPacket::Ipv6(ref packet) => IpAddr::from(packet.src_addr()),
+            Self::Ipv4(ref packet) => IpAddr::from(packet.src_addr()),
+            Self::Ipv6(ref packet) => IpAddr::from(packet.src_addr()),
         }
     }
 
     pub fn dst_addr(&self) -> IpAddr {
         match *self {
-            IpPacket::Ipv4(ref packet) => IpAddr::from(packet.dst_addr()),
-            IpPacket::Ipv6(ref packet) => IpAddr::from(packet.dst_addr()),
+            Self::Ipv4(ref packet) => IpAddr::from(packet.dst_addr()),
+            Self::Ipv6(ref packet) => IpAddr::from(packet.dst_addr()),
         }
     }
 
     pub fn protocol(&self) -> IpProtocol {
         match *self {
-            IpPacket::Ipv4(ref packet) => packet.next_header(),
-            IpPacket::Ipv6(ref packet) => packet.next_header(),
+            Self::Ipv4(ref packet) => packet.next_header(),
+            Self::Ipv6(ref packet) => packet.next_header(),
         }
     }
 }

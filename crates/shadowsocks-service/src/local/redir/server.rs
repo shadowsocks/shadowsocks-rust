@@ -27,14 +27,14 @@ pub struct RedirBuilder {
 
 impl RedirBuilder {
     /// Create a new transparent proxy server with default configuration
-    pub fn new(client_addr: ServerAddr, balancer: PingBalancer) -> RedirBuilder {
+    pub fn new(client_addr: ServerAddr, balancer: PingBalancer) -> Self {
         let context = ServiceContext::new();
-        RedirBuilder::with_context(Arc::new(context), client_addr, balancer)
+        Self::with_context(Arc::new(context), client_addr, balancer)
     }
 
     /// Create a new transparent proxy server with context
-    pub fn with_context(context: Arc<ServiceContext>, client_addr: ServerAddr, balancer: PingBalancer) -> RedirBuilder {
-        RedirBuilder {
+    pub fn with_context(context: Arc<ServiceContext>, client_addr: ServerAddr, balancer: PingBalancer) -> Self {
+        Self {
             context,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,

@@ -70,7 +70,7 @@ impl Plugin {
     ///
     /// `PluginMode::Client`: Plugin listens to `local_addr` and send data to `remote_addr`, client should send data to `local_addr`
     /// `PluginMode::Server`: Plugin listens to `remote_addr` and send data to `local_addr`, server should listen to `local_addr`
-    pub fn start(c: &PluginConfig, remote_addr: &ServerAddr, mode: PluginMode) -> io::Result<Plugin> {
+    pub fn start(c: &PluginConfig, remote_addr: &ServerAddr, mode: PluginMode) -> io::Result<Self> {
         let loop_ip = match remote_addr {
             ServerAddr::SocketAddr(sa) => match sa.ip() {
                 IpAddr::V4(..) => Ipv4Addr::LOCALHOST.into(),
@@ -113,7 +113,7 @@ impl Plugin {
                     }
                 }
 
-                Ok(Plugin {
+                Ok(Self {
                     process,
                     local_addr,
                     mode: c.plugin_mode,

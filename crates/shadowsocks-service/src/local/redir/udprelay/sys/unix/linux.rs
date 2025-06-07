@@ -30,15 +30,15 @@ impl UdpRedirSocket {
     /// Create a new UDP socket binded to `addr`
     ///
     /// This will allow listening to `addr` that is not in local host
-    pub fn listen(ty: RedirType, addr: SocketAddr) -> io::Result<UdpRedirSocket> {
-        UdpRedirSocket::bind(ty, addr, false)
+    pub fn listen(ty: RedirType, addr: SocketAddr) -> io::Result<Self> {
+        Self::bind(ty, addr, false)
     }
 
     /// Create a new UDP socket binded to `addr`
     ///
     /// This will allow binding to `addr` that is not in local host
-    pub fn bind_nonlocal(ty: RedirType, addr: SocketAddr, redir_opts: &RedirSocketOpts) -> io::Result<UdpRedirSocket> {
-        let socket = UdpRedirSocket::bind(ty, addr, true)?;
+    pub fn bind_nonlocal(ty: RedirType, addr: SocketAddr, redir_opts: &RedirSocketOpts) -> io::Result<Self> {
+        let socket = Self::bind(ty, addr, true)?;
 
         if let Some(mark) = redir_opts.fwmark {
             let ret = unsafe {
@@ -58,7 +58,7 @@ impl UdpRedirSocket {
         Ok(socket)
     }
 
-    fn bind(ty: RedirType, addr: SocketAddr, reuse_port: bool) -> io::Result<UdpRedirSocket> {
+    fn bind(ty: RedirType, addr: SocketAddr, reuse_port: bool) -> io::Result<Self> {
         if ty != RedirType::TProxy {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -123,7 +123,7 @@ impl UdpRedirSocket {
         }
 
         let io = AsyncFd::new(socket.into())?;
-        Ok(UdpRedirSocket { io })
+        Ok(Self { io })
     }
 
     /// Send data to the socket to the given target address

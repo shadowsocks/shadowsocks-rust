@@ -63,19 +63,19 @@ impl Command {
     #[rustfmt::skip]
     fn as_u8(self) -> u8 {
         match self {
-            Command::TcpConnect   => consts::SOCKS5_CMD_TCP_CONNECT,
-            Command::TcpBind      => consts::SOCKS5_CMD_TCP_BIND,
-            Command::UdpAssociate => consts::SOCKS5_CMD_UDP_ASSOCIATE,
+            Self::TcpConnect   => consts::SOCKS5_CMD_TCP_CONNECT,
+            Self::TcpBind      => consts::SOCKS5_CMD_TCP_BIND,
+            Self::UdpAssociate => consts::SOCKS5_CMD_UDP_ASSOCIATE,
         }
     }
 
     #[inline]
     #[rustfmt::skip]
-    fn from_u8(code: u8) -> Option<Command> {
+    fn from_u8(code: u8) -> Option<Self> {
         match code {
-            consts::SOCKS5_CMD_TCP_CONNECT   => Some(Command::TcpConnect),
-            consts::SOCKS5_CMD_TCP_BIND      => Some(Command::TcpBind),
-            consts::SOCKS5_CMD_UDP_ASSOCIATE => Some(Command::UdpAssociate),
+            consts::SOCKS5_CMD_TCP_CONNECT   => Some(Self::TcpConnect),
+            consts::SOCKS5_CMD_TCP_BIND      => Some(Self::TcpBind),
+            consts::SOCKS5_CMD_UDP_ASSOCIATE => Some(Self::UdpAssociate),
             _                                => None,
         }
     }
@@ -102,33 +102,33 @@ impl Reply {
     #[rustfmt::skip]
     pub fn as_u8(self) -> u8 {
         match self {
-            Reply::Succeeded               => consts::SOCKS5_REPLY_SUCCEEDED,
-            Reply::GeneralFailure          => consts::SOCKS5_REPLY_GENERAL_FAILURE,
-            Reply::ConnectionNotAllowed    => consts::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
-            Reply::NetworkUnreachable      => consts::SOCKS5_REPLY_NETWORK_UNREACHABLE,
-            Reply::HostUnreachable         => consts::SOCKS5_REPLY_HOST_UNREACHABLE,
-            Reply::ConnectionRefused       => consts::SOCKS5_REPLY_CONNECTION_REFUSED,
-            Reply::TtlExpired              => consts::SOCKS5_REPLY_TTL_EXPIRED,
-            Reply::CommandNotSupported     => consts::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
-            Reply::AddressTypeNotSupported => consts::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED,
-            Reply::OtherReply(c)           => c,
+            Self::Succeeded               => consts::SOCKS5_REPLY_SUCCEEDED,
+            Self::GeneralFailure          => consts::SOCKS5_REPLY_GENERAL_FAILURE,
+            Self::ConnectionNotAllowed    => consts::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
+            Self::NetworkUnreachable      => consts::SOCKS5_REPLY_NETWORK_UNREACHABLE,
+            Self::HostUnreachable         => consts::SOCKS5_REPLY_HOST_UNREACHABLE,
+            Self::ConnectionRefused       => consts::SOCKS5_REPLY_CONNECTION_REFUSED,
+            Self::TtlExpired              => consts::SOCKS5_REPLY_TTL_EXPIRED,
+            Self::CommandNotSupported     => consts::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
+            Self::AddressTypeNotSupported => consts::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED,
+            Self::OtherReply(c)           => c,
         }
     }
 
     #[inline]
     #[rustfmt::skip]
-    pub fn from_u8(code: u8) -> Reply {
+    pub fn from_u8(code: u8) -> Self {
         match code {
-            consts::SOCKS5_REPLY_SUCCEEDED                  => Reply::Succeeded,
-            consts::SOCKS5_REPLY_GENERAL_FAILURE            => Reply::GeneralFailure,
-            consts::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED     => Reply::ConnectionNotAllowed,
-            consts::SOCKS5_REPLY_NETWORK_UNREACHABLE        => Reply::NetworkUnreachable,
-            consts::SOCKS5_REPLY_HOST_UNREACHABLE           => Reply::HostUnreachable,
-            consts::SOCKS5_REPLY_CONNECTION_REFUSED         => Reply::ConnectionRefused,
-            consts::SOCKS5_REPLY_TTL_EXPIRED                => Reply::TtlExpired,
-            consts::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED      => Reply::CommandNotSupported,
-            consts::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED => Reply::AddressTypeNotSupported,
-            _                                               => Reply::OtherReply(code),
+            consts::SOCKS5_REPLY_SUCCEEDED                  => Self::Succeeded,
+            consts::SOCKS5_REPLY_GENERAL_FAILURE            => Self::GeneralFailure,
+            consts::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED     => Self::ConnectionNotAllowed,
+            consts::SOCKS5_REPLY_NETWORK_UNREACHABLE        => Self::NetworkUnreachable,
+            consts::SOCKS5_REPLY_HOST_UNREACHABLE           => Self::HostUnreachable,
+            consts::SOCKS5_REPLY_CONNECTION_REFUSED         => Self::ConnectionRefused,
+            consts::SOCKS5_REPLY_TTL_EXPIRED                => Self::TtlExpired,
+            consts::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED      => Self::CommandNotSupported,
+            consts::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED => Self::AddressTypeNotSupported,
+            _                                               => Self::OtherReply(code),
         }
     }
 }
@@ -137,16 +137,16 @@ impl fmt::Display for Reply {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Reply::Succeeded               => write!(f, "Succeeded"),
-            Reply::AddressTypeNotSupported => write!(f, "Address type not supported"),
-            Reply::CommandNotSupported     => write!(f, "Command not supported"),
-            Reply::ConnectionNotAllowed    => write!(f, "Connection not allowed"),
-            Reply::ConnectionRefused       => write!(f, "Connection refused"),
-            Reply::GeneralFailure          => write!(f, "General failure"),
-            Reply::HostUnreachable         => write!(f, "Host unreachable"),
-            Reply::NetworkUnreachable      => write!(f, "Network unreachable"),
-            Reply::OtherReply(u)           => write!(f, "Other reply ({u})"),
-            Reply::TtlExpired              => write!(f, "TTL expired"),
+            Self::Succeeded               => write!(f, "Succeeded"),
+            Self::AddressTypeNotSupported => write!(f, "Address type not supported"),
+            Self::CommandNotSupported     => write!(f, "Command not supported"),
+            Self::ConnectionNotAllowed    => write!(f, "Connection not allowed"),
+            Self::ConnectionRefused       => write!(f, "Connection refused"),
+            Self::GeneralFailure          => write!(f, "General failure"),
+            Self::HostUnreachable         => write!(f, "Host unreachable"),
+            Self::NetworkUnreachable      => write!(f, "Network unreachable"),
+            Self::OtherReply(u)           => write!(f, "Other reply ({u})"),
+            Self::TtlExpired              => write!(f, "TTL expired"),
         }
     }
 }
@@ -173,10 +173,10 @@ pub enum Error {
 }
 
 impl From<Error> for io::Error {
-    fn from(err: Error) -> io::Error {
+    fn from(err: Error) -> Self {
         match err {
             Error::IoError(err) => err,
-            e => io::Error::other(e),
+            e => Self::other(e),
         }
     }
 }
@@ -185,17 +185,17 @@ impl Error {
     /// Convert to `Reply` for responding
     pub fn as_reply(&self) -> Reply {
         match *self {
-            Error::IoError(ref err) => match err.kind() {
+            Self::IoError(ref err) => match err.kind() {
                 ErrorKind::ConnectionRefused => Reply::ConnectionRefused,
                 _ => Reply::GeneralFailure,
             },
-            Error::AddressTypeNotSupported(..) => Reply::AddressTypeNotSupported,
-            Error::AddressDomainInvalidEncoding => Reply::GeneralFailure,
-            Error::UnsupportedSocksVersion(..) => Reply::GeneralFailure,
-            Error::UnsupportedCommand(..) => Reply::CommandNotSupported,
-            Error::UnsupportedPasswdAuthVersion(..) => Reply::GeneralFailure,
-            Error::PasswdAuthInvalidRequest => Reply::GeneralFailure,
-            Error::Reply(r) => r,
+            Self::AddressTypeNotSupported(..) => Reply::AddressTypeNotSupported,
+            Self::AddressDomainInvalidEncoding => Reply::GeneralFailure,
+            Self::UnsupportedSocksVersion(..) => Reply::GeneralFailure,
+            Self::UnsupportedCommand(..) => Reply::CommandNotSupported,
+            Self::UnsupportedPasswdAuthVersion(..) => Reply::GeneralFailure,
+            Self::PasswdAuthInvalidRequest => Reply::GeneralFailure,
+            Self::Reply(r) => r,
         }
     }
 }
@@ -211,7 +211,7 @@ pub enum Address {
 
 impl Address {
     /// read from a cursor
-    pub fn read_cursor<T: AsRef<[u8]>>(cur: &mut io::Cursor<T>) -> Result<Address, Error> {
+    pub fn read_cursor<T: AsRef<[u8]>>(cur: &mut io::Cursor<T>) -> Result<Self, Error> {
         if cur.remaining() < 2 {
             return Err(io::Error::other("invalid buf").into());
         }
@@ -224,7 +224,7 @@ impl Address {
                 }
                 let addr = Ipv4Addr::from(cur.get_u32());
                 let port = cur.get_u16();
-                Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(addr, port))))
+                Ok(Self::SocketAddress(SocketAddr::V4(SocketAddrV4::new(addr, port))))
             }
             consts::SOCKS5_ADDR_TYPE_IPV6 => {
                 if cur.remaining() < 16 + 2 {
@@ -232,7 +232,7 @@ impl Address {
                 }
                 let addr = Ipv6Addr::from(cur.get_u128());
                 let port = cur.get_u16();
-                Ok(Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
+                Ok(Self::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
                     addr, port, 0, 0,
                 ))))
             }
@@ -245,14 +245,14 @@ impl Address {
                 cur.copy_to_slice(&mut buf);
                 let port = cur.get_u16();
                 let addr = String::from_utf8(buf).map_err(|_| Error::AddressDomainInvalidEncoding)?;
-                Ok(Address::DomainNameAddress(addr, port))
+                Ok(Self::DomainNameAddress(addr, port))
             }
             _ => Err(Error::AddressTypeNotSupported(atyp)),
         }
     }
 
     /// Parse from a `AsyncRead`
-    pub async fn read_from<R>(stream: &mut R) -> Result<Address, Error>
+    pub async fn read_from<R>(stream: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -267,7 +267,7 @@ impl Address {
 
                 let v4addr = Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]);
                 let port = u16::from_be_bytes([buf[4], buf[5]]);
-                Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port))))
+                Ok(Self::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port))))
             }
             consts::SOCKS5_ADDR_TYPE_IPV6 => {
                 let mut buf = [0u16; 9];
@@ -287,7 +287,7 @@ impl Address {
                 );
                 let port = u16::from_be(buf[8]);
 
-                Ok(Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
+                Ok(Self::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
                     v6addr, port, 0, 0,
                 ))))
             }
@@ -312,7 +312,7 @@ impl Address {
                     Err(..) => return Err(Error::AddressDomainInvalidEncoding),
                 };
 
-                Ok(Address::DomainNameAddress(addr, port))
+                Ok(Self::DomainNameAddress(addr, port))
             }
             _ => {
                 // Wrong Address Type . Socks5 only supports ipv4, ipv6 and domain name
@@ -356,16 +356,16 @@ impl Address {
     /// Get associated port number
     pub fn port(&self) -> u16 {
         match *self {
-            Address::SocketAddress(addr) => addr.port(),
-            Address::DomainNameAddress(.., port) => port,
+            Self::SocketAddress(addr) => addr.port(),
+            Self::DomainNameAddress(.., port) => port,
         }
     }
 
     /// Get host address string
     pub fn host(&self) -> String {
         match *self {
-            Address::SocketAddress(ref addr) => addr.ip().to_string(),
-            Address::DomainNameAddress(ref domain, ..) => domain.to_owned(),
+            Self::SocketAddress(ref addr) => addr.ip().to_string(),
+            Self::DomainNameAddress(ref domain, ..) => domain.to_owned(),
         }
     }
 }
@@ -374,8 +374,8 @@ impl Debug for Address {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
+            Self::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Self::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
@@ -384,8 +384,8 @@ impl fmt::Display for Address {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
+            Self::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Self::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
@@ -395,26 +395,26 @@ impl ToSocketAddrs for Address {
 
     fn to_socket_addrs(&self) -> io::Result<vec::IntoIter<SocketAddr>> {
         match self.clone() {
-            Address::SocketAddress(addr) => Ok(vec![addr].into_iter()),
-            Address::DomainNameAddress(addr, port) => (&addr[..], port).to_socket_addrs(),
+            Self::SocketAddress(addr) => Ok(vec![addr].into_iter()),
+            Self::DomainNameAddress(addr, port) => (&addr[..], port).to_socket_addrs(),
         }
     }
 }
 
 impl From<SocketAddr> for Address {
-    fn from(s: SocketAddr) -> Address {
-        Address::SocketAddress(s)
+    fn from(s: SocketAddr) -> Self {
+        Self::SocketAddress(s)
     }
 }
 
 impl From<(String, u16)> for Address {
-    fn from((dn, port): (String, u16)) -> Address {
-        Address::DomainNameAddress(dn, port)
+    fn from((dn, port): (String, u16)) -> Self {
+        Self::DomainNameAddress(dn, port)
     }
 }
 
-impl From<&Address> for Address {
-    fn from(addr: &Address) -> Address {
+impl From<&Self> for Address {
+    fn from(addr: &Self) -> Self {
         addr.clone()
     }
 }
@@ -434,19 +434,19 @@ impl std::error::Error for AddressError {}
 impl FromStr for Address {
     type Err = AddressError;
 
-    fn from_str(s: &str) -> Result<Address, AddressError> {
+    fn from_str(s: &str) -> Result<Self, AddressError> {
         match s.parse::<SocketAddr>() {
-            Ok(addr) => Ok(Address::SocketAddress(addr)),
+            Ok(addr) => Ok(Self::SocketAddress(addr)),
             Err(..) => {
                 let mut sp = s.split(':');
                 match (sp.next(), sp.next()) {
                     (Some(dn), Some(port)) => match port.parse::<u16>() {
-                        Ok(port) => Ok(Address::DomainNameAddress(dn.to_owned(), port)),
+                        Ok(port) => Ok(Self::DomainNameAddress(dn.to_owned(), port)),
                         Err(..) => Err(AddressError),
                     },
                     (Some(dn), None) => {
                         // Assume it is 80 (http's default port)
-                        Ok(Address::DomainNameAddress(dn.to_owned(), 80))
+                        Ok(Self::DomainNameAddress(dn.to_owned(), 80))
                     }
                     _ => Err(AddressError),
                 }
@@ -524,15 +524,15 @@ pub struct TcpRequestHeader {
 
 impl TcpRequestHeader {
     /// Creates a request header
-    pub fn new(cmd: Command, addr: Address) -> TcpRequestHeader {
-        TcpRequestHeader {
+    pub fn new(cmd: Command, addr: Address) -> Self {
+        Self {
             command: cmd,
             address: addr,
         }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<TcpRequestHeader, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -551,7 +551,7 @@ impl TcpRequestHeader {
         };
 
         let address = Address::read_from(r).await?;
-        Ok(TcpRequestHeader { command, address })
+        Ok(Self { command, address })
     }
 
     /// Write data into a writer
@@ -566,7 +566,7 @@ impl TcpRequestHeader {
 
     /// Writes to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        let TcpRequestHeader {
+        let Self {
             ref address,
             ref command,
         } = *self;
@@ -601,12 +601,12 @@ pub struct TcpResponseHeader {
 
 impl TcpResponseHeader {
     /// Creates a response header
-    pub fn new(reply: Reply, address: Address) -> TcpResponseHeader {
-        TcpResponseHeader { reply, address }
+    pub fn new(reply: Reply, address: Address) -> Self {
+        Self { reply, address }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<TcpResponseHeader, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -622,7 +622,7 @@ impl TcpResponseHeader {
 
         let address = Address::read_from(r).await?;
 
-        Ok(TcpResponseHeader {
+        Ok(Self {
             reply: Reply::from_u8(reply_code),
             address,
         })
@@ -640,7 +640,7 @@ impl TcpResponseHeader {
 
     /// Writes to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        let TcpResponseHeader { ref reply, ref address } = *self;
+        let Self { ref reply, ref address } = *self;
         buf.put_slice(&[consts::SOCKS5_VERSION, reply.as_u8(), 0x00]);
         address.write_to_buf(buf);
     }
@@ -668,12 +668,12 @@ pub struct HandshakeRequest {
 
 impl HandshakeRequest {
     /// Creates a handshake request
-    pub fn new(methods: Vec<u8>) -> HandshakeRequest {
-        HandshakeRequest { methods }
+    pub fn new(methods: Vec<u8>) -> Self {
+        Self { methods }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<HandshakeRequest, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -690,7 +690,7 @@ impl HandshakeRequest {
         let mut methods = vec![0u8; nmet as usize];
         let _ = r.read_exact(&mut methods).await?;
 
-        Ok(HandshakeRequest { methods })
+        Ok(Self { methods })
     }
 
     /// Write to a writer
@@ -705,7 +705,7 @@ impl HandshakeRequest {
 
     /// Write to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        let HandshakeRequest { ref methods } = *self;
+        let Self { ref methods } = *self;
         buf.put_slice(&[consts::SOCKS5_VERSION, methods.len() as u8]);
         buf.put_slice(methods);
     }
@@ -732,12 +732,12 @@ pub struct HandshakeResponse {
 
 impl HandshakeResponse {
     /// Creates a handshake response
-    pub fn new(cm: u8) -> HandshakeResponse {
-        HandshakeResponse { chosen_method: cm }
+    pub fn new(cm: u8) -> Self {
+        Self { chosen_method: cm }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<HandshakeResponse, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -750,7 +750,7 @@ impl HandshakeResponse {
         if ver != consts::SOCKS5_VERSION {
             Err(Error::UnsupportedSocksVersion(ver))
         } else {
-            Ok(HandshakeResponse { chosen_method: met })
+            Ok(Self { chosen_method: met })
         }
     }
 
@@ -796,12 +796,12 @@ pub struct UdpAssociateHeader {
 
 impl UdpAssociateHeader {
     /// Creates a header
-    pub fn new(frag: u8, address: Address) -> UdpAssociateHeader {
-        UdpAssociateHeader { frag, address }
+    pub fn new(frag: u8, address: Address) -> Self {
+        Self { frag, address }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<UdpAssociateHeader, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -810,7 +810,7 @@ impl UdpAssociateHeader {
 
         let frag = buf[2];
         let address = Address::read_from(r).await?;
-        Ok(UdpAssociateHeader::new(frag, address))
+        Ok(Self::new(frag, address))
     }
 
     /// Write to a writer
@@ -825,7 +825,7 @@ impl UdpAssociateHeader {
 
     /// Write to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        let UdpAssociateHeader { ref frag, ref address } = *self;
+        let Self { ref frag, ref address } = *self;
         buf.put_slice(&[0x00, 0x00, *frag]);
         address.write_to_buf(buf);
     }
@@ -855,7 +855,7 @@ pub struct PasswdAuthRequest {
 
 impl PasswdAuthRequest {
     /// Create a Username/Password Authentication Request
-    pub fn new<U, P>(uname: U, passwd: P) -> PasswdAuthRequest
+    pub fn new<U, P>(uname: U, passwd: P) -> Self
     where
         U: Into<Vec<u8>>,
         P: Into<Vec<u8>>,
@@ -869,11 +869,11 @@ impl PasswdAuthRequest {
                 && passwd.len() <= u8::MAX as usize
         );
 
-        PasswdAuthRequest { uname, passwd }
+        Self { uname, passwd }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<PasswdAuthRequest, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -911,7 +911,7 @@ impl PasswdAuthRequest {
             let _ = r.read_exact(&mut passwd).await?;
         }
 
-        Ok(PasswdAuthRequest { uname, passwd })
+        Ok(Self { uname, passwd })
     }
 
     /// Write to a writer
@@ -945,12 +945,12 @@ pub struct PasswdAuthResponse {
 }
 
 impl PasswdAuthResponse {
-    pub fn new(status: u8) -> PasswdAuthResponse {
-        PasswdAuthResponse { status }
+    pub fn new(status: u8) -> Self {
+        Self { status }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<PasswdAuthResponse, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<Self, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -961,7 +961,7 @@ impl PasswdAuthResponse {
             return Err(Error::UnsupportedPasswdAuthVersion(buf[0]));
         }
 
-        Ok(PasswdAuthResponse { status: buf[1] })
+        Ok(Self { status: buf[1] })
     }
 
     /// Write to a writer

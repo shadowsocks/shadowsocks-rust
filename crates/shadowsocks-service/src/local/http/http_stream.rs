@@ -22,8 +22,8 @@ pub enum ProxyHttpStream {
 }
 
 impl ProxyHttpStream {
-    pub fn connect_http(stream: AutoProxyClientStream) -> ProxyHttpStream {
-        ProxyHttpStream::Http(stream)
+    pub fn connect_http(stream: AutoProxyClientStream) -> Self {
+        Self::Http(stream)
     }
 
     #[cfg(feature = "local-http-native-tls")]
@@ -59,7 +59,7 @@ impl ProxyHttpStream {
     }
 
     #[cfg(feature = "local-http-rustls")]
-    pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
+    pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<Self> {
         use log::warn;
         use rustls_native_certs::CertificateResult;
         use std::sync::{Arc, LazyLock};
@@ -114,7 +114,7 @@ impl ProxyHttpStream {
         let (_, session) = tls_stream.get_ref();
         let negotiated_http2 = matches!(session.alpn_protocol(), Some(b"h2"));
 
-        Ok(ProxyHttpStream::Https(tls_stream, negotiated_http2))
+        Ok(Self::Https(tls_stream, negotiated_http2))
     }
 
     #[cfg(not(any(feature = "local-http-native-tls", feature = "local-http-rustls")))]
@@ -127,9 +127,9 @@ impl ProxyHttpStream {
 
     pub fn negotiated_http2(&self) -> bool {
         match *self {
-            ProxyHttpStream::Http(..) => false,
+            Self::Http(..) => false,
             #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
-            ProxyHttpStream::Https(_, n) => n,
+            Self::Https(_, n) => n,
         }
     }
 }

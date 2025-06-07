@@ -64,8 +64,8 @@ unsafe impl Send for TunBuilder {}
 
 impl TunBuilder {
     /// Create a Tun service builder
-    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer) -> TunBuilder {
-        TunBuilder {
+    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer) -> Self {
+        Self {
             context,
             balancer,
             tun_config: TunConfiguration::default(),

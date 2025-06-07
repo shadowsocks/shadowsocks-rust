@@ -45,8 +45,8 @@ impl Socks5UdpServerBuilder {
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
         balancer: PingBalancer,
-    ) -> Socks5UdpServerBuilder {
-        Socks5UdpServerBuilder {
+    ) -> Self {
+        Self {
             context,
             client_config,
             time_to_live,

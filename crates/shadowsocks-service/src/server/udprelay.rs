@@ -56,11 +56,11 @@ enum NatMap {
 impl NatMap {
     fn cleanup_expired(&mut self) {
         match *self {
-            NatMap::Association(ref mut m) => {
+            Self::Association(ref mut m) => {
                 m.iter();
             }
             #[cfg(feature = "aead-cipher-2022")]
-            NatMap::Session(ref mut m) => {
+            Self::Session(ref mut m) => {
                 m.iter();
             }
         }
@@ -68,11 +68,11 @@ impl NatMap {
 
     fn keep_alive(&mut self, key: &NatKey) {
         match (self, key) {
-            (NatMap::Association(m), NatKey::PeerAddr(peer_addr)) => {
+            (Self::Association(m), NatKey::PeerAddr(peer_addr)) => {
                 m.get(peer_addr);
             }
             #[cfg(feature = "aead-cipher-2022")]
-            (NatMap::Session(m), NatKey::SessionId(session_id)) => {
+            (Self::Session(m), NatKey::SessionId(session_id)) => {
                 m.get(session_id);
             }
             #[allow(unreachable_patterns)]
@@ -99,7 +99,7 @@ impl UdpServer {
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
         accept_opts: AcceptOpts,
-    ) -> io::Result<UdpServer> {
+    ) -> io::Result<Self> {
         let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
 
         fn create_assoc_map<K, V>(time_to_live: Duration, capacity: Option<usize>) -> LruCache<K, V>
@@ -128,7 +128,7 @@ impl UdpServer {
         let socket = MonProxySocket::from_socket(socket, context.flow_stat());
         let listener = Arc::new(socket);
 
-        Ok(UdpServer {
+        Ok(Self {
             context,
             assoc_map,
             keepalive_tx,
@@ -180,7 +180,7 @@ impl UdpServer {
 
                     loop {
                         let (n, peer_addr, target_addr, control) =
-                            match UdpServer::recv_one_packet(&context, &listener, &mut buffer).await {
+                            match Self::recv_one_packet(&context, &listener, &mut buffer).await {
                                 Some(s) => s,
                                 None => continue,
                             };
@@ -242,7 +242,7 @@ impl UdpServer {
                     self.assoc_map.keep_alive(&peer_addr);
                 }
 
-                recv_result = UdpServer::recv_one_packet(&self.context, &listener, &mut buffer) => {
+                recv_result = Self::recv_one_packet(&self.context, &listener, &mut buffer) => {
                     let (n, peer_addr, target_addr, control) = match recv_result {
                         Some(s) => s,
                         None => continue,
@@ -398,9 +398,9 @@ impl UdpAssociation {
         inbound: Arc<MonProxySocket<InboundUdpSocket>>,
         peer_addr: SocketAddr,
         keepalive_tx: mpsc::Sender<NatKey>,
-    ) -> UdpAssociation {
+    ) -> Self {
         let (assoc_handle, sender) = UdpAssociationContext::create(context, inbound, peer_addr, keepalive_tx, None);
-        UdpAssociation { assoc_handle, sender }
+        Self { assoc_handle, sender }
     }
 
     #[cfg(feature = "aead-cipher-2022")]
@@ -410,10 +410,10 @@ impl UdpAssociation {
         peer_addr: SocketAddr,
         keepalive_tx: mpsc::Sender<NatKey>,
         client_session_id: u64,
-    ) -> UdpAssociation {
+    ) -> Self {
         let (assoc_handle, sender) =
             UdpAssociationContext::create(context, inbound, peer_addr, keepalive_tx, Some(client_session_id));
-        UdpAssociation { assoc_handle, sender }
+        Self { assoc_handle, sender }
     }
 
     fn try_send(&self, data: UdpAssociationSendMessage) -> io::Result<()> {
@@ -432,8 +432,8 @@ struct ClientSessionContext {
 }
 
 impl ClientSessionContext {
-    fn new(client_session_id: u64) -> ClientSessionContext {
-        ClientSessionContext {
+    fn new(client_session_id: u64) -> Self {
+        Self {
             client_session_id,
             packet_window_filter: PacketWindowFilter::new(),
             client_user: None,
@@ -488,7 +488,7 @@ impl UdpAssociationContext {
         // being OOM.
         let (sender, receiver) = mpsc::channel(UDP_ASSOCIATION_SEND_CHANNEL_SIZE);
 
-        let mut assoc = UdpAssociationContext {
+        let mut assoc = Self {
             context,
             peer_addr,
             outbound_ipv4_socket: None,

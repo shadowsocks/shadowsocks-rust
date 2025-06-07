@@ -37,9 +37,9 @@ impl TcpServer {
         context: Arc<ServiceContext>,
         svr_cfg: ServerConfig,
         accept_opts: AcceptOpts,
-    ) -> io::Result<TcpServer> {
+    ) -> io::Result<Self> {
         let listener = ProxyListener::bind_with_opts(context.context(), &svr_cfg, accept_opts).await?;
-        Ok(TcpServer {
+        Ok(Self {
             context,
             svr_cfg,
             listener,

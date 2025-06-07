@@ -141,13 +141,13 @@ impl Drop for TokenBuffer {
 }
 
 impl TokenBuffer {
-    pub fn with_capacity(cap: usize) -> TokenBuffer {
+    pub fn with_capacity(cap: usize) -> Self {
         let mut list = TOKEN_BUFFER_LIST.lock().unwrap();
         if let Some(mut buffer) = list.pop() {
             buffer.reserve(cap);
-            return TokenBuffer { buffer };
+            return Self { buffer };
         }
-        TokenBuffer {
+        Self {
             buffer: BytesMut::with_capacity(cap),
         }
     }

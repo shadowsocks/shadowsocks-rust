@@ -74,10 +74,10 @@ pub enum ProtocolError {
 pub type ProtocolResult<T> = Result<T, ProtocolError>;
 
 impl From<ProtocolError> for io::Error {
-    fn from(e: ProtocolError) -> io::Error {
+    fn from(e: ProtocolError) -> Self {
         match e {
             ProtocolError::IoError(err) => err,
-            _ => io::Error::other(e),
+            _ => Self::other(e),
         }
     }
 }
@@ -101,9 +101,9 @@ pub struct DecryptedReader {
 }
 
 impl DecryptedReader {
-    pub fn new(method: CipherKind, key: &[u8]) -> DecryptedReader {
+    pub fn new(method: CipherKind, key: &[u8]) -> Self {
         if method.salt_len() > 0 {
-            DecryptedReader {
+            Self {
                 state: DecryptReadState::WaitSalt {
                     key: Bytes::copy_from_slice(key),
                 },
@@ -114,7 +114,7 @@ impl DecryptedReader {
                 has_handshaked: false,
             }
         } else {
-            DecryptedReader {
+            Self {
                 state: DecryptReadState::ReadLength,
                 cipher: Some(Cipher::new(method, key, &[])),
                 buffer: BytesMut::with_capacity(2 + method.tag_len()),
@@ -226,7 +226,7 @@ impl DecryptedReader {
         let cipher = self.cipher.as_mut().expect("cipher is None");
 
         let m = &mut self.buffer[..length_len];
-        let length = DecryptedReader::decrypt_length(cipher, m)?;
+        let length = Self::decrypt_length(cipher, m)?;
 
         Ok(Some(length)).into()
     }
@@ -339,12 +339,12 @@ pub struct EncryptedWriter {
 
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(method: CipherKind, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+    pub fn new(method: CipherKind, key: &[u8], nonce: &[u8]) -> Self {
         // nonce should be sent with the first packet
         let mut buffer = BytesMut::with_capacity(nonce.len());
         buffer.put(nonce);
 
-        EncryptedWriter {
+        Self {
             cipher: Cipher::new(method, key, nonce),
             buffer,
             state: EncryptWriteState::AssemblePacket,

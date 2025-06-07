@@ -22,8 +22,8 @@ pub struct MonProxyStream<S> {
 
 impl<S> MonProxyStream<S> {
     #[inline]
-    pub fn from_stream(stream: S, flow_stat: Arc<FlowStat>) -> MonProxyStream<S> {
-        MonProxyStream { stream, flow_stat }
+    pub fn from_stream(stream: S, flow_stat: Arc<FlowStat>) -> Self {
+        Self { stream, flow_stat }
     }
 
     #[inline]

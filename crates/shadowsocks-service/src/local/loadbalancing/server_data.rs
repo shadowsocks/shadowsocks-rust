@@ -25,11 +25,11 @@ pub struct ServerScore {
 
 impl ServerScore {
     /// Create a `ServerScore`
-    pub fn new(user_weight: f32, max_server_rtt: Duration, check_window: Duration) -> ServerScore {
+    pub fn new(user_weight: f32, max_server_rtt: Duration, check_window: Duration) -> Self {
         let max_server_rtt = max_server_rtt.as_millis() as u32;
         assert!(max_server_rtt > 0);
 
-        ServerScore {
+        Self {
             stat_data: Mutex::new(ServerStat::new(user_weight, max_server_rtt, check_window)),
             score: AtomicU32::new(u32::MAX),
         }
@@ -93,7 +93,7 @@ impl ServerIdent {
         svr_cfg: ServerInstanceConfig,
         max_server_rtt: Duration,
         check_window: Duration,
-    ) -> ServerIdent {
+    ) -> Self {
         let mut connect_opts = context.connect_opts_ref().clone();
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -114,7 +114,7 @@ impl ServerIdent {
             connect_opts.bind_interface = Some(bind_interface.clone());
         }
 
-        ServerIdent {
+        Self {
             tcp_score: ServerScore::new(svr_cfg.config.weight().tcp_weight(), max_server_rtt, check_window),
             udp_score: ServerScore::new(svr_cfg.config.weight().udp_weight(), max_server_rtt, check_window),
             svr_cfg,

@@ -49,7 +49,7 @@ pub enum ProtocolError {
 pub type ProtocolResult<T> = Result<T, ProtocolError>;
 
 impl From<ProtocolError> for io::Error {
-    fn from(e: ProtocolError) -> io::Error {
+    fn from(e: ProtocolError) -> Self {
         match e {
             ProtocolError::IoError(err) => err,
             #[cfg(feature = "stream-cipher")]
@@ -85,8 +85,8 @@ pub enum DecryptedReader {
 
 impl DecryptedReader {
     /// Create a new reader for reading encrypted data
-    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8]) -> DecryptedReader {
-        DecryptedReader::with_user_manager(stream_ty, method, key, None)
+    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8]) -> Self {
+        Self::with_user_manager(stream_ty, method, key, None)
     }
 
     /// Create a new reader for reading encrypted data
@@ -95,7 +95,7 @@ impl DecryptedReader {
         method: CipherKind,
         key: &[u8],
         user_manager: Option<Arc<ServerUserManager>>,
-    ) -> DecryptedReader {
+    ) -> Self {
         if cfg!(not(feature = "aead-cipher-2022")) {
             let _ = stream_ty;
             let _ = user_manager;
@@ -103,16 +103,16 @@ impl DecryptedReader {
 
         match method.category() {
             #[cfg(feature = "stream-cipher")]
-            CipherCategory::Stream => DecryptedReader::Stream(StreamDecryptedReader::new(method, key)),
+            CipherCategory::Stream => Self::Stream(StreamDecryptedReader::new(method, key)),
             #[cfg(feature = "aead-cipher")]
-            CipherCategory::Aead => DecryptedReader::Aead(AeadDecryptedReader::new(method, key)),
+            CipherCategory::Aead => Self::Aead(AeadDecryptedReader::new(method, key)),
             CipherCategory::None => {
                 let _ = method;
                 let _ = key;
-                DecryptedReader::None
+                Self::None
             }
             #[cfg(feature = "aead-cipher-2022")]
-            CipherCategory::Aead2022 => DecryptedReader::Aead2022(Aead2022DecryptedReader::with_user_manager(
+            CipherCategory::Aead2022 => Self::Aead2022(Aead2022DecryptedReader::with_user_manager(
                 stream_ty,
                 method,
                 key,
@@ -135,19 +135,19 @@ impl DecryptedReader {
     {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            DecryptedReader::Stream(ref mut reader) => {
+            Self::Stream(ref mut reader) => {
                 reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into)
             }
             #[cfg(feature = "aead-cipher")]
-            DecryptedReader::Aead(ref mut reader) => {
+            Self::Aead(ref mut reader) => {
                 reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into)
             }
-            DecryptedReader::None => {
+            Self::None => {
                 let _ = context;
                 Pin::new(stream).poll_read(cx, buf).map_err(Into::into)
             }
             #[cfg(feature = "aead-cipher-2022")]
-            DecryptedReader::Aead2022(ref mut reader) => {
+            Self::Aead2022(ref mut reader) => {
                 reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into)
             }
         }
@@ -157,12 +157,12 @@ impl DecryptedReader {
     pub fn nonce(&self) -> Option<&[u8]> {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            DecryptedReader::Stream(ref reader) => reader.iv(),
+            Self::Stream(ref reader) => reader.iv(),
             #[cfg(feature = "aead-cipher")]
-            DecryptedReader::Aead(ref reader) => reader.salt(),
-            DecryptedReader::None => None,
+            Self::Aead(ref reader) => reader.salt(),
+            Self::None => None,
             #[cfg(feature = "aead-cipher-2022")]
-            DecryptedReader::Aead2022(ref reader) => reader.salt(),
+            Self::Aead2022(ref reader) => reader.salt(),
         }
     }
 
@@ -170,12 +170,12 @@ impl DecryptedReader {
     pub fn request_nonce(&self) -> Option<&[u8]> {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            DecryptedReader::Stream(..) => None,
+            Self::Stream(..) => None,
             #[cfg(feature = "aead-cipher")]
-            DecryptedReader::Aead(..) => None,
-            DecryptedReader::None => None,
+            Self::Aead(..) => None,
+            Self::None => None,
             #[cfg(feature = "aead-cipher-2022")]
-            DecryptedReader::Aead2022(ref reader) => reader.request_salt(),
+            Self::Aead2022(ref reader) => reader.request_salt(),
         }
     }
 
@@ -183,24 +183,24 @@ impl DecryptedReader {
     pub fn user_key(&self) -> Option<&[u8]> {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            DecryptedReader::Stream(..) => None,
+            Self::Stream(..) => None,
             #[cfg(feature = "aead-cipher")]
-            DecryptedReader::Aead(..) => None,
-            DecryptedReader::None => None,
+            Self::Aead(..) => None,
+            Self::None => None,
             #[cfg(feature = "aead-cipher-2022")]
-            DecryptedReader::Aead2022(ref reader) => reader.user_key(),
+            Self::Aead2022(ref reader) => reader.user_key(),
         }
     }
 
     pub fn handshaked(&self) -> bool {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            DecryptedReader::Stream(ref reader) => reader.handshaked(),
+            Self::Stream(ref reader) => reader.handshaked(),
             #[cfg(feature = "aead-cipher")]
-            DecryptedReader::Aead(ref reader) => reader.handshaked(),
-            DecryptedReader::None => true,
+            Self::Aead(ref reader) => reader.handshaked(),
+            Self::None => true,
             #[cfg(feature = "aead-cipher-2022")]
-            DecryptedReader::Aead2022(ref reader) => reader.handshaked(),
+            Self::Aead2022(ref reader) => reader.handshaked(),
         }
     }
 }
@@ -219,24 +219,24 @@ pub enum EncryptedWriter {
 
 impl EncryptedWriter {
     /// Create a new writer for writing encrypted data
-    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8], nonce: &[u8]) -> Self {
         if cfg!(not(feature = "aead-cipher-2022")) {
             let _ = stream_ty;
         }
 
         match method.category() {
             #[cfg(feature = "stream-cipher")]
-            CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, key, nonce)),
+            CipherCategory::Stream => Self::Stream(StreamEncryptedWriter::new(method, key, nonce)),
             #[cfg(feature = "aead-cipher")]
-            CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, key, nonce)),
+            CipherCategory::Aead => Self::Aead(AeadEncryptedWriter::new(method, key, nonce)),
             CipherCategory::None => {
                 let _ = key;
                 let _ = nonce;
-                EncryptedWriter::None
+                Self::None
             }
             #[cfg(feature = "aead-cipher-2022")]
             CipherCategory::Aead2022 => {
-                EncryptedWriter::Aead2022(Aead2022EncryptedWriter::new(stream_ty, method, key, nonce))
+                Self::Aead2022(Aead2022EncryptedWriter::new(stream_ty, method, key, nonce))
             }
         }
     }
@@ -248,7 +248,7 @@ impl EncryptedWriter {
         key: &[u8],
         nonce: &[u8],
         identity_keys: &[Bytes],
-    ) -> EncryptedWriter {
+    ) -> Self {
         if cfg!(not(feature = "aead-cipher-2022")) {
             let _ = stream_ty;
             let _ = identity_keys;
@@ -256,16 +256,16 @@ impl EncryptedWriter {
 
         match method.category() {
             #[cfg(feature = "stream-cipher")]
-            CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, key, nonce)),
+            CipherCategory::Stream => Self::Stream(StreamEncryptedWriter::new(method, key, nonce)),
             #[cfg(feature = "aead-cipher")]
-            CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, key, nonce)),
+            CipherCategory::Aead => Self::Aead(AeadEncryptedWriter::new(method, key, nonce)),
             CipherCategory::None => {
                 let _ = key;
                 let _ = nonce;
-                EncryptedWriter::None
+                Self::None
             }
             #[cfg(feature = "aead-cipher-2022")]
-            CipherCategory::Aead2022 => EncryptedWriter::Aead2022(Aead2022EncryptedWriter::with_identity(
+            CipherCategory::Aead2022 => Self::Aead2022(Aead2022EncryptedWriter::with_identity(
                 stream_ty,
                 method,
                 key,
@@ -288,12 +288,12 @@ impl EncryptedWriter {
     {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            EncryptedWriter::Stream(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf).map_err(Into::into),
+            Self::Stream(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf).map_err(Into::into),
             #[cfg(feature = "aead-cipher")]
-            EncryptedWriter::Aead(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf).map_err(Into::into),
-            EncryptedWriter::None => Pin::new(stream).poll_write(cx, buf).map_err(Into::into),
+            Self::Aead(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf).map_err(Into::into),
+            Self::None => Pin::new(stream).poll_write(cx, buf).map_err(Into::into),
             #[cfg(feature = "aead-cipher-2022")]
-            EncryptedWriter::Aead2022(ref mut writer) => {
+            Self::Aead2022(ref mut writer) => {
                 writer.poll_write_encrypted(cx, stream, buf).map_err(Into::into)
             }
         }
@@ -303,12 +303,12 @@ impl EncryptedWriter {
     pub fn nonce(&self) -> &[u8] {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            EncryptedWriter::Stream(ref writer) => writer.iv(),
+            Self::Stream(ref writer) => writer.iv(),
             #[cfg(feature = "aead-cipher")]
-            EncryptedWriter::Aead(ref writer) => writer.salt(),
-            EncryptedWriter::None => &[],
+            Self::Aead(ref writer) => writer.salt(),
+            Self::None => &[],
             #[cfg(feature = "aead-cipher-2022")]
-            EncryptedWriter::Aead2022(ref writer) => writer.salt(),
+            Self::Aead2022(ref writer) => writer.salt(),
         }
     }
 
@@ -316,7 +316,7 @@ impl EncryptedWriter {
     pub fn set_request_nonce(&mut self, request_nonce: Bytes) {
         match *self {
             #[cfg(feature = "aead-cipher-2022")]
-            EncryptedWriter::Aead2022(ref mut writer) => writer.set_request_salt(request_nonce),
+            Self::Aead2022(ref mut writer) => writer.set_request_salt(request_nonce),
             _ => {
                 let _ = request_nonce;
                 panic!("only AEAD-2022 cipher could send request salt");
@@ -328,7 +328,7 @@ impl EncryptedWriter {
     pub fn reset_cipher_with_key(&mut self, key: &[u8]) {
         match *self {
             #[cfg(feature = "aead-cipher-2022")]
-            EncryptedWriter::Aead2022(ref mut writer) => writer.reset_cipher_with_key(key),
+            Self::Aead2022(ref mut writer) => writer.reset_cipher_with_key(key),
             _ => {
                 let _ = key;
                 panic!("only AEAD-2022 cipher could authenticate with multiple users");
@@ -363,9 +363,9 @@ impl<S> CryptoStream<S> {
         stream_ty: StreamType,
         method: CipherKind,
         key: &[u8],
-    ) -> CryptoStream<S> {
+    ) -> Self {
         const EMPTY_IDENTITY: [Bytes; 0] = [];
-        CryptoStream::from_stream_with_identity(context, stream, stream_ty, method, key, &EMPTY_IDENTITY, None)
+        Self::from_stream_with_identity(context, stream, stream_ty, method, key, &EMPTY_IDENTITY, None)
     }
 
     /// Create a new CryptoStream with the underlying stream connection
@@ -377,12 +377,12 @@ impl<S> CryptoStream<S> {
         key: &[u8],
         identity_keys: &[Bytes],
         user_manager: Option<Arc<ServerUserManager>>,
-    ) -> CryptoStream<S> {
+    ) -> Self {
         let category = method.category();
 
         if category == CipherCategory::None {
             // Fast-path for none cipher
-            return CryptoStream::<S>::new_none(stream, method);
+            return Self::new_none(stream, method);
         }
 
         let prev_len = match category {
@@ -426,7 +426,7 @@ impl<S> CryptoStream<S> {
             }
         };
 
-        CryptoStream {
+        Self {
             stream,
             dec: DecryptedReader::with_user_manager(stream_ty, method, key, user_manager),
             enc: EncryptedWriter::with_identity(stream_ty, method, key, &iv, identity_keys),
@@ -435,8 +435,8 @@ impl<S> CryptoStream<S> {
         }
     }
 
-    fn new_none(stream: S, method: CipherKind) -> CryptoStream<S> {
-        CryptoStream {
+    fn new_none(stream: S, method: CipherKind) -> Self {
+        Self {
             stream,
             dec: DecryptedReader::None,
             enc: EncryptedWriter::None,
@@ -547,7 +547,7 @@ where
         context: &Context,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<ProtocolResult<()>> {
-        let CryptoStream {
+        let Self {
             ref mut dec,
             ref mut enc,
             ref mut stream,
@@ -580,7 +580,7 @@ where
         cx: &mut task::Context<'_>,
         buf: &[u8],
     ) -> Poll<ProtocolResult<usize>> {
-        let CryptoStream {
+        let Self {
             ref mut enc,
             ref mut stream,
             ..

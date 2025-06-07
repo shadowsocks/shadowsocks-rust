@@ -41,10 +41,10 @@ impl ManagerClient {
         context: &Context,
         bind_addr: &ManagerAddr,
         connect_opts: &ConnectOpts,
-    ) -> Result<ManagerClient, Error> {
+    ) -> Result<Self, Error> {
         ManagerDatagram::connect(context, bind_addr, connect_opts)
             .await
-            .map(|socket| ManagerClient { socket })
+            .map(|socket| Self { socket })
             .map_err(Into::into)
     }
 

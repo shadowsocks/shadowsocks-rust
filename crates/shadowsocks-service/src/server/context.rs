@@ -27,7 +27,7 @@ pub struct ServiceContext {
 
 impl Default for ServiceContext {
     fn default() -> Self {
-        ServiceContext {
+        Self {
             context: Context::new_shared(ServerType::Server),
             connect_opts: ConnectOpts::default(),
             acl: None,
@@ -38,8 +38,8 @@ impl Default for ServiceContext {
 
 impl ServiceContext {
     /// Create a new `ServiceContext`
-    pub fn new() -> ServiceContext {
-        ServiceContext::default()
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get cloned `shadowsocks` Context

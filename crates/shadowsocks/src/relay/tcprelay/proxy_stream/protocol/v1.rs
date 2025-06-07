@@ -13,8 +13,8 @@ pub struct StreamTcpRequestHeader {
 }
 
 impl StreamTcpRequestHeader {
-    pub async fn read_from<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<StreamTcpRequestHeader> {
-        Ok(StreamTcpRequestHeader {
+    pub async fn read_from<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Self> {
+        Ok(Self {
             addr: Address::read_from(reader).await?,
         })
     }

@@ -25,7 +25,7 @@ pub struct Socks5TcpClient {
 
 impl Socks5TcpClient {
     /// Connects to `addr` via `proxy`
-    pub async fn connect<A, P>(addr: A, proxy: P) -> Result<Socks5TcpClient, Error>
+    pub async fn connect<A, P>(addr: A, proxy: P) -> Result<Self, Error>
     where
         A: Into<Address>,
         P: ToSocketAddrs,
@@ -56,13 +56,13 @@ impl Socks5TcpClient {
             r => return Err(Error::Reply(r)),
         }
 
-        Ok(Socks5TcpClient { stream: s })
+        Ok(Self { stream: s })
     }
 
     /// UDP Associate `addr` via `proxy`
     ///
     /// According to RFC, `addr` is the address that your UDP socket binds to
-    pub async fn udp_associate<A, P>(addr: A, proxy: P) -> Result<(Socks5TcpClient, Address), Error>
+    pub async fn udp_associate<A, P>(addr: A, proxy: P) -> Result<(Self, Address), Error>
     where
         A: Into<Address>,
         P: ToSocketAddrs,
@@ -93,7 +93,7 @@ impl Socks5TcpClient {
             r => return Err(Error::Reply(r)),
         }
 
-        Ok((Socks5TcpClient { stream: s }, hp.address))
+        Ok((Self { stream: s }, hp.address))
     }
 }
 

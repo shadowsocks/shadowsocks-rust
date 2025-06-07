@@ -70,9 +70,9 @@ impl DnsBuilder {
         remote_addr: Address,
         balancer: PingBalancer,
         client_cache_size: usize,
-    ) -> DnsBuilder {
+    ) -> Self {
         let context = ServiceContext::new();
-        DnsBuilder::with_context(
+        Self::with_context(
             Arc::new(context),
             bind_addr,
             local_addr,
@@ -90,8 +90,8 @@ impl DnsBuilder {
         remote_addr: Address,
         balancer: PingBalancer,
         client_cache_size: usize,
-    ) -> DnsBuilder {
-        DnsBuilder {
+    ) -> Self {
+        Self {
             context,
             mode: Mode::UdpOnly,
             local_addr,
@@ -190,8 +190,8 @@ impl DnsTcpServerBuilder {
         local_addr: Arc<NameServerAddr>,
         remote_addr: Arc<Address>,
         client: Arc<DnsClient>,
-    ) -> DnsTcpServerBuilder {
-        DnsTcpServerBuilder {
+    ) -> Self {
+        Self {
             context,
             bind_addr,
             local_addr,
@@ -270,7 +270,7 @@ impl DnsTcpServer {
                 }
             };
 
-            tokio::spawn(DnsTcpServer::handle_tcp_stream(
+            tokio::spawn(Self::handle_tcp_stream(
                 self.client.clone(),
                 stream,
                 peer_addr,
@@ -365,8 +365,8 @@ impl DnsUdpServerBuilder {
         local_addr: Arc<NameServerAddr>,
         remote_addr: Arc<Address>,
         client: Arc<DnsClient>,
-    ) -> DnsUdpServerBuilder {
-        DnsUdpServerBuilder {
+    ) -> Self {
+        Self {
             context,
             bind_addr,
             local_addr,
@@ -453,7 +453,7 @@ impl DnsUdpServer {
                 }
             };
 
-            tokio::spawn(DnsUdpServer::handle_udp_packet(
+            tokio::spawn(Self::handle_udp_packet(
                 self.client.clone(),
                 self.listener.clone(),
                 peer_addr,
@@ -720,8 +720,8 @@ struct DnsClient {
 }
 
 impl DnsClient {
-    fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode, client_cache_size: usize) -> DnsClient {
-        DnsClient {
+    fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode, client_cache_size: usize) -> Self {
+        Self {
             context,
             client_cache: DnsClientCache::new(client_cache_size),
             mode,

@@ -46,14 +46,14 @@ pub struct ServiceContext {
 
 impl Default for ServiceContext {
     fn default() -> Self {
-        ServiceContext::new()
+        Self::new()
     }
 }
 
 impl ServiceContext {
     /// Create a new `ServiceContext`
-    pub fn new() -> ServiceContext {
-        ServiceContext {
+    pub fn new() -> Self {
+        Self {
             context: Context::new_shared(ServerType::Local),
             connect_opts: ConnectOpts::default(),
             accept_opts: AcceptOpts::default(),

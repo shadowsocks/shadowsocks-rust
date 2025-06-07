@@ -34,8 +34,8 @@ impl TunnelUdpServerBuilder {
         capacity: Option<usize>,
         balancer: PingBalancer,
         forward_addr: Address,
-    ) -> TunnelUdpServerBuilder {
-        TunnelUdpServerBuilder {
+    ) -> Self {
+        Self {
             context,
             client_config,
             time_to_live,

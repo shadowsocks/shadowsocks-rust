@@ -116,13 +116,13 @@ struct CipherKey {
 }
 
 impl PartialOrd for CipherKey {
-    fn partial_cmp(&self, other: &CipherKey) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for CipherKey {
-    fn cmp(&self, other: &CipherKey) -> Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         let hash1 = {
             let mut hasher = DefaultHasher::new();
             self.hash(&mut hasher);

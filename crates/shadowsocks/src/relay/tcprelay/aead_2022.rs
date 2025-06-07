@@ -110,10 +110,10 @@ pub enum ProtocolError {
 pub type ProtocolResult<T> = Result<T, ProtocolError>;
 
 impl From<ProtocolError> for io::Error {
-    fn from(e: ProtocolError) -> io::Error {
+    fn from(e: ProtocolError) -> Self {
         match e {
             ProtocolError::IoError(err) => err,
-            _ => io::Error::other(e),
+            _ => Self::other(e),
         }
     }
 }
@@ -141,8 +141,8 @@ pub struct DecryptedReader {
 }
 
 impl DecryptedReader {
-    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8]) -> DecryptedReader {
-        DecryptedReader::with_user_manager(stream_ty, method, key, None)
+    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8]) -> Self {
+        Self::with_user_manager(stream_ty, method, key, None)
     }
 
     pub fn with_user_manager(
@@ -150,9 +150,9 @@ impl DecryptedReader {
         method: CipherKind,
         key: &[u8],
         user_manager: Option<Arc<ServerUserManager>>,
-    ) -> DecryptedReader {
+    ) -> Self {
         if method.salt_len() > 0 {
-            DecryptedReader {
+            Self {
                 stream_ty,
                 state: DecryptReadState::ReadHeader {
                     key: Bytes::copy_from_slice(key),
@@ -168,7 +168,7 @@ impl DecryptedReader {
                 has_handshaked: false,
             }
         } else {
-            DecryptedReader {
+            Self {
                 stream_ty,
                 state: DecryptReadState::ReadHeader {
                     key: Bytes::new(), // EMPTY SALT, no allocation
@@ -419,7 +419,7 @@ impl DecryptedReader {
         let cipher = self.cipher.as_mut().expect("cipher is None");
 
         let m = &mut self.buffer[..length_len];
-        let length = DecryptedReader::decrypt_length(cipher, m)?;
+        let length = Self::decrypt_length(cipher, m)?;
 
         Ok(Some(length)).into()
     }
@@ -531,9 +531,9 @@ pub struct EncryptedWriter {
 
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8], nonce: &[u8]) -> Self {
         const EMPTY_IDENTITY: [Bytes; 0] = [];
-        EncryptedWriter::with_identity(stream_ty, method, key, nonce, &EMPTY_IDENTITY)
+        Self::with_identity(stream_ty, method, key, nonce, &EMPTY_IDENTITY)
     }
 
     /// Creates a new EncryptedWriter with identities
@@ -543,7 +543,7 @@ impl EncryptedWriter {
         key: &[u8],
         nonce: &[u8],
         identity_keys: &[Bytes],
-    ) -> EncryptedWriter {
+    ) -> Self {
         // nonce should be sent with the first packet
         let mut buffer = BytesMut::with_capacity(nonce.len() + identity_keys.len() * 16);
         buffer.put(nonce);
@@ -607,7 +607,7 @@ impl EncryptedWriter {
             }
         }
 
-        EncryptedWriter {
+        Self {
             stream_ty,
             cipher: TcpCipher::new(method, key, nonce),
             method,

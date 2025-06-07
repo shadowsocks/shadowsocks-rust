@@ -31,8 +31,8 @@ pub struct Socks4TcpHandler {
 }
 
 impl Socks4TcpHandler {
-    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode) -> Socks4TcpHandler {
-        Socks4TcpHandler {
+    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode) -> Self {
+        Self {
             context,
             balancer,
             mode,

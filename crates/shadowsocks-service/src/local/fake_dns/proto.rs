@@ -12,7 +12,7 @@ pub struct StorageMeta {
 }
 
 impl StorageMeta {
-    pub fn decode(v: &[u8]) -> io::Result<StorageMeta> {
+    pub fn decode(v: &[u8]) -> io::Result<Self> {
         bson::from_slice(v).map_err(io::Error::other)
     }
 
@@ -28,7 +28,7 @@ pub struct IpAddrMapping {
 }
 
 impl IpAddrMapping {
-    pub fn decode(v: &[u8]) -> io::Result<IpAddrMapping> {
+    pub fn decode(v: &[u8]) -> io::Result<Self> {
         bson::from_slice(v).map_err(io::Error::other)
     }
 
@@ -45,7 +45,7 @@ pub struct DomainNameMapping {
 }
 
 impl DomainNameMapping {
-    pub fn decode(v: &[u8]) -> io::Result<DomainNameMapping> {
+    pub fn decode(v: &[u8]) -> io::Result<Self> {
         bson::from_slice(v).map_err(io::Error::other)
     }
 

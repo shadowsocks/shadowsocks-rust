@@ -29,9 +29,9 @@ pub struct TunnelBuilder {
 
 impl TunnelBuilder {
     /// Create a new Tunnel server forwarding to `forward_addr`
-    pub fn new(forward_addr: Address, client_addr: ServerAddr, balancer: PingBalancer) -> TunnelBuilder {
+    pub fn new(forward_addr: Address, client_addr: ServerAddr, balancer: PingBalancer) -> Self {
         let context = ServiceContext::new();
-        TunnelBuilder::with_context(Arc::new(context), forward_addr, client_addr, balancer)
+        Self::with_context(Arc::new(context), forward_addr, client_addr, balancer)
     }
 
     /// Create a new Tunnel server with context
@@ -40,8 +40,8 @@ impl TunnelBuilder {
         forward_addr: Address,
         client_addr: ServerAddr,
         balancer: PingBalancer,
-    ) -> TunnelBuilder {
-        TunnelBuilder {
+    ) -> Self {
+        Self {
             context,
             forward_addr,
             mode: Mode::TcpOnly,

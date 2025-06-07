@@ -80,7 +80,7 @@ pub struct AddResponse(pub String);
 
 impl ManagerProtocol for AddResponse {
     fn from_bytes(buf: &[u8]) -> Result<Self, Error> {
-        Ok(AddResponse(str::from_utf8(buf)?.trim().to_owned()))
+        Ok(Self(str::from_utf8(buf)?.trim().to_owned()))
     }
 
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
@@ -129,7 +129,7 @@ pub struct RemoveResponse(pub String);
 
 impl ManagerProtocol for RemoveResponse {
     fn from_bytes(buf: &[u8]) -> Result<Self, Error> {
-        Ok(RemoveResponse(str::from_utf8(buf)?.trim().to_owned()))
+        Ok(Self(str::from_utf8(buf)?.trim().to_owned()))
     }
 
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
@@ -150,7 +150,7 @@ impl ManagerProtocol for ListRequest {
             return Err(Error::UnrecognizedCommand(cmd.to_owned()));
         }
 
-        Ok(ListRequest)
+        Ok(Self)
     }
 
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
@@ -189,7 +189,7 @@ impl ManagerProtocol for PingRequest {
             return Err(Error::UnrecognizedCommand(cmd.to_owned()));
         }
 
-        Ok(PingRequest)
+        Ok(Self)
     }
 
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
@@ -295,11 +295,11 @@ impl ManagerRequest {
     /// Command key
     pub fn command(&self) -> &'static str {
         match *self {
-            ManagerRequest::Add(..) => "add",
-            ManagerRequest::Remove(..) => "remove",
-            ManagerRequest::List(..) => "list",
-            ManagerRequest::Ping(..) => "ping",
-            ManagerRequest::Stat(..) => "stat",
+            Self::Add(..) => "add",
+            Self::Remove(..) => "remove",
+            Self::List(..) => "list",
+            Self::Ping(..) => "ping",
+            Self::Stat(..) => "stat",
         }
     }
 }
@@ -307,15 +307,15 @@ impl ManagerRequest {
 impl ManagerProtocol for ManagerRequest {
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         match *self {
-            ManagerRequest::Add(ref req) => req.to_bytes(),
-            ManagerRequest::Remove(ref req) => req.to_bytes(),
-            ManagerRequest::List(ref req) => req.to_bytes(),
-            ManagerRequest::Ping(ref req) => req.to_bytes(),
-            ManagerRequest::Stat(ref req) => req.to_bytes(),
+            Self::Add(ref req) => req.to_bytes(),
+            Self::Remove(ref req) => req.to_bytes(),
+            Self::List(ref req) => req.to_bytes(),
+            Self::Ping(ref req) => req.to_bytes(),
+            Self::Stat(ref req) => req.to_bytes(),
         }
     }
 
-    fn from_bytes(buf: &[u8]) -> Result<ManagerRequest, Error> {
+    fn from_bytes(buf: &[u8]) -> Result<Self, Error> {
         let mut nsplit = buf.splitn(2, |b| *b == b':');
 
         let cmd = nsplit.next().expect("first element shouldn't be None");
@@ -324,33 +324,33 @@ impl ManagerProtocol for ManagerRequest {
                 None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
-                    Ok(ManagerRequest::Add(req))
+                    Ok(Self::Add(req))
                 }
             },
             "remove" => match nsplit.next() {
                 None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
-                    Ok(ManagerRequest::Remove(req))
+                    Ok(Self::Remove(req))
                 }
             },
             "list" => {
                 if nsplit.next().is_some() {
                     return Err(Error::RedundantParameter);
                 }
-                Ok(ManagerRequest::List(ListRequest))
+                Ok(Self::List(ListRequest))
             }
             "ping" => {
                 if nsplit.next().is_some() {
                     return Err(Error::RedundantParameter);
                 }
-                Ok(ManagerRequest::Ping(PingRequest))
+                Ok(Self::Ping(PingRequest))
             }
             "stat" => match nsplit.next() {
                 None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
-                    Ok(ManagerRequest::Stat(req))
+                    Ok(Self::Stat(req))
                 }
             },
             cmd => Err(Error::UnrecognizedCommand(cmd.to_owned())),
@@ -374,7 +374,7 @@ pub enum Error {
 }
 
 impl From<Error> for io::Error {
-    fn from(err: Error) -> io::Error {
-        io::Error::other(err.to_string())
+    fn from(err: Error) -> Self {
+        Self::other(err.to_string())
     }
 }

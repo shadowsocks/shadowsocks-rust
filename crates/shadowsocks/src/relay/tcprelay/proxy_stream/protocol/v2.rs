@@ -27,7 +27,7 @@ pub struct Aead2022TcpRequestHeader {
 }
 
 impl Aead2022TcpRequestHeader {
-    pub async fn read_from<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Aead2022TcpRequestHeader> {
+    pub async fn read_from<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Self> {
         let addr = Address::read_from(reader).await?;
 
         let mut padding_size_buffer = [0u8; 2];
@@ -46,7 +46,7 @@ impl Aead2022TcpRequestHeader {
             }
         }
 
-        Ok(Aead2022TcpRequestHeader { addr, padding_size })
+        Ok(Self { addr, padding_size })
     }
 
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {

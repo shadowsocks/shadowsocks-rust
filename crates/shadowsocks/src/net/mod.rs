@@ -26,19 +26,19 @@ pub enum AddrFamily {
 }
 
 impl From<&SocketAddr> for AddrFamily {
-    fn from(addr: &SocketAddr) -> AddrFamily {
+    fn from(addr: &SocketAddr) -> Self {
         match *addr {
-            SocketAddr::V4(..) => AddrFamily::Ipv4,
-            SocketAddr::V6(..) => AddrFamily::Ipv6,
+            SocketAddr::V4(..) => Self::Ipv4,
+            SocketAddr::V6(..) => Self::Ipv6,
         }
     }
 }
 
 impl From<SocketAddr> for AddrFamily {
-    fn from(addr: SocketAddr) -> AddrFamily {
+    fn from(addr: SocketAddr) -> Self {
         match addr {
-            SocketAddr::V4(..) => AddrFamily::Ipv4,
-            SocketAddr::V6(..) => AddrFamily::Ipv6,
+            SocketAddr::V4(..) => Self::Ipv4,
+            SocketAddr::V6(..) => Self::Ipv6,
         }
     }
 }

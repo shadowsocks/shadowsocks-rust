@@ -24,7 +24,7 @@ pub struct Socks4TcpClient {
 
 impl Socks4TcpClient {
     /// Connects to `addr` via `proxy`
-    pub async fn connect<A, P, U>(addr: A, proxy: P, user_id: U) -> Result<Socks4TcpClient, Error>
+    pub async fn connect<A, P, U>(addr: A, proxy: P, user_id: U) -> Result<Self, Error>
     where
         A: Into<Address>,
         P: ToSocketAddrs,
@@ -51,7 +51,7 @@ impl Socks4TcpClient {
             return Err(Error::Result(hsp.cd));
         }
 
-        Ok(Socks4TcpClient { stream: s })
+        Ok(Self { stream: s })
     }
 }
 

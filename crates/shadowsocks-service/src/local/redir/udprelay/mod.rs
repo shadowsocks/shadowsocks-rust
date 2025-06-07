@@ -46,7 +46,7 @@ impl Drop for UdpRedirInboundCache {
 }
 
 impl UdpRedirInboundCache {
-    fn new() -> UdpRedirInboundCache {
+    fn new() -> Self {
         let cache = Arc::new(Mutex::new(LruCache::with_expiry_duration_and_capacity(
             INBOUND_SOCKET_CACHE_EXPIRATION,
             INBOUND_SOCKET_CACHE_CAPACITY,
@@ -62,7 +62,7 @@ impl UdpRedirInboundCache {
             })
         };
 
-        UdpRedirInboundCache { cache, watcher }
+        Self { cache, watcher }
     }
 }
 
@@ -75,8 +75,8 @@ struct UdpRedirInboundWriter {
 
 impl UdpRedirInboundWriter {
     #[allow(unused_variables, clippy::needless_update)]
-    fn new(redir_ty: RedirType, opts: &ConnectOpts) -> UdpRedirInboundWriter {
-        UdpRedirInboundWriter {
+    fn new(redir_ty: RedirType, opts: &ConnectOpts) -> Self {
+        Self {
             redir_ty,
             socket_opts: RedirSocketOpts {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -212,7 +212,7 @@ impl RedirUdpServer {
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
         balancer: PingBalancer,
-    ) -> io::Result<RedirUdpServer> {
+    ) -> io::Result<Self> {
         let listener = match *client_config {
             ServerAddr::SocketAddr(ref saddr) => UdpRedirSocket::listen(redir_ty, *saddr)?,
             ServerAddr::DomainName(ref dname, port) => {
@@ -223,7 +223,7 @@ impl RedirUdpServer {
             }
         };
 
-        Ok(RedirUdpServer {
+        Ok(Self {
             context,
             redir_ty,
             time_to_live,

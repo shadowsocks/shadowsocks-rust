@@ -68,8 +68,8 @@ struct ManagerNotify {
 }
 
 impl ManagerNotify {
-    fn new(thread: Thread) -> ManagerNotify {
-        ManagerNotify { thread }
+    fn new(thread: Thread) -> Self {
+        Self { thread }
     }
 
     fn notify(&self) {
@@ -119,7 +119,7 @@ impl TcpConnection {
         socket_creation_tx: &mpsc::UnboundedSender<TcpSocketCreation>,
         manager_notify: Arc<ManagerNotify>,
         tcp_opts: &TcpSocketOpts,
-    ) -> impl Future<Output = TcpConnection> + use<> {
+    ) -> impl Future<Output = Self> + use<> {
         let send_buffer_size = tcp_opts.send_buffer_size.unwrap_or(DEFAULT_TCP_SEND_BUFFER_SIZE);
         let recv_buffer_size = tcp_opts.recv_buffer_size.unwrap_or(DEFAULT_TCP_RECV_BUFFER_SIZE);
 
@@ -140,7 +140,7 @@ impl TcpConnection {
         async move {
             // waiting socket add to SocketSet
             let _ = rx.await;
-            TcpConnection {
+            Self {
                 control,
                 manager_notify,
             }
@@ -257,7 +257,7 @@ impl Drop for TcpTun {
 }
 
 impl TcpTun {
-    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mtu: u32) -> TcpTun {
+    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mtu: u32) -> Self {
         let mut capabilities = DeviceCapabilities::default();
         capabilities.medium = Medium::Ip;
         capabilities.max_transmission_unit = mtu as usize;
@@ -486,7 +486,7 @@ impl TcpTun {
 
         let manager_notify = Arc::new(ManagerNotify::new(manager_handle.thread().clone()));
 
-        TcpTun {
+        Self {
             context,
             manager_handle: Some(manager_handle),
             manager_notify,

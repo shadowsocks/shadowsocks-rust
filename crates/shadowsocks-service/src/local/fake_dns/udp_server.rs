@@ -22,7 +22,7 @@ impl FakeDnsUdpServer {
         context: Arc<ServiceContext>,
         client_config: &ServerAddr,
         manager: Arc<FakeDnsManager>,
-    ) -> io::Result<FakeDnsUdpServer> {
+    ) -> io::Result<Self> {
         let listener = match *client_config {
             ServerAddr::SocketAddr(ref saddr) => {
                 ShadowUdpSocket::listen_with_opts(saddr, context.accept_opts()).await?
@@ -35,7 +35,7 @@ impl FakeDnsUdpServer {
             }
         };
 
-        Ok(FakeDnsUdpServer { listener, manager })
+        Ok(Self { listener, manager })
     }
 
     /// Get UDP local address

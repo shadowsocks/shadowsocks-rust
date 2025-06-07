@@ -21,15 +21,15 @@ pub struct PacketWindowFilter {
 }
 
 impl Default for PacketWindowFilter {
-    fn default() -> PacketWindowFilter {
-        PacketWindowFilter::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl PacketWindowFilter {
     /// Create an empty filter
-    pub fn new() -> PacketWindowFilter {
-        PacketWindowFilter {
+    pub fn new() -> Self {
+        Self {
             last_packet_id: 0,
             packet_ring: [0u64; RING_BLOCKS as usize],
         }

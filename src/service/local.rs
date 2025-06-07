@@ -59,19 +59,19 @@ mod local_value_parser {
     impl FromStr for RemoteDnsAddress {
         type Err = AddressError;
 
-        fn from_str(a: &str) -> Result<RemoteDnsAddress, Self::Err> {
+        fn from_str(a: &str) -> Result<Self, Self::Err> {
             if let Ok(ip) = a.parse::<IpAddr>() {
-                return Ok(RemoteDnsAddress(Address::SocketAddress(SocketAddr::new(ip, 53))));
+                return Ok(Self(Address::SocketAddress(SocketAddr::new(ip, 53))));
             }
 
             if let Ok(saddr) = a.parse::<SocketAddr>() {
-                return Ok(RemoteDnsAddress(Address::SocketAddress(saddr)));
+                return Ok(Self(Address::SocketAddress(saddr)));
             }
 
             if a.find(':').is_some() {
                 a.parse::<Address>().map(RemoteDnsAddress)
             } else {
-                Ok(RemoteDnsAddress(Address::DomainNameAddress(a.to_owned(), 53)))
+                Ok(Self(Address::DomainNameAddress(a.to_owned(), 53)))
             }
         }
     }
