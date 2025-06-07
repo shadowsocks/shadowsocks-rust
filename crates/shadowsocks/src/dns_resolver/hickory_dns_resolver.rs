@@ -85,6 +85,11 @@ impl RuntimeProvider for ShadowDnsRuntimeProvider {
         let wait_for = wait_for.unwrap_or_else(|| Duration::from_secs(5));
 
         Box::pin(async move {
+            trace!(
+                "hickory-dns RuntimeProvider tcp connecting to {} with {:?}",
+                server_addr, connect_opts
+            );
+
             let tcp = match tokio::time::timeout(
                 wait_for,
                 ShadowTcpStream::connect_with_opts(&server_addr, &connect_opts),
@@ -95,6 +100,11 @@ impl RuntimeProvider for ShadowDnsRuntimeProvider {
                 Ok(Err(err)) => return Err(err),
                 Err(_) => return Err(io::ErrorKind::TimedOut.into()),
             };
+
+            trace!(
+                "hickory-dns RuntimeProvider tcp connected to {}, {:?}",
+                server_addr, connect_opts
+            );
             Ok(AsyncIoTokioAsStd(tcp))
         })
     }
@@ -106,7 +116,15 @@ impl RuntimeProvider for ShadowDnsRuntimeProvider {
     ) -> Pin<Box<dyn Send + Future<Output = std::io::Result<Self::Udp>>>> {
         let connect_opts = self.connect_opts.clone();
         Box::pin(async move {
+            trace!(
+                "hickory-dns RuntimeProvider udp binding to {} with {:?}",
+                local_addr, connect_opts
+            );
             let udp = ShadowUdpSocket::bind_with_opts(&local_addr, &connect_opts).await?;
+            trace!(
+                "hickory-dns RuntimeProvider udp bound to {}, {:?}",
+                local_addr, connect_opts
+            );
             Ok(udp)
         })
     }
