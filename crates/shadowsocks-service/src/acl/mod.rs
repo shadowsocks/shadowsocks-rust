@@ -565,7 +565,13 @@ impl AccessControl {
                 }
                 if let Ok(vaddr) = context.dns_resolve(host, port).await {
                     for addr in vaddr {
-                        if !self.check_ip_in_proxy_list(&addr.ip()) {
+                        let ip = addr.ip();
+                        if self.black_list.check_ip_matched(&ip) {
+                            // If IP is in black_list, it should be bypassed
+                            return false;
+                        }
+                        if self.white_list.check_ip_matched(&ip) {
+                            // If IP is in white_list, it should be proxied
                             return true;
                         }
                     }
@@ -614,8 +620,14 @@ impl AccessControl {
 
                 if let Ok(vaddr) = context.dns_resolve(host, *port).await {
                     for addr in vaddr {
-                        if self.check_outbound_ip_blocked(&addr.ip()) {
+                        let ip = addr.ip();
+                        if self.outbound_block.check_ip_matched(&ip) {
+                            // If IP is in outbound_block, it should be blocked
                             return true;
+                        }
+                        if self.outbound_allow.check_ip_matched(&ip) {
+                            // If IP is in outbound_allow, it should be allowed
+                            return false;
                         }
                     }
                 }
