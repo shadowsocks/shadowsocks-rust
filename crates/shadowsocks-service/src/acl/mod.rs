@@ -560,22 +560,27 @@ impl AccessControl {
                 if let Some(value) = self.check_host_in_proxy_list(host) {
                     return !value;
                 }
-                if self.is_ip_empty() {
+
+                // If mode is BlackList, host is proxied by default. If it has any resolved IPs in black_list, then it should be bypassed.
+                // If mode is WhiteList, host is bypassed by default. If it has any resolved IPs in white_list, then it should be proxied.
+                let (check_list, bypass_if_matched) = match self.mode {
+                    Mode::BlackList => (&self.black_list, true),
+                    Mode::WhiteList => (&self.white_list, false),
+                };
+
+                if check_list.is_ip_empty() {
                     return !self.is_default_in_proxy_list();
                 }
+
                 if let Ok(vaddr) = context.dns_resolve(host, port).await {
                     for addr in vaddr {
                         let ip = addr.ip();
-                        if self.black_list.check_ip_matched(&ip) {
-                            // If IP is in black_list, it should be bypassed
-                            return false;
-                        }
-                        if self.white_list.check_ip_matched(&ip) {
-                            // If IP is in white_list, it should be proxied
-                            return true;
+                        if check_list.check_ip_matched(&ip) {
+                            return bypass_if_matched;
                         }
                     }
                 }
+
                 !self.is_default_in_proxy_list()
             }
         }
@@ -613,7 +618,15 @@ impl AccessControl {
 
                 // If no domain name rules matched,
                 // we need to resolve the hostname to IP addresses
-                if self.is_outbound_ip_empty() {
+
+                // If mode is BlackList, host is allowed by default. If any of its' resolved IPs in outboud_block, then it is blocked.
+                // If mode is WhiteList, host is blocked by default. If any of its' resolved IPs in outbound_allow, then it is allowed.
+                let (check_rule, block_if_matched) = match self.outbound_mode {
+                    Mode::BlackList => (&self.outbound_block, true),
+                    Mode::WhiteList => (&self.outbound_allow, false),
+                };
+
+                if check_rule.is_ip_empty() {
                     // If there are no IP rules, use the default mode
                     return self.is_outbound_default_blocked();
                 }
@@ -621,13 +634,8 @@ impl AccessControl {
                 if let Ok(vaddr) = context.dns_resolve(host, *port).await {
                     for addr in vaddr {
                         let ip = addr.ip();
-                        if self.outbound_block.check_ip_matched(&ip) {
-                            // If IP is in outbound_block, it should be blocked
-                            return true;
-                        }
-                        if self.outbound_allow.check_ip_matched(&ip) {
-                            // If IP is in outbound_allow, it should be allowed
-                            return false;
+                        if check_rule.check_ip_matched(&ip) {
+                            return block_if_matched;
                         }
                     }
                 }
