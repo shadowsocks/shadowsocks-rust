@@ -959,19 +959,22 @@ These Ciphers require `"password"` to be a Base64 string of key that have **exac
 
 - For local servers (`sslocal`, `ssredir`, ...)
   - Modes:
-    - `[bypass_all]` - ACL runs in `BlackList` mode. Bypasses all addresses that didn't match any rules.
-    - `[proxy_all]` - ACL runs in `WhiteList` mode. Proxies all addresses that didn't match any rules.
+    - `[bypass_all]` - ACL runs in `WhiteList` mode. Bypasses all addresses except those matched any rules.
+    - `[proxy_all]` - ACL runs in `BlackList` mode. Proxies all addresses except those matched any rules. (default)
   - Rules:
     - `[bypass_list]` - Rules for connecting directly
     - `[proxy_list]` - Rules for connecting through proxies
 - For remote servers (`ssserver`)
   - Modes:
-    - `[reject_all]` - ACL runs in `BlackList` mode. Rejects all clients that didn't match any rules.
-    - `[accept_all]` - ACL runs in `WhiteList` mode. Accepts all clients that didn't match any rules.
+    - `[reject_all]` - ACL runs in `WhiteList` mode. Rejects all clients except those matched any rules.
+    - `[accept_all]` - ACL runs in `BlackList` mode. Accepts all clients except those matched any rules. (default)
+    - `[outbound_block_all]` - Outbound ACL runs in `WhiteList` mode. Blockes all outbound addresses except those matched any rules.
+    - `[outbound_allow_all]` - Outbound ACL runs in `BlackList` mode. Allows all outbound addresses except those matched any rules. (default)
   - Rules:
     - `[white_list]` - Rules for accepted clients
     - `[black_list]` - Rules for rejected clients
     - `[outbound_block_list]` - Rules for blocking outbound addresses.
+    - `[outbound_allow_list]` - Rules for allowing outbound addresses.
 
 ### Example
 

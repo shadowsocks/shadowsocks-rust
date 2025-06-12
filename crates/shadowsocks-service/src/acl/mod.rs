@@ -305,8 +305,8 @@ impl ParsingRules {
 /// Available sections are
 ///
 /// - For local servers (`sslocal`, `ssredir`, ...)
-///     * `[bypass_all]` - ACL runs in `BlackList` mode.
-///     * `[proxy_all]` - ACL runs in `WhiteList` mode.
+///     * `[bypass_all]` - ACL runs in `WhiteList` mode.
+///     * `[proxy_all]` - ACL runs in `BlackList` mode.
 ///     * `[bypass_list]` - Rules for connecting directly
 ///     * `[proxy_list]` - Rules for connecting through proxies
 /// - For remote servers (`ssserver`)
