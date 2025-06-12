@@ -665,9 +665,4 @@ impl AccessControl {
             Mode::WhiteList => true,
         }
     }
-
-    #[inline]
-    fn is_outbound_ip_empty(&self) -> bool {
-        self.outbound_block.is_ip_empty() && self.outbound_allow.is_ip_empty()
-    }
 }
