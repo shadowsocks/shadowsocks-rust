@@ -97,7 +97,7 @@ shadowsocks-crypto = { version = "0.6.0", default-features = false }
 tokio-tfo = "0.3"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.60", features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",
