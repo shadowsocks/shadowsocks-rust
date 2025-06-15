@@ -68,6 +68,10 @@ impl TcpStream {
                     Err(..) => return Err(io::Error::new(ErrorKind::TimedOut, "protect() timeout")),
                 }
             }
+
+            if let Some(ref protector) = opts.vpn_socket_protector {
+                protector.protect(socket.as_raw_fd())
+            }
         }
 
         // Set SO_MARK for mark-based routing on Linux (since 2.6.25)
@@ -343,6 +347,10 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
                 Ok(Err(err)) => return Err(err),
                 Err(..) => return Err(io::Error::new(ErrorKind::TimedOut, "protect() timeout")),
             }
+        }
+
+        if let Some(ref protector) = config.vpn_socket_protector {
+            protector.protect(socket.as_raw_fd())
         }
     }
 
