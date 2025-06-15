@@ -10,6 +10,8 @@ pub use self::{
     tcp::{TcpListener, TcpStream},
     udp::UdpSocket,
 };
+#[cfg(target_os = "android")]
+pub use self::option::android::SocketProtector;
 
 mod option;
 mod sys;
