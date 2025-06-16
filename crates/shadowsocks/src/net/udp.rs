@@ -408,3 +408,17 @@ impl From<UdpSocket> for tokio::net::UdpSocket {
         s.socket
     }
 }
+
+#[cfg(unix)]
+impl std::os::fd::AsRawFd for UdpSocket {
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        self.socket.as_raw_fd()
+    }
+}
+
+#[cfg(unix)]
+impl std::os::fd::AsFd for UdpSocket {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        self.socket.as_fd()
+    }
+}
