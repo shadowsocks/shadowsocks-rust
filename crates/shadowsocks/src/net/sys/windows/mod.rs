@@ -26,7 +26,7 @@ use tokio::{
 use tokio_tfo::TfoStream;
 use windows_sys::{
     Win32::{
-        Foundation::{BOOL, ERROR_BUFFER_OVERFLOW, ERROR_NO_DATA, ERROR_SUCCESS},
+        Foundation::{ERROR_BUFFER_OVERFLOW, ERROR_NO_DATA, ERROR_SUCCESS},
         NetworkManagement::IpHelper::{
             GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_DNS_SERVER, GAA_FLAG_SKIP_MULTICAST, GAA_FLAG_SKIP_UNICAST,
             GetAdaptersAddresses, IP_ADAPTER_ADDRESSES_LH, if_nametoindex,
@@ -37,7 +37,7 @@ use windows_sys::{
             WSAIoctl, htonl, setsockopt,
         },
     },
-    core::PCSTR,
+    core::{PCSTR, BOOL},
 };
 
 // BOOL values
