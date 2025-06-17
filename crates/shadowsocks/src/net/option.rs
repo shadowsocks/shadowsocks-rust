@@ -59,6 +59,8 @@ pub struct ConnectOpts {
     /// This is an [Android shadowsocks implementation](https://github.com/shadowsocks/shadowsocks-android) specific feature
     #[cfg(target_os = "android")]
     pub vpn_protect_path: Option<std::path::PathBuf>,
+    #[cfg(target_os = "android")]
+    pub vpn_socket_protect_fn: Option<android::SocketProtectFn<Box<dyn android::CloneFn>>>,
 
     /// Outbound socket binds to this IP address, mostly for choosing network interfaces
     ///
@@ -86,4 +88,57 @@ pub struct AcceptOpts {
 
     /// Enable IPV6_V6ONLY option for socket
     pub ipv6_only: bool,
+}
+
+#[cfg(target_os = "android")]
+pub mod android {
+    pub fn socket_protect_fn<F>(f: F) -> SocketProtectFn<Box<dyn CloneFn>>
+    where
+        F: Fn(i32) + Send + Sync + Clone + 'static,
+    {
+        SocketProtectFn {
+            f: Box::new(f),
+        }
+    }
+
+    pub trait CloneFn: Fn(i32) + Send + Sync {
+        fn clone_box(&self) -> Box<dyn CloneFn>;
+    }
+
+    impl<F: Clone + Send + Sync + 'static> CloneFn for F
+    where
+        F: Fn(i32),
+    {
+        fn clone_box(&self) -> Box<dyn CloneFn> {
+            Box::new(self.clone())
+        }
+    }
+
+    pub struct SocketProtectFn<F> {
+        f: F,
+    }
+
+    impl<F> SocketProtectFn<F>
+    where 
+        F: Fn(i32)
+    {
+        pub fn call(&self, fd: i32) {
+            (self.f)(fd)
+        }
+    }
+
+    impl Clone for SocketProtectFn<Box<dyn CloneFn>>
+    {
+        fn clone(&self) -> Self {
+            Self {
+                f: self.f.clone_box(),
+            }
+        }
+    }
+
+    impl<F> std::fmt::Debug for SocketProtectFn<F> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("SocketProtectFn").finish()
+        }
+    }
 }

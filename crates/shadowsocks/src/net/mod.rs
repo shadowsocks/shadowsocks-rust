@@ -10,6 +10,8 @@ pub use self::{
     tcp::{TcpListener, TcpStream},
     udp::UdpSocket,
 };
+#[cfg(target_os = "android")]
+pub use self::option::android::{CloneFn, SocketProtectFn, socket_protect_fn};
 
 mod option;
 mod sys;
