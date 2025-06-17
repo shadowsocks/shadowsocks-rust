@@ -3359,7 +3359,7 @@ dependencies = [
  "tokio-tfo",
  "trait-variant",
  "url",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3478,7 +3478,7 @@ dependencies = [
  "trait-variant",
  "tun",
  "webpki-roots 1.0.0",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
  "zstd",
 ]
 
