@@ -11,7 +11,7 @@ pub use self::{
     udp::UdpSocket,
 };
 #[cfg(target_os = "android")]
-pub use self::option::android::SocketProtector;
+pub use self::option::android::{CloneFn, SocketProtectFn, socket_protect_fn};
 
 mod option;
 mod sys;

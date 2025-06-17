@@ -69,8 +69,8 @@ impl TcpStream {
                 }
             }
 
-            if let Some(ref protector) = opts.vpn_socket_protector {
-                protector.protect(socket.as_raw_fd());
+            if let Some(ref protect_fn) = opts.vpn_socket_protect_fn {
+                protect_fn.call(socket.as_raw_fd());
             }
         }
 
@@ -349,8 +349,8 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
             }
         }
 
-        if let Some(ref protector) = config.vpn_socket_protector {
-            protector.protect(socket.as_raw_fd());
+        if let Some(ref protect_fn) = opts.vpn_socket_protect_fn {
+            protect_fn.call(socket.as_raw_fd());
         }
     }
 

@@ -60,7 +60,7 @@ pub struct ConnectOpts {
     #[cfg(target_os = "android")]
     pub vpn_protect_path: Option<std::path::PathBuf>,
     #[cfg(target_os = "android")]
-    pub vpn_socket_protector: Option<android::SocketProtector>,
+    pub vpn_socket_protect_fn: Option<android::SocketProtectFn<Box<dyn android::CloneFn>>>,
 
     /// Outbound socket binds to this IP address, mostly for choosing network interfaces
     ///
@@ -92,7 +92,16 @@ pub struct AcceptOpts {
 
 #[cfg(target_os = "android")]
 pub mod android {
-    trait CloneFn: Fn(i32) + Send + Sync {
+    pub fn socket_protect_fn<F>(f: F) -> SocketProtectFn<Box<dyn CloneFn>>
+    where
+        F: Fn(i32) + Send + Sync + Clone + 'static,
+    {
+        SocketProtectFn {
+            f: Box::new(f),
+        }
+    }
+
+    pub trait CloneFn: Fn(i32) + Send + Sync {
         fn clone_box(&self) -> Box<dyn CloneFn>;
     }
 
@@ -105,35 +114,31 @@ pub mod android {
         }
     }
 
-    pub struct SocketProtector {
-        func: Box<dyn CloneFn>,
+    pub struct SocketProtectFn<F> {
+        f: F,
     }
 
-    impl SocketProtector {
-        pub fn new<F: Fn(i32) + Send + Sync + Clone + 'static>(func: F) -> Self {
-            Self {
-                func: Box::new(func),
-            }
-        }
-
-        pub fn protect(&self, code: i32) {
-            (self.func)(code)
+    impl<F> SocketProtectFn<F>
+    where 
+        F: Fn(i32) + Send + Sync + Clone + 'static
+    {
+        pub fn call(&self, fd: i32) {
+            (self.f)(fd)
         }
     }
 
-    impl Clone for SocketProtector {
+    impl Clone for SocketProtectFn<Box<dyn CloneFn>>
+    {
         fn clone(&self) -> Self {
             Self {
-                func: self.func.clone_box(),
+                f: self.f.clone_box(),
             }
         }
     }
 
-    impl std::fmt::Debug for SocketProtector {
+    impl<F> std::fmt::Debug for SocketProtectFn<F> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("SocketProtector")
-                .field("func", &"Box<dyn CloneFn>")
-                .finish()
+            f.debug_struct("SocketProtectFn").finish()
         }
     }
 }
