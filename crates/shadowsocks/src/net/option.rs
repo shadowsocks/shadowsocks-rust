@@ -96,8 +96,7 @@ impl ConnectOpts {
     where
         F: Fn(std::os::unix::io::RawFd) -> std::io::Result<()> + Send + Sync + 'static,
     {
-        let protect_fn = Box::new(android::SocketProtectFn { f }) as Box<dyn android::SocketProtect + Send + Sync>;
-        self.vpn_socket_protect = Some(std::sync::Arc::new(protect_fn))
+        self.vpn_socket_protect = Some(android::make_socket_protect_fn(f))
     }
 }
 
@@ -106,6 +105,14 @@ pub mod android {
     use std::io;
     use std::os::unix::io::RawFd;
     use std::sync::Arc;
+
+    pub fn make_socket_protect_fn<F>(f: F) -> Arc<Box<dyn SocketProtect + Send + Sync>>
+    where
+        F: Fn(RawFd) -> io::Result<()> + Send + Sync + 'static,
+    {
+        let protect_fn = Box::new(SocketProtectFn { f }) as Box<dyn SocketProtect + Send + Sync>;
+        std::sync::Arc::new(protect_fn)
+    }
 
     pub trait SocketProtect {
         fn protect(&self, fd: RawFd) -> io::Result<()>;

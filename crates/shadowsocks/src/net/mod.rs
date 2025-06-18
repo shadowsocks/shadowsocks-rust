@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 #[cfg(unix)]
 pub use self::sys::uds::{UnixListener, UnixStream};
 #[cfg(target_os = "android")]
-pub use self::option::android::{SocketProtect, SocketProtectFn};
+pub use self::option::android::{SocketProtect, SocketProtectFn, make_socket_protect_fn};
 pub use self::{
     option::{AcceptOpts, ConnectOpts, TcpSocketOpts, UdpSocketOpts},
     sys::{IpStackCapabilities, get_ip_stack_capabilities, set_tcp_fastopen, socket_bind_dual_stack},
