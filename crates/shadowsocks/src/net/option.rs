@@ -59,6 +59,8 @@ pub struct ConnectOpts {
     /// This is an [Android shadowsocks implementation](https://github.com/shadowsocks/shadowsocks-android) specific feature
     #[cfg(target_os = "android")]
     pub vpn_protect_path: Option<std::path::PathBuf>,
+    #[cfg(target_os = "android")]
+    pub vpn_socket_protect: Option<std::sync::Arc<Box<dyn android::SocketProtect + Send + Sync>>>,
 
     /// Outbound socket binds to this IP address, mostly for choosing network interfaces
     ///
@@ -86,4 +88,51 @@ pub struct AcceptOpts {
 
     /// Enable IPV6_V6ONLY option for socket
     pub ipv6_only: bool,
+}
+
+#[cfg(target_os = "android")]
+impl ConnectOpts {
+    pub fn set_vpn_socket_protect<F>(&mut self, f: F)
+    where
+        F: Fn(std::os::unix::io::RawFd) -> std::io::Result<()> + Send + Sync + 'static,
+    {
+        let protect_fn = Box::new(android::SocketProtectFn { f }) as Box<dyn android::SocketProtect + Send + Sync>;
+        self.vpn_socket_protect = Some(std::sync::Arc::new(protect_fn))
+    }
+}
+
+#[cfg(target_os = "android")]
+pub mod android {
+    use std::io;
+    use std::os::unix::io::RawFd;
+    use std::sync::Arc;
+
+    pub trait SocketProtect {
+        fn protect(&self, fd: RawFd) -> io::Result<()>;
+    }
+
+    pub struct SocketProtectFn<F> {
+        pub f: F,
+    }
+
+    impl<F> SocketProtect for SocketProtectFn<F>
+    where
+        F: Fn(RawFd) -> io::Result<()>,
+    {
+        fn protect(&self, fd: RawFd) -> io::Result<()> {
+            (self.f)(fd)
+        }
+    }
+
+    impl<F> Clone for SocketProtectFn<Arc<F>> {
+        fn clone(&self) -> Self {
+            Self { f: self.f.clone() }
+        }
+    }
+
+    impl std::fmt::Debug for dyn SocketProtect + Send + Sync {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("dyn SocketProtect + Send + Sync").finish()
+        }
+    }
 }
