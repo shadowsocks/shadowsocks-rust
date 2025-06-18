@@ -60,8 +60,7 @@ pub struct ConnectOpts {
     #[cfg(target_os = "android")]
     pub vpn_protect_path: Option<std::path::PathBuf>,
     #[cfg(target_os = "android")]
-    pub vpn_socket_protect_fn:
-        Option<android::SocketProtectFn<std::sync::Arc<Box<dyn android::SocketProtect + Send + Sync>>>>,
+    pub vpn_socket_protect: Option<std::sync::Arc<Box<dyn android::SocketProtect + Send + Sync>>>,
 
     /// Outbound socket binds to this IP address, mostly for choosing network interfaces
     ///
@@ -92,35 +91,28 @@ pub struct AcceptOpts {
 }
 
 #[cfg(target_os = "android")]
+impl ConnectOpts {
+    pub fn set_vpn_socket_protect<F>(&mut self, f: F)
+    where
+        F: Fn(std::os::unix::io::RawFd) -> std::io::Result<()> + Send + Sync + 'static,
+    {
+        let protect_fn = Box::new(android::SocketProtectFn { f }) as Box<dyn android::SocketProtect + Send + Sync>;
+        self.vpn_socket_protect = Some(std::sync::Arc::new(protect_fn))
+    }
+}
+
+#[cfg(target_os = "android")]
 pub mod android {
     use std::io;
     use std::os::unix::io::RawFd;
     use std::sync::Arc;
 
-    pub fn make_socket_protect_fn<F>(f: F) -> SocketProtectFn<Arc<Box<dyn SocketProtect + Send + Sync>>>
-    where
-        F: Fn(RawFd) -> io::Result<()> + Send + Sync + 'static,
-    {
-        SocketProtectFn {
-            f: Arc::new(Box::new(f) as Box<dyn SocketProtect + Send + Sync>),
-        }
-    }
-
     pub trait SocketProtect {
         fn protect(&self, fd: RawFd) -> io::Result<()>;
     }
 
-    impl<F> SocketProtect for F
-    where
-        F: Fn(RawFd) -> io::Result<()>,
-    {
-        fn protect(&self, fd: RawFd) -> io::Result<()> {
-            self(fd)
-        }
-    }
-
     pub struct SocketProtectFn<F> {
-        f: F,
+        pub f: F,
     }
 
     impl<F> SocketProtect for SocketProtectFn<F>
@@ -132,21 +124,15 @@ pub mod android {
         }
     }
 
-    impl SocketProtectFn<Arc<Box<dyn SocketProtect>>> {
-        pub fn call(&self, fd: RawFd) -> io::Result<()> {
-            self.f.protect(fd)
-        }
-    }
-
     impl<F> Clone for SocketProtectFn<Arc<F>> {
         fn clone(&self) -> Self {
             Self { f: self.f.clone() }
         }
     }
 
-    impl<F> std::fmt::Debug for SocketProtectFn<F> {
+    impl std::fmt::Debug for dyn SocketProtect + Send + Sync {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("SocketProtectFn").finish()
+            f.debug_struct("dyn SocketProtect + Send + Sync").finish()
         }
     }
 }
