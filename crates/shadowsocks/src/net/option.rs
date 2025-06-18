@@ -60,7 +60,8 @@ pub struct ConnectOpts {
     #[cfg(target_os = "android")]
     pub vpn_protect_path: Option<std::path::PathBuf>,
     #[cfg(target_os = "android")]
-    pub vpn_socket_protect_fn: Option<android::SocketProtectFn<Box<dyn android::CloneFn>>>,
+    pub vpn_socket_protect_fn:
+        Option<android::SocketProtectFn<std::sync::Arc<Box<dyn android::SocketProtect + Send + Sync>>>>,
 
     /// Outbound socket binds to this IP address, mostly for choosing network interfaces
     ///
@@ -92,47 +93,39 @@ pub struct AcceptOpts {
 
 #[cfg(target_os = "android")]
 pub mod android {
-    pub fn socket_protect_fn<F>(f: F) -> SocketProtectFn<Box<dyn CloneFn>>
+    use std::io;
+    use std::os::unix::io::RawFd;
+    use std::sync::Arc;
+
+    pub fn make_socket_protect_fn<F>(f: F) -> SocketProtectFn<Arc<Box<F>>>
     where
-        F: Fn(i32) + Send + Sync + Clone + 'static,
+        F: Fn(RawFd) -> io::Result<()> + Send + Sync + Clone,
     {
         SocketProtectFn {
-            f: Box::new(f),
+            f: Arc::new(Box::new(f)),
         }
     }
 
-    pub trait CloneFn: Fn(i32) + Send + Sync {
-        fn clone_box(&self) -> Box<dyn CloneFn>;
-    }
-
-    impl<F: Clone + Send + Sync + 'static> CloneFn for F
-    where
-        F: Fn(i32),
-    {
-        fn clone_box(&self) -> Box<dyn CloneFn> {
-            Box::new(self.clone())
-        }
+    pub trait SocketProtect {
+        fn protect(&self, fd: RawFd) -> io::Result<()>;
     }
 
     pub struct SocketProtectFn<F> {
         f: F,
     }
 
-    impl<F> SocketProtectFn<F>
-    where 
-        F: Fn(i32)
+    impl<F> SocketProtect for SocketProtectFn<F>
+    where
+        F: Fn(RawFd) -> io::Result<()>,
     {
-        pub fn call(&self, fd: i32) {
+        fn protect(&self, fd: RawFd) -> io::Result<()> {
             (self.f)(fd)
         }
     }
 
-    impl Clone for SocketProtectFn<Box<dyn CloneFn>>
-    {
+    impl<F> Clone for SocketProtectFn<Arc<F>> {
         fn clone(&self) -> Self {
-            Self {
-                f: self.f.clone_box(),
-            }
+            Self { f: self.f.clone() }
         }
     }
 
