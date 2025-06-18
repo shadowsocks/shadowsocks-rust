@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 
 #[cfg(target_os = "android")]
-pub use self::option::android::{CloneFn, SocketProtectFn, make_socket_protect_fn};
+pub use self::option::android::{SocketProtect, SocketProtectFn, make_socket_protect_fn};
 #[cfg(unix)]
 pub use self::sys::uds::{UnixListener, UnixStream};
 pub use self::{
