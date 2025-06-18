@@ -131,9 +131,7 @@ where
                 if chunk_count == 1 && chunk_remaining == 0 {
                     // Header is the end of the data chunk, so no payload is in the first chunk, and padding == 0.
                     // REJECT insecure clients.
-                    return Err(io::Error::other(
-                        "no payload in first data chunk, and padding is 0",
-                    ));
+                    return Err(io::Error::other("no payload in first data chunk, and padding is 0"));
                 } else if chunk_count > 1 {
                     warn!(
                         "tcp header is separated in {} chunks, client is not following the AEAD-2022 spec",

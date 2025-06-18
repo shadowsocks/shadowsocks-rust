@@ -1,11 +1,6 @@
 //! Shadowsocks server manager protocol
 
-use std::{
-    collections::HashMap,
-    io,
-    str,
-    string::ToString,
-};
+use std::{collections::HashMap, io, str, string::ToString};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

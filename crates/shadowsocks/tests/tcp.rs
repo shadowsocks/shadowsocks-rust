@@ -1,8 +1,4 @@
-use std::{
-    io,
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{io, net::SocketAddr, sync::Arc};
 
 use byte_string::ByteStr;
 use futures::future;

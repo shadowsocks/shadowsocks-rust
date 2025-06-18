@@ -57,9 +57,7 @@ impl ManagerDatagram {
     /// Create a `ManagerDatagram` binding to requested `bind_addr`
     pub async fn bind(context: &Context, bind_addr: &ManagerAddr) -> io::Result<Self> {
         match *bind_addr {
-            ManagerAddr::SocketAddr(ref saddr) => Ok(Self::UdpDatagram(
-                ShadowUdpSocket::listen(saddr).await?.into(),
-            )),
+            ManagerAddr::SocketAddr(ref saddr) => Ok(Self::UdpDatagram(ShadowUdpSocket::listen(saddr).await?.into())),
             ManagerAddr::DomainName(ref dname, port) => {
                 let (_, socket) =
                     lookup_then!(context, dname, port, |saddr| { ShadowUdpSocket::listen(&saddr).await })?;
@@ -79,11 +77,7 @@ impl ManagerDatagram {
     }
 
     /// Create a `ManagerDatagram` for sending data to manager
-    pub async fn connect(
-        context: &Context,
-        bind_addr: &ManagerAddr,
-        connect_opts: &ConnectOpts,
-    ) -> io::Result<Self> {
+    pub async fn connect(context: &Context, bind_addr: &ManagerAddr, connect_opts: &ConnectOpts) -> io::Result<Self> {
         match *bind_addr {
             ManagerAddr::SocketAddr(sa) => Self::connect_socket_addr(sa, connect_opts).await,
 

@@ -276,11 +276,7 @@ where
         }
     }
 
-    async fn connect_http_http1(
-        scheme: &Scheme,
-        host: Address,
-        stream: AutoProxyClientStream,
-    ) -> io::Result<Self> {
+    async fn connect_http_http1(scheme: &Scheme, host: Address, stream: AutoProxyClientStream) -> io::Result<Self> {
         trace!(
             "HTTP making new HTTP/1.1 connection to host: {}, scheme: {}",
             host, scheme

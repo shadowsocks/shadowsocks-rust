@@ -540,9 +540,7 @@ impl Manager {
                             user.password
                         );
 
-                        return Err(io::Error::other(
-                            "users[].password must be encoded with base64",
-                        ));
+                        return Err(io::Error::other("users[].password must be encoded with base64"));
                     }
                 };
 

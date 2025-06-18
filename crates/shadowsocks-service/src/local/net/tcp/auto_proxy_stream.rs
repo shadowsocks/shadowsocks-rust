@@ -32,11 +32,7 @@ pub enum AutoProxyClientStream {
 
 impl AutoProxyClientStream {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect<A>(
-        context: Arc<ServiceContext>,
-        server: &ServerIdent,
-        addr: A,
-    ) -> io::Result<Self>
+    pub async fn connect<A>(context: Arc<ServiceContext>, server: &ServerIdent, addr: A) -> io::Result<Self>
     where
         A: Into<Address>,
     {
@@ -90,16 +86,11 @@ impl AutoProxyClientStream {
     }
 
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect_proxied<A>(
-        context: Arc<ServiceContext>,
-        server: &ServerIdent,
-        addr: A,
-    ) -> io::Result<Self>
+    pub async fn connect_proxied<A>(context: Arc<ServiceContext>, server: &ServerIdent, addr: A) -> io::Result<Self>
     where
         A: Into<Address>,
     {
-        Self::connect_proxied_with_opts(context.clone(), server, addr, context.connect_opts_ref())
-            .await
+        Self::connect_proxied_with_opts(context.clone(), server, addr, context.connect_opts_ref()).await
     }
 
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`

@@ -59,11 +59,7 @@ static DEFAULT_CONNECT_OPTS: LazyLock<ConnectOpts> = LazyLock::new(Default::defa
 
 impl ProxyClientStream<OutboundTcpStream> {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect<A>(
-        context: SharedContext,
-        svr_cfg: &ServerConfig,
-        addr: A,
-    ) -> io::Result<Self>
+    pub async fn connect<A>(context: SharedContext, svr_cfg: &ServerConfig, addr: A) -> io::Result<Self>
     where
         A: Into<Address>,
     {
@@ -234,10 +230,7 @@ where
                         let sent_nonce = this.stream.sent_nonce();
                         let sent_nonce = if sent_nonce.is_empty() { None } else { Some(sent_nonce) };
                         if sent_nonce != this.stream.received_request_nonce() {
-                            return Err(io::Error::other(
-                                "received TCP response header with unmatched salt",
-                            ))
-                            .into();
+                            return Err(io::Error::other("received TCP response header with unmatched salt")).into();
                         }
 
                         *(this.reader_state) = ProxyClientStreamReadState::Established;

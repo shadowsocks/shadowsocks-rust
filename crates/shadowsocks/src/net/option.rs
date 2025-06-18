@@ -92,25 +92,36 @@ pub struct AcceptOpts {
 
 #[cfg(target_os = "android")]
 impl ConnectOpts {
+    /// Set `vpn_protect_path` for Android VPNService.protect implementation
     pub fn set_vpn_socket_protect<F>(&mut self, f: F)
     where
-        F: Fn(std::os::unix::io::RawFd) -> std::io::Result<()> + Send + Sync + 'static,
+        F: self::android::MakeSocketProtect + Send + Sync + 'static,
     {
-        let protect_fn = Box::new(android::SocketProtectFn { f }) as Box<dyn android::SocketProtect + Send + Sync>;
+        let protect_fn = Box::new(f.make_socket_protect()) as Box<dyn android::SocketProtect + Send + Sync>;
         self.vpn_socket_protect = Some(std::sync::Arc::new(protect_fn))
     }
 }
 
+/// Android specific features
 #[cfg(target_os = "android")]
 pub mod android {
-    use std::io;
-    use std::os::unix::io::RawFd;
-    use std::sync::Arc;
+    use std::{fmt, io, os::unix::io::RawFd, sync::Arc};
 
+    /// Android VPN socket protect implemetation
     pub trait SocketProtect {
+        /// Protects the socket file descriptor by calling `VpnService.protect(fd)`
         fn protect(&self, fd: RawFd) -> io::Result<()>;
     }
 
+    /// Creating an instance of `SocketProtect`
+    pub trait MakeSocketProtect {
+        type SocketProtect: SocketProtect + Send + Sync;
+
+        /// Creates an instance of `SocketProtect`
+        fn make_socket_protect(self) -> Self::SocketProtect;
+    }
+
+    /// A function that implements `SocketProtect` trait
     pub struct SocketProtectFn<F> {
         pub f: F,
     }
@@ -130,9 +141,20 @@ pub mod android {
         }
     }
 
-    impl std::fmt::Debug for dyn SocketProtect + Send + Sync {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl fmt::Debug for dyn SocketProtect + Send + Sync {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("dyn SocketProtect + Send + Sync").finish()
+        }
+    }
+
+    impl<F> MakeSocketProtect for F
+    where
+        F: Fn(RawFd) -> io::Result<()> + Send + Sync + 'static,
+    {
+        type SocketProtect = SocketProtectFn<F>;
+
+        fn make_socket_protect(self) -> Self::SocketProtect {
+            SocketProtectFn { f: self }
         }
     }
 }

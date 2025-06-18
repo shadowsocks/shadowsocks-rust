@@ -232,9 +232,7 @@ impl Address {
                 }
                 let addr = Ipv6Addr::from(cur.get_u128());
                 let port = cur.get_u16();
-                Ok(Self::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
-                    addr, port, 0, 0,
-                ))))
+                Ok(Self::SocketAddress(SocketAddr::V6(SocketAddrV6::new(addr, port, 0, 0))))
             }
             consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
                 let domain_len = cur.get_u8() as usize;

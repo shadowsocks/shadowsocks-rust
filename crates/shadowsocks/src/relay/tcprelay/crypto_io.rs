@@ -135,21 +135,15 @@ impl DecryptedReader {
     {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            Self::Stream(ref mut reader) => {
-                reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into)
-            }
+            Self::Stream(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into),
             #[cfg(feature = "aead-cipher")]
-            Self::Aead(ref mut reader) => {
-                reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into)
-            }
+            Self::Aead(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into),
             Self::None => {
                 let _ = context;
                 Pin::new(stream).poll_read(cx, buf).map_err(Into::into)
             }
             #[cfg(feature = "aead-cipher-2022")]
-            Self::Aead2022(ref mut reader) => {
-                reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into)
-            }
+            Self::Aead2022(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf).map_err(Into::into),
         }
     }
 
@@ -235,9 +229,7 @@ impl EncryptedWriter {
                 Self::None
             }
             #[cfg(feature = "aead-cipher-2022")]
-            CipherCategory::Aead2022 => {
-                Self::Aead2022(Aead2022EncryptedWriter::new(stream_ty, method, key, nonce))
-            }
+            CipherCategory::Aead2022 => Self::Aead2022(Aead2022EncryptedWriter::new(stream_ty, method, key, nonce)),
         }
     }
 
@@ -293,9 +285,7 @@ impl EncryptedWriter {
             Self::Aead(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf).map_err(Into::into),
             Self::None => Pin::new(stream).poll_write(cx, buf).map_err(Into::into),
             #[cfg(feature = "aead-cipher-2022")]
-            Self::Aead2022(ref mut writer) => {
-                writer.poll_write_encrypted(cx, stream, buf).map_err(Into::into)
-            }
+            Self::Aead2022(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf).map_err(Into::into),
         }
     }
 
@@ -357,13 +347,7 @@ impl<S> fmt::Debug for CryptoStream<S> {
 
 impl<S> CryptoStream<S> {
     /// Create a new CryptoStream with the underlying stream connection
-    pub fn from_stream(
-        context: &Context,
-        stream: S,
-        stream_ty: StreamType,
-        method: CipherKind,
-        key: &[u8],
-    ) -> Self {
+    pub fn from_stream(context: &Context, stream: S, stream_ty: StreamType, method: CipherKind, key: &[u8]) -> Self {
         const EMPTY_IDENTITY: [Bytes; 0] = [];
         Self::from_stream_with_identity(context, stream, stream_ty, method, key, &EMPTY_IDENTITY, None)
     }

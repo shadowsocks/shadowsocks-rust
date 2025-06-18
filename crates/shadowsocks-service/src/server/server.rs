@@ -1,11 +1,6 @@
 //! Shadowsocks Server instance
 
-use std::{
-    collections::HashMap,
-    io,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, io, sync::Arc, time::Duration};
 
 use futures::future;
 use log::{error, trace};

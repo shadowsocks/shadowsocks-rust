@@ -1,8 +1,7 @@
 use std::{
     collections::HashMap,
     future::Future,
-    io,
-    mem,
+    io, mem,
     net::{IpAddr, SocketAddr},
     pin::Pin,
     sync::{

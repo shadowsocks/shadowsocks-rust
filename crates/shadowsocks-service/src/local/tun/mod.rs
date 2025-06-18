@@ -3,8 +3,7 @@
 #[cfg(unix)]
 use std::os::unix::io::RawFd;
 use std::{
-    io,
-    mem,
+    io, mem,
     net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,

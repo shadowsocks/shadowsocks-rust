@@ -35,11 +35,7 @@ impl HttpBuilder {
     }
 
     /// Create with an existed context
-    pub fn with_context(
-        context: Arc<ServiceContext>,
-        client_config: ServerAddr,
-        balancer: PingBalancer,
-    ) -> Self {
+    pub fn with_context(context: Arc<ServiceContext>, client_config: ServerAddr, balancer: PingBalancer) -> Self {
         Self {
             context,
             client_config,

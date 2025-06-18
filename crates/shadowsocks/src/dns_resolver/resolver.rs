@@ -276,9 +276,7 @@ impl DnsResolver {
         connect_opts: ConnectOpts,
     ) -> io::Result<Self> {
         use super::hickory_dns_resolver::create_resolver;
-        Ok(Self::HickoryDns(
-            create_resolver(Some(dns), opts, connect_opts).await?,
-        ))
+        Ok(Self::HickoryDns(create_resolver(Some(dns), opts, connect_opts).await?))
     }
 
     /// Custom DNS resolver

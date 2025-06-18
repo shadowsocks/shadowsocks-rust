@@ -108,9 +108,9 @@ impl Socks5TcpHandler {
                 let rsp = PasswdAuthResponse::new(err.as_reply().as_u8());
                 let _ = rsp.write_to(stream).await;
 
-                return Err(Error::other(
-                    format!("Username/Password Authentication Initial request failed: {err}"),
-                ));
+                return Err(Error::other(format!(
+                    "Username/Password Authentication Initial request failed: {err}"
+                )));
             }
         };
 
@@ -157,9 +157,9 @@ impl Socks5TcpHandler {
                 user_name, password
             );
 
-            Err(Error::other(
-                format!("Username/Password Authentication failed, user: {user_name}, password: {password}"),
-            ))
+            Err(Error::other(format!(
+                "Username/Password Authentication failed, user: {user_name}, password: {password}"
+            )))
         }
     }
 

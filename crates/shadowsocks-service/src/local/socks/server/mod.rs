@@ -43,11 +43,7 @@ impl SocksBuilder {
     }
 
     /// Create a new SOCKS server with context
-    pub fn with_context(
-        context: Arc<ServiceContext>,
-        client_config: ServerAddr,
-        balancer: PingBalancer,
-    ) -> Self {
+    pub fn with_context(context: Arc<ServiceContext>, client_config: ServerAddr, balancer: PingBalancer) -> Self {
         Self {
             context,
             mode: Mode::TcpOnly,

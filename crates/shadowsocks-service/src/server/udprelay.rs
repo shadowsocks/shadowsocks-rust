@@ -1,12 +1,6 @@
 //! Shadowsocks UDP server
 
-use std::{
-    cell::RefCell,
-    io,
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{cell::RefCell, io, net::SocketAddr, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use futures::future;

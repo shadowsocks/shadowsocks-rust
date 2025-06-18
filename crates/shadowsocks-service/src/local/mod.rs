@@ -1,11 +1,6 @@
 //! Shadowsocks Local Server
 
-use std::{
-    io,
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::future;
 use log::trace;

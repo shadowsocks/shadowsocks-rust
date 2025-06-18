@@ -60,11 +60,7 @@ impl TcpStream {
     }
 
     /// Connects proxy remote target
-    pub async fn connect_remote_with_opts(
-        context: &Context,
-        addr: &Address,
-        opts: &ConnectOpts,
-    ) -> io::Result<Self> {
+    pub async fn connect_remote_with_opts(context: &Context, addr: &Address, opts: &ConnectOpts) -> io::Result<Self> {
         let stream = match *addr {
             Address::SocketAddress(ref addr) => SysTcpStream::connect(*addr, opts).await?,
             Address::DomainNameAddress(ref domain, port) => {
