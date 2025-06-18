@@ -111,7 +111,7 @@ pub mod android {
         F: Fn(RawFd) -> io::Result<()> + Send + Sync + 'static,
     {
         let protect_fn = Box::new(SocketProtectFn { f }) as Box<dyn SocketProtect + Send + Sync>;
-        std::sync::Arc::new(protect_fn)
+        Arc::new(protect_fn)
     }
 
     pub trait SocketProtect {
