@@ -133,7 +133,7 @@ pub mod android {
     }
 
     impl SocketProtectFn<Arc<Box<dyn SocketProtect>>> {
-        pub fn protect(&self, fd: RawFd) -> io::Result<()> {
+        pub fn call(&self, fd: RawFd) -> io::Result<()> {
             self.f.protect(fd)
         }
     }

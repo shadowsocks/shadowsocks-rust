@@ -56,7 +56,6 @@ impl TcpStream {
         // This is a workaround for VPNService
         #[cfg(target_os = "android")]
         if !addr.ip().is_loopback() {
-            use crate::net::SocketProtect;
             use std::time::Duration;
             use tokio::time;
 
@@ -71,7 +70,7 @@ impl TcpStream {
             }
 
             if let Some(ref protect_fn) = opts.vpn_socket_protect_fn {
-                protect_fn.protect(socket.as_raw_fd())?;
+                protect_fn.call(socket.as_raw_fd())?;
             }
         }
 
@@ -337,7 +336,6 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
     // This is a workaround for VPNService
     #[cfg(target_os = "android")]
     {
-        use crate::net::SocketProtect;
         use std::time::Duration;
         use tokio::time;
 
@@ -352,7 +350,7 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
         }
 
         if let Some(ref protect_fn) = config.vpn_socket_protect_fn {
-            protect_fn.protect(socket.as_raw_fd())?;
+            protect_fn.call(socket.as_raw_fd())?;
         }
     }
 
