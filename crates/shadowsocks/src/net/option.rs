@@ -132,6 +132,15 @@ pub mod android {
         }
     }
 
+    impl<F> SocketProtectFn<F>
+    where
+        F: SocketProtect,
+    {
+        pub fn protect(&self, fd: RawFd) -> io::Result<()> {
+            (self.f).protect(fd)
+        }
+    }
+
     impl<F> Clone for SocketProtectFn<Arc<F>> {
         fn clone(&self) -> Self {
             Self { f: self.f.clone() }
