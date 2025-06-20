@@ -241,7 +241,7 @@ jemallocator = { version = "0.5", optional = true }
 snmalloc-rs = { version = "0.3", optional = true }
 rpmalloc = { version = "0.2", optional = true }
 
-shadowsocks-service = { version = "1.23.4", path = "./crates/shadowsocks-service", default-features = false, features = ["aead-cipher"] }
+shadowsocks-service = { version = "1.23.4", path = "./crates/shadowsocks-service", default-features = false }
 
 windows-service = { version = "0.8", optional = true }
 
