@@ -9,7 +9,6 @@ use std::{
     task::{self, Poll},
 };
 
-use cfg_if::cfg_if;
 use log::{debug, error, warn};
 use pin_project::pin_project;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -56,22 +55,7 @@ impl TcpStream {
         // This is a workaround for VPNService
         #[cfg(target_os = "android")]
         if !addr.ip().is_loopback() {
-            use std::time::Duration;
-            use tokio::time;
-
-            if let Some(ref path) = opts.vpn_protect_path {
-                // RPC calls to `VpnService.protect()`
-                // Timeout in 3 seconds like shadowsocks-libev
-                match time::timeout(Duration::from_secs(3), vpn_protect(path, socket.as_raw_fd())).await {
-                    Ok(Ok(..)) => {}
-                    Ok(Err(err)) => return Err(err),
-                    Err(..) => return Err(io::Error::new(ErrorKind::TimedOut, "protect() timeout")),
-                }
-            }
-
-            if let Some(ref protect) = opts.vpn_socket_protect {
-                protect.protect(socket.as_raw_fd())?;
-            }
+            android::vpn_protect(&socket, opts).await?;
         }
 
         // Set SO_MARK for mark-based routing on Linux (since 2.6.25)
@@ -335,24 +319,7 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
     // Any traffic except localhost should be protected
     // This is a workaround for VPNService
     #[cfg(target_os = "android")]
-    {
-        use std::time::Duration;
-        use tokio::time;
-
-        if let Some(ref path) = config.vpn_protect_path {
-            // RPC calls to `VpnService.protect()`
-            // Timeout in 3 seconds like shadowsocks-libev
-            match time::timeout(Duration::from_secs(3), vpn_protect(path, socket.as_raw_fd())).await {
-                Ok(Ok(..)) => {}
-                Ok(Err(err)) => return Err(err),
-                Err(..) => return Err(io::Error::new(ErrorKind::TimedOut, "protect() timeout")),
-            }
-        }
-
-        if let Some(ref protect) = config.vpn_socket_protect {
-            protect.protect(socket.as_raw_fd())?;
-        }
-    }
+    android::vpn_protect(&socket, config).await?;
 
     // Set SO_MARK for mark-based routing on Linux (since 2.6.25)
     // NOTE: This will require CAP_NET_ADMIN capability (root in most cases)
@@ -403,36 +370,67 @@ fn set_bindtodevice<S: AsRawFd>(socket: &S, iface: &str) -> io::Result<()> {
     Ok(())
 }
 
-cfg_if! {
-    if #[cfg(target_os = "android")] {
-        use std::path::Path;
-        use tokio::io::AsyncReadExt;
+#[cfg(target_os = "android")]
+mod android {
+    use std::{
+        io::{self, ErrorKind},
+        os::unix::io::{AsRawFd, RawFd},
+        path::Path,
+        time::Duration,
+    };
+    use tokio::{io::AsyncReadExt, time};
 
-        use super::uds::UnixStream;
+    use super::super::uds::UnixStream;
+    use super::ConnectOpts;
 
-        /// This is a RPC for Android to `protect()` socket for connecting to remote servers
-        ///
-        /// https://developer.android.com/reference/android/net/VpnService#protect(java.net.Socket)
-        ///
-        /// More detail could be found in [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android) project.
-        async fn vpn_protect<P: AsRef<Path>>(protect_path: P, fd: RawFd) -> io::Result<()> {
-            let mut stream = UnixStream::connect(protect_path).await?;
+    /// This is a RPC for Android to `protect()` socket for connecting to remote servers
+    ///
+    /// https://developer.android.com/reference/android/net/VpnService#protect(java.net.Socket)
+    ///
+    /// More detail could be found in [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android) project.
+    async fn send_vpn_protect_uds<P: AsRef<Path>>(protect_path: P, fd: RawFd) -> io::Result<()> {
+        let mut stream = UnixStream::connect(protect_path).await?;
 
-            // send fds
-            let dummy: [u8; 1] = [1];
-            let fds: [RawFd; 1] = [fd];
-            stream.send_with_fd(&dummy, &fds).await?;
+        // send fds
+        let dummy: [u8; 1] = [1];
+        let fds: [RawFd; 1] = [fd];
+        stream.send_with_fd(&dummy, &fds).await?;
 
-            // receive the return value
-            let mut response = [0; 1];
-            stream.read_exact(&mut response).await?;
+        // receive the return value
+        let mut response = [0; 1];
+        stream.read_exact(&mut response).await?;
 
-            if response[0] == 0xFF {
-                return Err(io::Error::other("protect() failed"));
-            }
-
-            Ok(())
+        if response[0] == 0xFF {
+            return Err(io::Error::other("protect() failed"));
         }
+
+        Ok(())
+    }
+
+    /// Try to run VPNService#protect on Android
+    ///
+    /// https://developer.android.com/reference/android/net/VpnService#protect(java.net.Socket)
+    pub async fn vpn_protect<S>(socket: &S, opts: &ConnectOpts) -> io::Result<()>
+    where
+        S: AsRawFd + Send + Sync + 'static,
+    {
+        // shadowsocks-android uses a Unix domain socket to communicate with the VPNService#protect
+        if let Some(ref path) = opts.vpn_protect_path {
+            // RPC calls to `VpnService.protect()`
+            // Timeout in 3 seconds like shadowsocks-libev
+            match time::timeout(Duration::from_secs(3), send_vpn_protect_uds(path, socket.as_raw_fd())).await {
+                Ok(Ok(..)) => {}
+                Ok(Err(err)) => return Err(err),
+                Err(..) => return Err(io::Error::new(ErrorKind::TimedOut, "protect() timeout")),
+            }
+        }
+
+        // Customized SocketProtect
+        if let Some(ref protect) = opts.vpn_socket_protect {
+            protect.protect(socket.as_raw_fd())?;
+        }
+
+        Ok(())
     }
 }
 

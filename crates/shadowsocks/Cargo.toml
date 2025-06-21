@@ -72,6 +72,7 @@ percent-encoding = "2.1"
 futures = "0.3"
 trait-variant = "0.1"
 dynosaur = "0.2.0"
+sealed = "0.6"
 
 socket2 = { version = "0.5", features = ["all"] }
 tokio = { version = "1.9.0", features = [
