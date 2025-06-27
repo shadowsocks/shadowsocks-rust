@@ -219,3 +219,6 @@ features = [
     "dns-over-tls",
     "dns-over-https",
 ]
+
+[lints.clippy]
+uninlined_format_args = "allow"
