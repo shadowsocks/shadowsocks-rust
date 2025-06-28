@@ -3422,7 +3422,6 @@ dependencies = [
  "log",
  "log4rs",
  "mimalloc",
- "mime",
  "qrcode",
  "rand 0.9.1",
  "reqwest",

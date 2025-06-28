@@ -157,7 +157,6 @@ local-fake-dns = ["local", "shadowsocks-service/local-fake-dns", "ipnet"]
 # https://shadowsocks.org/doc/sip008.html
 local-online-config = [
     "local",
-    "mime",
     "shadowsocks-service/local-online-config",
 ]
 
@@ -218,7 +217,6 @@ serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
 thiserror = "2.0"
 base64 = "0.22"
-mime = { version = "0.3", optional = true }
 
 clap = { version = "4.5", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
@@ -267,3 +265,6 @@ byteorder = "1.5"
 env_logger = "0.11"
 byte_string = "1.0"
 tokio = { version = "1", features = ["net", "time", "macros", "io-util"] }
+
+[lints.clippy]
+uninlined_format_args = "allow"
