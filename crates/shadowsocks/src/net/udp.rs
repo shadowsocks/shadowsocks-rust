@@ -35,11 +35,11 @@ use futures::ready;
 use tokio::io::Interest;
 use tokio::{io::ReadBuf, net::ToSocketAddrs};
 
-use crate::{ServerAddr, context::Context, relay::socks5::Address};
+use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
 use super::{
-    AcceptOpts, AddrFamily, ConnectOpts,
     sys::{bind_outbound_udp_socket, create_inbound_udp_socket, create_outbound_udp_socket},
+    AcceptOpts, AddrFamily, ConnectOpts,
 };
 
 /// Message struct for `batch_send`
@@ -412,5 +412,19 @@ impl std::os::fd::AsRawFd for UdpSocket {
 impl std::os::fd::AsFd for UdpSocket {
     fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
         self.socket.as_fd()
+    }
+}
+
+#[cfg(windows)]
+impl std::os::windows::io::AsRawSocket for UdpSocket {
+    fn as_raw_socket(&self) -> std::os::windows::io::RawSocket {
+        self.socket.as_raw_socket()
+    }
+}
+
+#[cfg(windows)]
+impl std::os::windows::io::AsSocket for UdpSocket {
+    fn as_socket(&self) -> std::os::windows::io::BorrowedSocket<'_> {
+        self.socket.as_socket()
     }
 }
