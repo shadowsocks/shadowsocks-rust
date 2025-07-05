@@ -157,7 +157,7 @@ tokio-rustls = { version = "0.26", optional = true, default-features = false, fe
 rustls-native-certs = { version = "0.8", optional = true }
 trait-variant = "0.1"
 
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { version = "0.6", features = ["all"] }
 libc = "~0.2.141"
 
 hyper = { version = "1.4", optional = true, features = ["full"] }
