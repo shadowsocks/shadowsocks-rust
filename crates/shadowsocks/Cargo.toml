@@ -95,7 +95,7 @@ blake3 = "1.5"
 shadowsocks-crypto = { version = "0.6.0", default-features = false }
 
 [target.'cfg(any(windows, target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "macos", target_os = "ios", target_os = "watchos", target_os = "tvos"))'.dependencies]
-tokio-tfo = "0.3"
+tokio-tfo = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.60", features = [

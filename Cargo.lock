@@ -3928,9 +3928,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-tfo"
-version = "0.3.4"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e3d7ba01a66a3a6dedebca3788232547ac193b31530bb625cb42eeb8e5154b6"
+checksum = "131d5cbb460af38a60d668de7cb5e4c1c8a908506111ff2034417559994aa81e"
 dependencies = [
  "cfg-if",
  "futures",
@@ -3938,9 +3938,9 @@ dependencies = [
  "log",
  "once_cell",
  "pin-project",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "tokio",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
