@@ -41,10 +41,14 @@ jobs:
         run: cargo test --features "full-extra" --verbose --no-fail-fast
       - name: Build & Test (Default) - shadowsocks
         run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-fail-fast
+      - name: Build & Test (Default) - shadowsocks-service
+        run: cargo test --manifest-path ./crates/shadowsocks-service/Cargo.toml --verbose --no-fail-fast
       - name: Build & Test (--no-default-features)
         run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build & Test (--no-default-features) - shadowsocks
         run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-default-features --no-fail-fast
+      - name: Build & Test (--no-default-features) - shadowsocks-service
+        run: cargo test --manifest-path ./crates/shadowsocks-service/Cargo.toml --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled (Unix)
         if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
         run: cargo build --verbose --features "full-extra local-flow-stat utility-url-outline"
