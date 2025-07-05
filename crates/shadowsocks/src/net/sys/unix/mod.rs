@@ -112,7 +112,7 @@ pub fn set_common_sockopt_after_connect<S: AsRawFd>(stream: &S, opts: &ConnectOp
 
 fn set_common_sockopt_after_connect_impl(socket: &Socket, opts: &ConnectOpts) -> io::Result<()> {
     if opts.tcp.nodelay {
-        socket.set_nodelay(true)?;
+        socket.set_tcp_nodelay(true)?;
     }
 
     set_tcp_keepalive(socket, &opts.tcp)?;
@@ -133,7 +133,7 @@ fn set_common_sockopt_after_accept_impl(socket: &Socket, opts: &AcceptOpts) -> i
         socket.set_recv_buffer_size(buf_size as usize)?;
     }
 
-    socket.set_nodelay(opts.tcp.nodelay)?;
+    socket.set_tcp_nodelay(opts.tcp.nodelay)?;
 
     set_tcp_keepalive(socket, &opts.tcp)?;
 
