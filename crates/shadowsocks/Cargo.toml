@@ -74,7 +74,7 @@ trait-variant = "0.1"
 dynosaur = "0.2.0"
 sealed = "0.6"
 
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { version = "0.6", features = ["all"] }
 tokio = { version = "1.9.0", features = [
     "io-util",
     "macros",

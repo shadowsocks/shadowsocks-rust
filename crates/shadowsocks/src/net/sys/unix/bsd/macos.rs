@@ -14,7 +14,7 @@ use std::{
 
 use log::{debug, error, warn};
 use pin_project::pin_project;
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use socket2::{Domain, Protocol, SockAddr, SockAddrStorage, Socket, Type};
 use tokio::{
     io::{AsyncRead, AsyncWrite, Interest, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
@@ -85,7 +85,7 @@ impl TcpStream {
                     let raddr = SockAddr::from(addr);
 
                     let mut endpoints: libc::sa_endpoints_t = mem::zeroed();
-                    endpoints.sae_dstaddr = raddr.as_ptr();
+                    endpoints.sae_dstaddr = raddr.as_ptr() as *const _;
                     endpoints.sae_dstaddrlen = raddr.len();
 
                     let ret = libc::connectx(
@@ -428,8 +428,9 @@ static SUPPORT_BATCH_SEND_RECV_MSG: AtomicBool = AtomicBool::new(true);
 fn recvmsg_fallback<S: AsRawFd>(sock: &S, msg: &mut BatchRecvMessage<'_>) -> io::Result<()> {
     let mut hdr: libc::msghdr = unsafe { mem::zeroed() };
 
-    let addr_storage: libc::sockaddr_storage = unsafe { mem::zeroed() };
-    let addr_len = mem::size_of_val(&addr_storage) as libc::socklen_t;
+    let addr_storage = SockAddrStorage::zeroed();
+    let addr_len = addr_storage.size_of() as libc::socklen_t;
+
     let sock_addr = unsafe { SockAddr::new(addr_storage, addr_len) };
     hdr.msg_name = sock_addr.as_ptr() as *mut _;
     hdr.msg_namelen = sock_addr.len() as _;
@@ -464,8 +465,8 @@ pub fn batch_recvmsg<S: AsRawFd>(sock: &S, msgs: &mut [BatchRecvMessage<'_>]) ->
     for msg in msgs.iter_mut() {
         let mut hdr: msghdr_x = unsafe { mem::zeroed() };
 
-        let addr_storage: libc::sockaddr_storage = unsafe { mem::zeroed() };
-        let addr_len = mem::size_of_val(&addr_storage) as libc::socklen_t;
+        let addr_storage = SockAddrStorage::zeroed();
+        let addr_len = addr_storage.size_of() as libc::socklen_t;
 
         vec_msg_name.push(unsafe { SockAddr::new(addr_storage, addr_len) });
         let sock_addr = vec_msg_name.last_mut().unwrap();

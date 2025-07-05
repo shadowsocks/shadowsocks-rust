@@ -526,7 +526,7 @@ pub fn set_common_sockopt_after_connect<S: AsRawSocket>(stream: &S, opts: &Conne
 
 fn set_common_sockopt_after_connect_impl(socket: &Socket, opts: &ConnectOpts) -> io::Result<()> {
     if opts.tcp.nodelay {
-        socket.set_nodelay(true)?;
+        socket.set_tcp_nodelay(true)?;
     }
 
     if let Some(intv) = opts.tcp.keepalive {
@@ -550,7 +550,7 @@ fn set_common_sockopt_after_accept_impl(socket: &Socket, opts: &AcceptOpts) -> i
         socket.set_recv_buffer_size(buf_size as usize)?;
     }
 
-    socket.set_nodelay(opts.tcp.nodelay)?;
+    socket.set_tcp_nodelay(opts.tcp.nodelay)?;
 
     if let Some(intv) = opts.tcp.keepalive {
         let keepalive = TcpKeepalive::new().with_time(intv).with_interval(intv);
