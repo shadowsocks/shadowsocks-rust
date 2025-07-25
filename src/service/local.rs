@@ -261,6 +261,8 @@ pub fn define_command_line_options(mut app: Command) -> Command {
             .arg(
                 Arg::new("LOG_CONFIG")
                     .long("log-config")
+                    // deprecated for removal
+                    .hide(true)
                     .num_args(1)
                     .action(ArgAction::Set)
                     .value_parser(clap::value_parser!(PathBuf))

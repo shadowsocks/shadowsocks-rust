@@ -877,9 +877,23 @@ Example configuration:
             // Euiqvalent to `--log-without-time`
             "without_time": false,
         },
-        // Equivalent to `--log-config`
-        // More detail could be found in https://crates.io/crates/log4rs
-        "config_path": "/path/to/log4rs/config.yaml"
+        // File logging configuration (will disable stdout logging)
+        // This is particularly useful for running as a Windows Service
+        "file": {
+            // Directory to store log files. If not set, it will not log to file
+            "directory": "/var/log/shadowsocks-rust",
+            // Log rotation frequency, must be one of the following:
+            // - never (default): This will result in log file located at `directory/prefix.suffix`
+            // - daily: A new log file in the format of `directory/prefix.yyyy-MM-dd.suffix` will be created daily
+            // - hourly: A new log file in the format of `directory/prefix.yyyy-MM-dd-HH.suffix` will be created hourly
+            "rotation": "never",
+            // Prefix of log file, default is one of `sslocal`, `ssserver`, `ssmanager` depending on the service being run.
+            "prefix": "shadowsocks-rust",
+            // Suffix of log file, default is `log`
+            "suffix": "log",
+            // Keeps the last N log files. If not set, no limit will be applied.
+            "max_files": 5
+        }
     },
     // Runtime configuration
     "runtime": {

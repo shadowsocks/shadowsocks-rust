@@ -142,6 +142,31 @@ impl Config {
                 nlog.format = nformat;
             }
 
+            if let Some(file_config) = log.file
+                // directory must be configured for file logging
+                && let Some(directory) = file_config.directory
+            {
+                let mut nfile = LogFileConfig::new(directory);
+                if let Some(rotation) = file_config.rotation {
+                    nfile.rotation = match rotation.as_str() {
+                        "never" => tracing_appender::rolling::Rotation::NEVER,
+                        "hourly" => tracing_appender::rolling::Rotation::HOURLY,
+                        "daily" => tracing_appender::rolling::Rotation::DAILY,
+                        _ => return Err(ConfigError::InvalidValue(rotation)),
+                    };
+                }
+                if let Some(prefix) = file_config.prefix {
+                    nfile.prefix = Some(prefix);
+                }
+                if let Some(suffix) = file_config.suffix {
+                    nfile.suffix = Some(suffix);
+                }
+                if let Some(max_files) = file_config.max_files {
+                    nfile.max_files = Some(max_files);
+                }
+                nlog.file = Some(nfile);
+            }
+
             if let Some(config_path) = log.config_path {
                 nlog.config_path = Some(PathBuf::from(config_path));
             }
@@ -210,6 +235,8 @@ pub struct LogConfig {
     pub level: u32,
     /// Default logger format configuration
     pub format: LogFormatConfig,
+    /// File appender configuration
+    pub file: Option<LogFileConfig>,
     /// Logging configuration file path
     pub config_path: Option<PathBuf>,
 }
@@ -219,6 +246,35 @@ pub struct LogConfig {
 #[derive(Debug, Clone, Default)]
 pub struct LogFormatConfig {
     pub without_time: bool,
+}
+
+/// File appender configuration for logging
+#[cfg(feature = "logging")]
+#[derive(Debug, Clone)]
+pub struct LogFileConfig {
+    /// Directory to store log files
+    pub directory: PathBuf,
+    /// Rotation strategy for log files. Default is `Rotation::NEVER`.
+    pub rotation: tracing_appender::rolling::Rotation,
+    /// Prefix for log file names. Default is the binary name.
+    pub prefix: Option<String>,
+    /// Suffix for log file names. Default is "log".
+    pub suffix: Option<String>,
+    /// Maximum number of log files to keep. Default is `None`, meaning no limit.
+    pub max_files: Option<usize>,
+}
+
+#[cfg(feature = "logging")]
+impl LogFileConfig {
+    fn new(directory: impl Into<PathBuf>) -> Self {
+        Self {
+            directory: directory.into(),
+            rotation: tracing_appender::rolling::Rotation::NEVER,
+            prefix: None,
+            suffix: None,
+            max_files: None,
+        }
+    }
 }
 
 /// Runtime mode (Tokio)
@@ -272,6 +328,7 @@ struct SSConfig {
 struct SSLogConfig {
     level: Option<u32>,
     format: Option<SSLogFormat>,
+    file: Option<SSLogFileConfig>,
     config_path: Option<String>,
 }
 
@@ -279,6 +336,16 @@ struct SSLogConfig {
 #[derive(Deserialize)]
 struct SSLogFormat {
     without_time: Option<bool>,
+}
+
+#[cfg(feature = "logging")]
+#[derive(Deserialize)]
+struct SSLogFileConfig {
+    directory: Option<String>,
+    rotation: Option<String>,
+    prefix: Option<String>,
+    suffix: Option<String>,
+    max_files: Option<usize>,
 }
 
 #[derive(Deserialize)]
