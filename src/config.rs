@@ -142,29 +142,29 @@ impl Config {
                 nlog.format = nformat;
             }
 
-            if let Some(file_config) = log.file
+            if let Some(file_config) = log.file {
                 // directory must be configured for file logging
-                && let Some(directory) = file_config.directory
-            {
-                let mut nfile = LogFileConfig::new(directory);
-                if let Some(rotation) = file_config.rotation {
-                    nfile.rotation = match rotation.as_str() {
-                        "never" => tracing_appender::rolling::Rotation::NEVER,
-                        "hourly" => tracing_appender::rolling::Rotation::HOURLY,
-                        "daily" => tracing_appender::rolling::Rotation::DAILY,
-                        _ => return Err(ConfigError::InvalidValue(rotation)),
-                    };
+                if let Some(directory) = file_config.directory {
+                    let mut nfile = LogFileConfig::new(directory);
+                    if let Some(rotation) = file_config.rotation {
+                        nfile.rotation = match rotation.as_str() {
+                            "never" => tracing_appender::rolling::Rotation::NEVER,
+                            "hourly" => tracing_appender::rolling::Rotation::HOURLY,
+                            "daily" => tracing_appender::rolling::Rotation::DAILY,
+                            _ => return Err(ConfigError::InvalidValue(rotation)),
+                        };
+                    }
+                    if let Some(prefix) = file_config.prefix {
+                        nfile.prefix = Some(prefix);
+                    }
+                    if let Some(suffix) = file_config.suffix {
+                        nfile.suffix = Some(suffix);
+                    }
+                    if let Some(max_files) = file_config.max_files {
+                        nfile.max_files = Some(max_files);
+                    }
+                    nlog.file = Some(nfile);
                 }
-                if let Some(prefix) = file_config.prefix {
-                    nfile.prefix = Some(prefix);
-                }
-                if let Some(suffix) = file_config.suffix {
-                    nfile.suffix = Some(suffix);
-                }
-                if let Some(max_files) = file_config.max_files {
-                    nfile.max_files = Some(max_files);
-                }
-                nlog.file = Some(nfile);
             }
 
             if let Some(config_path) = log.config_path {
