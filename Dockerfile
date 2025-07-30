@@ -27,7 +27,7 @@ RUN case "$TARGETARCH" in \
         exit 1 \
     ;; \
     esac \
-    && wget -qO- "https://musl.cc/$MUSL-cross.tgz" | tar -xzC /root/ \
+    && wget -qO- "https://github.com/AaronChen0/musl-cc-mirror/releases/download/2021-09-23/$MUSL-cross.tgz" | tar -xzC /root/ \
     && PATH="/root/$MUSL-cross/bin:$PATH" \
     && CC=/root/$MUSL-cross/bin/$MUSL-gcc \
     && echo "CC=$CC" \
