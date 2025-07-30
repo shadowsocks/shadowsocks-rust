@@ -1,0 +1,3 @@
+/usr/bin/ssservice              --      gen_context(system_u:object_r:shadowsocks_exec_t,s0)
+/etc/shadowsocks(/.*)?          --      gen_context(system_u:object_r:shadowsocks_conf_t,s0)
+/usr/lib/systemd/system/ss-server@.*\.service  --      gen_context(system_u:object_r:shadowsocks_unit_file_t,s0)
