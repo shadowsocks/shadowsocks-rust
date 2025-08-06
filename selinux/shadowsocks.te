@@ -1,0 +1,62 @@
+policy_module(shadowsocks, 1.0.0)
+
+########################################
+#
+# Declarations
+#
+
+type shadowsocks_t;
+type shadowsocks_exec_t;
+init_daemon_domain(shadowsocks_t, shadowsocks_exec_t)
+
+type shadowsocks_conf_t;
+files_config_file(shadowsocks_conf_t)
+
+type shadowsocks_unit_file_t;
+systemd_unit_file(shadowsocks_unit_file_t)
+
+########################################
+#
+# shadowsocks local policy
+#
+
+# Domain transition rules
+domain_auto_trans(init_t, shadowsocks_exec_t, shadowsocks_t)
+allow init_t shadowsocks_t:process2 nnp_transition;
+
+# Allow shadowsocks to use its own executable as entrypoint
+allow shadowsocks_t shadowsocks_exec_t:file { entrypoint ioctl lock };
+
+# Network sockets
+allow shadowsocks_t self:tcp_socket create_stream_socket_perms;
+allow shadowsocks_t self:udp_socket create_socket_perms;
+allow shadowsocks_t self:process signal_perms;
+
+# Configuration files
+allow shadowsocks_t shadowsocks_conf_t:file read_file_perms;
+allow shadowsocks_t shadowsocks_conf_t:dir list_dir_perms;
+
+# Network access
+corenet_tcp_bind_generic_node(shadowsocks_t)
+corenet_udp_bind_generic_node(shadowsocks_t)
+corenet_tcp_connect_all_ports(shadowsocks_t)
+corenet_tcp_bind_all_ports(shadowsocks_t)
+corenet_udp_bind_all_ports(shadowsocks_t)
+
+# System access
+kernel_read_system_state(shadowsocks_t)
+dev_read_urand(shadowsocks_t)
+files_read_etc_files(shadowsocks_t)
+miscfiles_read_localization(shadowsocks_t)
+logging_send_syslog_msg(shadowsocks_t)
+
+# Network configuration and DNS resolution
+sysnet_read_config(shadowsocks_t)
+sysnet_dns_name_resolve(shadowsocks_t)
+allow shadowsocks_t net_conf_t:file { read_file_perms watch };
+
+# Cgroup access for resource monitoring
+fs_search_cgroup_dirs(shadowsocks_t)
+fs_getattr_cgroup(shadowsocks_t)
+allow shadowsocks_t cgroup_t:file { getattr open read };
+allow shadowsocks_t cgroup_t:dir { search getattr };
