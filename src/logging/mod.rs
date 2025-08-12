@@ -9,7 +9,7 @@ use crate::config::LogConfig;
 mod log4rs;
 mod tracing;
 
-/// Initialize logger ([log4rs](https://crates.io/crates/log4rs), [trace4rs](https://crates.io/crates/trace4rs)) from yaml configuration file
+/// Initialize [log4rs](https://crates.io/crates/log4rs) from yaml configuration file
 pub fn init_with_file<P>(path: P)
 where
     P: AsRef<Path>,
@@ -25,7 +25,6 @@ where
 
 /// Initialize logger with provided configuration
 pub fn init_with_config(bin_name: &str, config: &LogConfig) {
-    // log4rs::init_with_config(bin_name, config);
     tracing::init_with_config(bin_name, config);
 }
 
