@@ -148,6 +148,8 @@ pub fn define_command_line_options(mut app: Command) -> Command {
             .arg(
                 Arg::new("LOG_CONFIG")
                     .long("log-config")
+                    // deprecated for removal
+                    .hide(true)
                     .num_args(1)
                     .action(ArgAction::Set)
                     .value_parser(clap::value_parser!(PathBuf))
@@ -297,7 +299,7 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
                 logging::init_with_file(path);
             }
             None => {
-                logging::init_with_config("sslocal", &service_config.log);
+                logging::init_with_config("ssmanager", &service_config.log);
             }
         }
 
