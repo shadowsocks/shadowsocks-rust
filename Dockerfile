@@ -1,9 +1,9 @@
-FROM --platform=$BUILDPLATFORM rust:alpine3.20 AS builder
+FROM --platform=$BUILDPLATFORM rust:1.89.0-alpine3.22 AS builder
 
 ARG TARGETARCH
 
 RUN set -x \
-    && apk add --no-cache build-base cmake llvm15-dev clang15-libclang clang15 rust-bindgen
+    && apk add --no-cache musl-dev
 
 WORKDIR /root/shadowsocks-rust
 
@@ -36,7 +36,6 @@ RUN case "$TARGETARCH" in \
     && PATH="/root/$MUSL-cross/bin:$PATH" \
     && CC=/root/$MUSL-cross/bin/$MUSL-gcc \
     && echo "CC=$CC" \
-    && rustup override set stable \
     && rustup target add "$RUST_TARGET" \
     && RUSTFLAGS="-C linker=$CC" CC=$CC cargo build --target "$RUST_TARGET" --release --features "full" \
     && mv target/$RUST_TARGET/release/ss* target/release/
