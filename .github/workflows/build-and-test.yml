@@ -20,7 +20,7 @@ jobs:
       - if: ${{ matrix.platform == 'ubuntu-latest' }}
         name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: Swatinem/rust-cache@v2
       - if: ${{ runner.os == 'Windows' }}
         uses: ilammy/setup-nasm@v1
