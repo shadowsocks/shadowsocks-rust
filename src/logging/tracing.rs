@@ -3,15 +3,15 @@
 use std::io;
 use std::io::IsTerminal;
 
-use time::format_description::well_known::Rfc3339;
 use time::UtcOffset;
+use time::format_description::well_known::Rfc3339;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::rolling::{InitError, RollingFileAppender};
-use tracing_subscriber::fmt::time::OffsetTime;
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::fmt::time::OffsetTime;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter, Layer, Registry};
+use tracing_subscriber::{EnvFilter, Layer, Registry, fmt};
 
 use crate::config::{
     LogConfig, LogConsoleWriterConfig, LogFileWriterConfig, LogFormatConfig, LogFormatConfigOverride, LogWriterConfig,
@@ -36,7 +36,7 @@ trait MakeLayer {
 impl MakeLayer for LogWriterConfig {
     fn make_layer(&self, bin_name: &str, global: &LogConfig) -> BoxedLayer {
         match self {
-            LogWriterConfig::Stdout(console_config) => console_config.make_layer(bin_name, global),
+            LogWriterConfig::Console(console_config) => console_config.make_layer(bin_name, global),
             LogWriterConfig::File(file_config) => file_config.make_layer(bin_name, global),
         }
     }

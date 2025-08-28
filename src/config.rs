@@ -177,7 +177,7 @@ impl Default for LogConfig {
         LogConfig {
             level: 0,
             format: LogFormatConfig::default(),
-            writers: vec![LogWriterConfig::Stdout(LogConsoleWriterConfig::default())],
+            writers: vec![LogWriterConfig::Console(LogConsoleWriterConfig::default())],
             config_path: None,
         }
     }
@@ -196,7 +196,7 @@ pub struct LogFormatConfig {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum LogWriterConfig {
-    Stdout(LogConsoleWriterConfig),
+    Console(LogConsoleWriterConfig),
     File(LogFileWriterConfig),
 }
 
@@ -312,7 +312,7 @@ mod tests {
             assert!(!config.log.format.without_time);
             // default writer configuration should contain a stdout writer
             assert_eq!(config.log.writers.len(), 1);
-            if let LogWriterConfig::Stdout(stdout_config) = &config.log.writers[0] {
+            if let LogWriterConfig::Console(stdout_config) = &config.log.writers[0] {
                 assert_eq!(stdout_config.level, None);
                 assert_eq!(stdout_config.format.without_time, None);
             } else {
@@ -415,13 +415,13 @@ mod tests {
         }
     }
     #[test]
-    fn test_deser_stdout_writer_full() {
+    fn test_deser_console_writer_full() {
         let config_str = r#"
             {
                 "log": {
                     "writers": [
                         {
-                            "stdout": {
+                            "console": {
                                 "level": 1,
                                 "format": {
                                     "without_time": false
@@ -436,24 +436,24 @@ mod tests {
         #[cfg(feature = "logging")]
         {
             assert_eq!(config.log.writers.len(), 1);
-            if let LogWriterConfig::Stdout(stdout_config) = &config.log.writers[0] {
+            if let LogWriterConfig::Console(stdout_config) = &config.log.writers[0] {
                 assert_eq!(stdout_config.level, Some(1));
                 assert_eq!(stdout_config.format.without_time, Some(false));
             } else {
-                panic!("Expected a stdout writer configuration");
+                panic!("Expected a console writer configuration");
             }
         }
     }
 
     #[test]
-    fn test_deser_stdout_writer_minimal() {
-        // Minimal valid stdout writer configuration
+    fn test_deser_console_writer_minimal() {
+        // Minimal valid console writer configuration
         let config_str = r#"
             {
                 "log": {
                     "writers": [
                         {
-                            "stdout": {}
+                            "console": {}
                         }
                     ]
                 }
@@ -463,11 +463,11 @@ mod tests {
         #[cfg(feature = "logging")]
         {
             assert_eq!(config.log.writers.len(), 1);
-            if let LogWriterConfig::Stdout(stdout_config) = &config.log.writers[0] {
+            if let LogWriterConfig::Console(stdout_config) = &config.log.writers[0] {
                 assert_eq!(stdout_config.level, None);
                 assert_eq!(stdout_config.format.without_time, None);
             } else {
-                panic!("Expected a stdout writer configuration");
+                panic!("Expected a console writer configuration");
             }
         }
     }
