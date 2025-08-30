@@ -880,14 +880,14 @@ Example configuration:
             "without_time": false,
         },
         // Advanced logging configuration for configuring multiple writers
-        // A stdout writer will be configured by default.
+        // A console writer will be configured by default.
         // Set this to empty array `[]` to disable logging completely
         "writers": [
             {
-                // Configure a stdout writer
+                // Configure a console writer
                 // The inner fields are optional, if not set, it will use the default values
-                // To minimally configure a stdout writer, simply write `"stdout": {}`.
-                "stdout": {
+                // To minimally configure a console writer, simply write `"console": {}`.
+                "console": {
                     "level": 2,
                     "format": {
                         "without_time": false,
