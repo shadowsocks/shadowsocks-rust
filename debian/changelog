@@ -11,12 +11,15 @@ shadowsocks-rust (1.23.5) unstable; urgency=medium
   - #1966 Build `xdg` only on *nix platforms
   - #1968 Make `hickory-dns` truly optional
 
+ -- ty <zonyitoo@gmail.com>  Fri, 04 Jul 2025 22:58:00 +0800
 
 shadowsocks-rust (1.23.4) unstable; urgency=medium
 
   ## Bug Fixes
 
   - shadowsocks/shadowsocks-android#3185 `local-dns`: Fixed skipping remote resolver for remote servers' names
+
+ -- ty <zonyitoo@gmail.com>  Mon, 12 May 2025 23:29:00 +0800
 
 shadowsocks-rust (1.23.3) unstable; urgency=medium
 
@@ -28,11 +31,15 @@ shadowsocks-rust (1.23.3) unstable; urgency=medium
 
   - Build feature `--full` won't report errors for targets that are not supported by `local-tun` and `local-redir`.
 
+ -- ty <zonyitoo@gmail.com>  Sun, 11 May 2025 21:21:00 +0800
+
 shadowsocks-rust (1.23.2) unstable; urgency=medium
 
   ## Bug Fixes
 
   - #1940 `local-tun`: Fixes `panic` when resizing cached buffers
+
+ -- ty <zonyitoo@gmail.com>  Fri, 25 Apr 2025 08:20:00 +0800
 
 shadowsocks-rust (1.23.1) unstable; urgency=medium
 
@@ -46,6 +53,8 @@ shadowsocks-rust (1.23.1) unstable; urgency=medium
 
   - #1929 `outbound_bind_addr` for UDP sockets failed to `bind()` if it is an IPv4 address
   - Double check IPSK key length (AEAD-2022) when reading from configuration file
+
+ -- ty <zonyitoo@gmail.com>  Mon, 21 Apr 2025 22:26:00 +0800
 
 shadowsocks-rust (1.23.0) unstable; urgency=medium
 
@@ -65,6 +74,8 @@ shadowsocks-rust (1.23.0) unstable; urgency=medium
   ## Miscellaneous
 
   - #1834 Shadowsocks entrance APIs has strongly typed errors
+
+ -- ty <zonyitoo@gmail.com>  Wed, 19 Mar 2025 21:40:00 +0800
 
 shadowsocks-rust (1.22.0) unstable; urgency=medium
 
@@ -575,7 +586,7 @@ shadowsocks-rust (1.12.2) unstable; urgency=medium
 
   - Removed direct dependency to [`mio`](https://crates.io/crates/mio), sending file descriptors through UDS now with [`sendfd`](https://crates.io/crates/sendfd).
 
- -- ty <zonyitoo@gmail.com>  Tue, 16 Nov 00:11:44 2021 +0800
+ -- ty <zonyitoo@gmail.com>  Tue, 16 Nov 2021 00:11:44 +0800
 
 shadowsocks-rust (1.12.1) unstable; urgency=medium
 

@@ -1,0 +1,5 @@
+shadowsocks-rust
+debhelper-*
+*.debhelper
+files
+*.substvars

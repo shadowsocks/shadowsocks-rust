@@ -7,4 +7,4 @@ override_dh_auto_install:
 	dh_auto_install -- TARGET=release PREFIX=/usr/bin
 
 %:
-	dh $@ 
+	dh $@
