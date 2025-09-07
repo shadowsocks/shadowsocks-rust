@@ -3631,9 +3631,9 @@ dependencies = [
 
 [[package]]
 name = "sysexits"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fff8b58f22cae39a24a26289da003ac87ddce0c024359c382d9ea0c48d08bc86"
+checksum = "bf9154bb31a0b747e214520c60cb9a842df871bf6a5fea5be4352b59d6c432ab"
 
 [[package]]
 name = "system-configuration"
