@@ -202,7 +202,7 @@ shadowsocks = { version = "1.23.2", path = "../shadowsocks", default-features = 
 nix = { version = "0.30", features = ["ioctl"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.60", features = ["Win32_Networking_WinSock"] }
+windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock"] }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos", target_os = "linux", target_os = "android", target_os = "windows", target_os = "freebsd"))'.dependencies]
 tun = { version = "0.8", optional = true, features = ["async"] }
