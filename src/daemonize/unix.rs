@@ -1,6 +1,6 @@
 use std::{env::current_dir, path::Path};
 
-use daemonize::Daemonize;
+use super::daemonize::Daemonize;
 use log::error;
 
 /// Daemonize a server process in a *nix standard way
