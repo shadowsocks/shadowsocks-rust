@@ -16,7 +16,7 @@
 //! ```
 //! use std::fs::File;
 //!
-//! use Daemonize;
+//! use self::Daemonize;
 //!
 //! fn main() {
 //!     let stdout = File::create("/tmp/daemon.out").unwrap();
