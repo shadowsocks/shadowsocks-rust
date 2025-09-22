@@ -14,11 +14,9 @@
 //! Usage example:
 //!
 //! ```
-//! extern crate daemonize;
-//!
 //! use std::fs::File;
 //!
-//! use daemonize::Daemonize;
+//! use Daemonize;
 //!
 //! fn main() {
 //!     let stdout = File::create("/tmp/daemon.out").unwrap();
