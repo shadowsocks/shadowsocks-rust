@@ -13,10 +13,10 @@
 //!
 //! Usage example:
 //!
-//! ```
+//! ```rust,ignore
 //! use std::fs::File;
 //!
-//! use self::Daemonize;
+//! use Daemonize;
 //!
 //! fn main() {
 //!     let stdout = File::create("/tmp/daemon.out").unwrap();
