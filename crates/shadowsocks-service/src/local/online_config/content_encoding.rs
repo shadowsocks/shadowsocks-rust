@@ -46,7 +46,7 @@ pub async fn read_body<B>(encoding: ContentEncoding, body: &mut B) -> io::Result
 where
     B: Body + Sized + Unpin + 'static,
     B::Data: AsRef<[u8]>,
-    B::Error: Into<Box<(dyn ::std::error::Error + Send + Sync + 'static)>>,
+    B::Error: Into<Box<dyn ::std::error::Error + Send + Sync + 'static>>,
 {
     let mut raw_body = Vec::new();
 
