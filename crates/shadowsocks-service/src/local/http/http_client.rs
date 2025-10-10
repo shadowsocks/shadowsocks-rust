@@ -34,7 +34,7 @@ use super::{
     utils::{check_keep_alive, connect_host, host_addr},
 };
 
-const CONNECTION_EXPIRE_DURATION: Duration = Duration::from_secs(20);
+const CONNECTION_EXPIRE_DURATION: Duration = Duration::from_secs(5);
 
 /// HTTPClient API request errors
 #[derive(thiserror::Error, Debug)]
