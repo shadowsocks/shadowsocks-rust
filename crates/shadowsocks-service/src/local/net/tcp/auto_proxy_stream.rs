@@ -8,6 +8,7 @@ use std::{
     task::{self, Poll},
 };
 
+use log::trace;
 use pin_project::pin_project;
 use shadowsocks::{
     net::{ConnectOpts, TcpStream},
@@ -49,10 +50,17 @@ impl AutoProxyClientStream {
     where
         A: Into<Address>,
     {
-        let addr = addr.into();
+        #[cfg_attr(not(feature = "local-fake-dns"), allow(unused_mut))]
+        let mut addr = addr.into();
+        #[cfg(feature = "local-fake-dns")]
+        if let Some(mapped_addr) = context.try_map_fake_address(&addr).await {
+            addr = mapped_addr;
+        }
         if context.check_target_bypassed(&addr).await {
+            trace!("Bypassing target address {addr}");
             Self::connect_bypassed_with_opts(context, addr, opts).await
         } else {
+            trace!("Proxying target address {addr}");
             Self::connect_proxied_with_opts(context, server, addr, opts).await
         }
     }
