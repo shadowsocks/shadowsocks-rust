@@ -58,10 +58,10 @@ impl AutoProxyClientStream {
         }
         if context.check_target_bypassed(&addr).await {
             trace!("Bypassing target address {addr}");
-            Self::connect_bypassed_with_opts(context, addr, opts).await
+            Self::connect_bypassed_with_opts_inner(context, addr, opts).await
         } else {
             trace!("Proxying target address {addr}");
-            Self::connect_proxied_with_opts(context, server, addr, opts).await
+            Self::connect_proxied_with_opts_inner(context, server, addr, opts).await
         }
     }
 
@@ -89,6 +89,18 @@ impl AutoProxyClientStream {
         if let Some(mapped_addr) = context.try_map_fake_address(&addr).await {
             addr = mapped_addr;
         }
+        Self::connect_bypassed_with_opts_inner(context, addr, connect_opts).await
+    }
+
+    async fn connect_bypassed_with_opts_inner<A>(
+        context: Arc<ServiceContext>,
+        addr: A,
+        connect_opts: &ConnectOpts,
+    ) -> io::Result<Self>
+    where
+        A: Into<Address>,
+    {
+        let addr = addr.into();
         let stream = TcpStream::connect_remote_with_opts(context.context_ref(), &addr, connect_opts).await?;
         Ok(Self::Bypassed(stream))
     }
@@ -117,6 +129,18 @@ impl AutoProxyClientStream {
         if let Some(mapped_addr) = context.try_map_fake_address(&addr).await {
             addr = mapped_addr;
         }
+        Self::connect_proxied_with_opts_inner(context, server, addr, connect_opts).await
+    }
+
+    async fn connect_proxied_with_opts_inner<A>(
+        context: Arc<ServiceContext>,
+        server: &ServerIdent,
+        addr: A,
+        connect_opts: &ConnectOpts,
+    ) -> io::Result<Self>
+    where
+        A: Into<Address>,
+    {
         let flow_stat = context.flow_stat();
         let stream = match ProxyClientStream::connect_with_opts_map(
             context.context(),
