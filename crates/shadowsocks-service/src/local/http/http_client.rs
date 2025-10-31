@@ -53,6 +53,7 @@ pub enum HttpClientError {
     InvalidHeaderValue(#[from] InvalidHeaderValue),
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(thiserror::Error, Debug)]
 enum SendRequestError<B> {
     #[error("{0}")]
