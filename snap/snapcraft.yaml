@@ -39,6 +39,11 @@ apps:
     install-mode: disable
     plugs: [network, network-bind, home]
 
+  ssservice:
+    command: bin/ssservice
+    plugs: [network, network-bind, network-control, home]
+    aliases: [ssservice]
+
   ssurl:
     command: bin/ssurl
     aliases: [ssurl]
