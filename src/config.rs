@@ -198,6 +198,8 @@ pub struct LogFormatConfig {
 pub enum LogWriterConfig {
     Console(LogConsoleWriterConfig),
     File(LogFileWriterConfig),
+    #[cfg(unix)]
+    Syslog(LogSyslogWriterConfig),
 }
 
 /// Console appender configuration for logging
@@ -267,6 +269,25 @@ impl From<LogRotation> for tracing_appender::rolling::Rotation {
             LogRotation::Daily => Self::DAILY,
         }
     }
+}
+
+/// File appender configuration for logging
+#[cfg(all(feature = "logging", unix))]
+#[derive(Deserialize, Debug, Clone)]
+pub struct LogSyslogWriterConfig {
+    /// Level override
+    #[serde(default)]
+    pub level: Option<u32>,
+    /// Format override
+    #[serde(default)]
+    pub format: LogFormatConfigOverride,
+
+    /// syslog identity, process name by default
+    #[serde(default)]
+    pub identity: Option<String>,
+    /// Facility, 1 (USER) by default
+    #[serde(default)]
+    pub facility: Option<i32>,
 }
 
 /// Runtime mode (Tokio)

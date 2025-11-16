@@ -913,6 +913,17 @@ Example configuration:
                     // Optional. If set, keeps the last N log files
                     "max_files": 5
                 }
+            },
+            {
+                // Configure a syslog writer, only supported on *nix system
+                "syslog": {
+                    // `level` and `format` can also be set here, if not set, it will use the default values
+
+                    // Optional. Set the "identity" when calling openlog(). Use current service name by default.
+                    "identity": "identity_name",
+                    // Optional. Set the "facility" when calling openlog(). 1 (user-level messages) by default. See RFC5424.
+                    "facility": 1
+                }
             }
         ]
     },

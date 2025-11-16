@@ -1,18 +1,21 @@
 //! Logging facilities with tracing
 
-use std::io;
-use std::io::IsTerminal;
+use std::io::{self, IsTerminal};
 
-use time::UtcOffset;
-use time::format_description::well_known::Rfc3339;
+#[cfg(unix)]
+use syslog_tracing::Syslog;
+use time::{UtcOffset, format_description::well_known::Rfc3339};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::rolling::{InitError, RollingFileAppender};
-use tracing_subscriber::fmt::MakeWriter;
-use tracing_subscriber::fmt::time::OffsetTime;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Layer, Registry, fmt};
+use tracing_subscriber::{
+    fmt::{MakeWriter, time::OffsetTime},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+    {EnvFilter, Layer, Registry, fmt},
+};
 
+#[cfg(unix)]
+use crate::config::LogSyslogWriterConfig;
 use crate::config::{
     LogConfig, LogConsoleWriterConfig, LogFileWriterConfig, LogFormatConfig, LogFormatConfigOverride, LogWriterConfig,
 };
@@ -38,6 +41,8 @@ impl MakeLayer for LogWriterConfig {
         match self {
             LogWriterConfig::Console(console_config) => console_config.make_layer(bin_name, global),
             LogWriterConfig::File(file_config) => file_config.make_layer(bin_name, global),
+            #[cfg(unix)]
+            LogWriterConfig::Syslog(syslog_config) => syslog_config.make_layer(bin_name, global),
         }
     }
 }
@@ -60,6 +65,17 @@ impl MakeLayer for LogFileWriterConfig {
             // don't have the room for a more graceful error handling here
             .expect("Failed to create file writer for logging");
         make_fmt_layer(bin_name, level, &format, false, file_writer)
+    }
+}
+
+#[cfg(unix)]
+impl MakeLayer for LogSyslogWriterConfig {
+    fn make_layer(&self, bin_name: &str, global: &LogConfig) -> BoxedLayer {
+        let level = self.level.unwrap_or(global.level);
+        let format = apply_override(&global.format, &self.format);
+
+        let syslog_writer = make_syslog_writer(bin_name, self);
+        make_fmt_layer(bin_name, level, &format, false, syslog_writer)
     }
 }
 
@@ -161,4 +177,45 @@ fn apply_override(global: &LogFormatConfig, override_config: &LogFormatConfigOve
     LogFormatConfig {
         without_time: override_config.without_time.unwrap_or(global.without_time),
     }
+}
+
+#[cfg(unix)]
+fn make_syslog_writer(bin_name: &str, config: &LogSyslogWriterConfig) -> Syslog {
+    use std::ffi::CString;
+
+    use syslog_tracing::{Facility, Options};
+
+    let identity = config.identity.as_deref().unwrap_or(bin_name);
+    let facility = match config.facility {
+        None => Facility::default(),
+        Some(f) => match f {
+            1 => Facility::User,
+            2 => Facility::Mail,
+            3 => Facility::Daemon,
+            4 => Facility::Auth,
+            6 => Facility::Lpr,
+            7 => Facility::News,
+            8 => Facility::Uucp,
+            9 => Facility::Cron,
+            10 => Facility::AuthPriv,
+            16 => Facility::Local0,
+            17 => Facility::Local1,
+            18 => Facility::Local2,
+            19 => Facility::Local3,
+            20 => Facility::Local4,
+            21 => Facility::Local5,
+            22 => Facility::Local6,
+            23 => Facility::Local7,
+            _ => panic!("unsupported syslog facility: {}", f),
+        },
+    };
+    let options = Options::default();
+    let identity = CString::new(identity).expect("syslog identity contains null-byte ('\\0')");
+
+    let syslogger = match Syslog::new(identity, options, facility) {
+        Some(l) => l,
+        None => panic!("syslog is already initialized"),
+    };
+
+    syslogger
 }
