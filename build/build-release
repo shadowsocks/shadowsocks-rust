@@ -91,7 +91,7 @@ function build() {
     PKG_DIR="${CUR_DIR}/release"
     mkdir -p "${PKG_DIR}"
 
-    if [[ "$TARGET" == *"-linux-"* ]]; then
+    if [[ "$TARGET" == *"-linux-"* || "$TARGET" == *"-freebsd" || "$TARGET" == *"-netbsd" ]]; then
         PKG_NAME="shadowsocks-v${VERSION}.${TARGET}.tar.xz"
         PKG_PATH="${PKG_DIR}/${PKG_NAME}"
 
