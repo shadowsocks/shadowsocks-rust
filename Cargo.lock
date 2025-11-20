@@ -3315,6 +3315,7 @@ dependencies = [
  "rocksdb",
  "rustls-native-certs",
  "serde",
+ "serde_json",
  "serde_json5",
  "shadowsocks",
  "smoltcp",

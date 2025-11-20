@@ -190,7 +190,7 @@ impl OnlineConfigService {
             Err(..) => return Err(io::Error::other("body contains non-utf8 bytes")),
         };
 
-        let online_config = match Config::load_from_str(&parsed_body, ConfigType::OnlineConfig) {
+        let online_config = match Config::load_from_json_str(&parsed_body, ConfigType::OnlineConfig) {
             Ok(c) => c,
             Err(err) => {
                 error!(

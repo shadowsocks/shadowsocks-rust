@@ -1458,6 +1458,7 @@ macro_rules! impl_from {
 
 impl_from!(::std::io::Error, ErrorKind::IoError, "error while reading file");
 impl_from!(serde_json5::Error, ErrorKind::JsonParsingError, "json parse error");
+impl_from!(serde_json::Error, ErrorKind::JsonParsingError, "json parse error");
 
 impl Debug for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -2565,6 +2566,12 @@ impl Config {
     /// Load Config from a `str`
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Self, Error> {
         let c = serde_json5::from_str::<SSConfig>(s)?;
+        Self::load_from_ssconfig(c, config_type)
+    }
+
+    /// Load Config from a JSON `str`
+    pub fn load_from_json_str(s: &str, config_type: ConfigType) -> Result<Self, Error> {
+        let c = serde_json::from_str::<SSConfig>(s)?;
         Self::load_from_ssconfig(c, config_type)
     }
 
