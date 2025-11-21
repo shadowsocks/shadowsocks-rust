@@ -212,10 +212,8 @@ fn make_syslog_writer(bin_name: &str, config: &LogSyslogWriterConfig) -> Syslog 
     let options = Options::default();
     let identity = CString::new(identity).expect("syslog identity contains null-byte ('\\0')");
 
-    let syslogger = match Syslog::new(identity, options, facility) {
+    match Syslog::new(identity, options, facility) {
         Some(l) => l,
         None => panic!("syslog is already initialized"),
-    };
-
-    syslogger
+    }
 }
