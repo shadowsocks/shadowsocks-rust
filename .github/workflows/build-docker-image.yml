@@ -15,7 +15,7 @@ jobs:
           - sslocal
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GitHub Container Registry
