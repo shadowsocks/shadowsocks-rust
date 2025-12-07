@@ -1457,7 +1457,7 @@ macro_rules! impl_from {
 }
 
 impl_from!(::std::io::Error, ErrorKind::IoError, "error while reading file");
-impl_from!(serde_json5::Error, ErrorKind::JsonParsingError, "json parse error");
+impl_from!(json5::Error, ErrorKind::JsonParsingError, "json parse error");
 impl_from!(serde_json::Error, ErrorKind::JsonParsingError, "json parse error");
 
 impl Debug for Error {
@@ -2565,7 +2565,7 @@ impl Config {
 
     /// Load Config from a `str`
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Self, Error> {
-        let c = serde_json5::from_str::<SSConfig>(s)?;
+        let c = json5::from_str::<SSConfig>(s)?;
         Self::load_from_ssconfig(c, config_type)
     }
 
@@ -3185,7 +3185,7 @@ impl fmt::Display for Config {
             });
         }
 
-        write!(f, "{}", serde_json5::to_string(&jconf).unwrap())
+        write!(f, "{}", json5::to_string(&jconf).unwrap())
     }
 }
 

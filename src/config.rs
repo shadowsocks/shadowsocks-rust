@@ -88,7 +88,7 @@ pub enum ConfigError {
     IoError(#[from] io::Error),
     /// JSON parsing error
     #[error("{0}")]
-    JsonError(#[from] serde_json5::Error),
+    JsonError(#[from] json5::Error),
     /// Invalid value
     #[error("Invalid value: {0}")]
     InvalidValue(String),
@@ -120,7 +120,7 @@ impl Config {
 
     /// Load `Config` from string
     pub fn load_from_str(s: &str) -> Result<Self, ConfigError> {
-        serde_json5::from_str(s).map_err(ConfigError::from)
+        json5::from_str(s).map_err(ConfigError::from)
     }
 
     /// Set by command line options

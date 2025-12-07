@@ -66,7 +66,7 @@ impl Socks5AuthConfig {
         let mut content = String::new();
         reader.read_to_string(&mut content)?;
 
-        let jconf: SSSocks5AuthConfig = match serde_json5::from_str(&content) {
+        let jconf: SSSocks5AuthConfig = match json5::from_str(&content) {
             Ok(c) => c,
             Err(err) => return Err(io::Error::other(err)),
         };
