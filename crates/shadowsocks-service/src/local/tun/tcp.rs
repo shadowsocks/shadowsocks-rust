@@ -159,11 +159,10 @@ impl AsyncRead for TcpConnection {
             }
 
             // Nothing could be read. Wait for notify.
-            if let Some(old_waker) = control.recv_waker.replace(cx.waker().clone()) {
-                if !old_waker.will_wake(cx.waker()) {
+            if let Some(old_waker) = control.recv_waker.replace(cx.waker().clone())
+                && !old_waker.will_wake(cx.waker()) {
                     old_waker.wake();
                 }
-            }
 
             return Poll::Pending;
         }
@@ -191,11 +190,10 @@ impl AsyncWrite for TcpConnection {
         // Write to buffer
 
         if control.send_buffer.is_full() {
-            if let Some(old_waker) = control.send_waker.replace(cx.waker().clone()) {
-                if !old_waker.will_wake(cx.waker()) {
+            if let Some(old_waker) = control.send_waker.replace(cx.waker().clone())
+                && !old_waker.will_wake(cx.waker()) {
                     old_waker.wake();
                 }
-            }
 
             return Poll::Pending;
         }
@@ -224,11 +222,10 @@ impl AsyncWrite for TcpConnection {
             control.send_state = TcpSocketState::Close;
         }
 
-        if let Some(old_waker) = control.send_waker.replace(cx.waker().clone()) {
-            if !old_waker.will_wake(cx.waker()) {
+        if let Some(old_waker) = control.send_waker.replace(cx.waker().clone())
+            && !old_waker.will_wake(cx.waker()) {
                 old_waker.wake();
             }
-        }
 
         self.manager_notify.notify();
         Poll::Pending
@@ -421,11 +418,10 @@ impl TcpTun {
                                 wake_receiver = true;
                             }
 
-                            if wake_receiver && control.recv_waker.is_some() {
-                                if let Some(waker) = control.recv_waker.take() {
+                            if wake_receiver && control.recv_waker.is_some()
+                                && let Some(waker) = control.recv_waker.take() {
                                     waker.wake();
                                 }
-                            }
 
                             // Check if writable
                             let mut wake_sender = false;
@@ -456,11 +452,10 @@ impl TcpTun {
                                 }
                             }
 
-                            if wake_sender && control.send_waker.is_some() {
-                                if let Some(waker) = control.send_waker.take() {
+                            if wake_sender && control.send_waker.is_some()
+                                && let Some(waker) = control.send_waker.take() {
                                     waker.wake();
                                 }
-                            }
                         }
 
                         for socket_handle in sockets_to_remove {
@@ -601,11 +596,10 @@ async fn handle_redir_client(
     // Get forward address from socket
     //
     // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
-    if let SocketAddr::V6(ref a) = daddr {
-        if let Some(v4) = to_ipv4_mapped(a.ip()) {
+    if let SocketAddr::V6(ref a) = daddr
+        && let Some(v4) = to_ipv4_mapped(a.ip()) {
             daddr = SocketAddr::new(IpAddr::from(v4), a.port());
         }
-    }
     let target_addr = Address::from(daddr);
     establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr).await
 }

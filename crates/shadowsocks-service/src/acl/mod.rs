@@ -208,15 +208,14 @@ impl ParsingRules {
                         return;
                     }
                 }
-            } else if let Some(set_rule) = caps.get(2) {
-                if let Ok(set_rule) = str::from_utf8(set_rule.as_bytes()) {
+            } else if let Some(set_rule) = caps.get(2)
+                && let Ok(set_rule) = str::from_utf8(set_rule.as_bytes()) {
                     let set_rule = set_rule.replace("\\.", ".");
                     if self.add_set_rule_inner(&set_rule).is_ok() {
                         trace!("REGEX-RULE {} => SET-RULE {}", rule, set_rule);
                         return;
                     }
                 }
-            }
         }
 
         trace!("REGEX-RULE {}", rule);

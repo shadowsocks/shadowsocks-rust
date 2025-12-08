@@ -404,17 +404,15 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         }
 
         // Overrides
-        if matches.get_flag("UDP_ONLY") {
-            if let Some(ref mut m) = config.manager {
+        if matches.get_flag("UDP_ONLY")
+            && let Some(ref mut m) = config.manager {
                 m.mode = Mode::UdpOnly;
             }
-        }
 
-        if matches.get_flag("TCP_AND_UDP") {
-            if let Some(ref mut m) = config.manager {
+        if matches.get_flag("TCP_AND_UDP")
+            && let Some(ref mut m) = config.manager {
                 m.mode = Mode::TcpAndUdp;
             }
-        }
 
         if let Some(acl_file) = matches.get_one::<String>("ACL") {
             let acl = AccessControl::load_from_file(acl_file)

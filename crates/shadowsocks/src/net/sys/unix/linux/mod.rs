@@ -310,11 +310,10 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
         UdpSocket::from_std(socket.into())?
     };
 
-    if !config.udp.allow_fragmentation {
-        if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
+    if !config.udp.allow_fragmentation
+        && let Err(err) = set_disable_ip_fragmentation(af, &socket) {
             warn!("failed to disable IP fragmentation, error: {}", err);
         }
-    }
 
     // Any traffic except localhost should be protected
     // This is a workaround for VPNService

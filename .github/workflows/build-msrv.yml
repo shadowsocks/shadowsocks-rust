@@ -30,9 +30,9 @@ jobs:
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install 1.85
-          rustup default 1.85
-          rustup override set 1.85
+          rustup toolchain install 1.88
+          rustup default 1.88
+          rustup override set 1.88
       - name: Build with All Features Enabled (Unix)
         if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
         run: cargo build --verbose --features "full-extra local-flow-stat utility-url-outline"
@@ -63,9 +63,9 @@ jobs:
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install 1.85
-          rustup default 1.85
-          rustup override set 1.85
+          rustup toolchain install 1.88
+          rustup default 1.88
+          rustup override set 1.88
       - name: Build with All Features Enabled
         run: cargo build --manifest-path crates/shadowsocks-service/Cargo.toml --verbose --features "full dns-over-tls dns-over-https dns-over-h3 local-dns local-flow-stat local-http-rustls local-tun local-fake-dns local-online-config stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
 
@@ -92,8 +92,8 @@ jobs:
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install 1.85
-          rustup default 1.85
-          rustup override set 1.85
+          rustup toolchain install 1.88
+          rustup default 1.88
+          rustup override set 1.88
       - name: Build with All Features Enabled
         run: cargo build --manifest-path crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"

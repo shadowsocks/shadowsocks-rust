@@ -214,15 +214,14 @@ impl OnlineConfigService {
         // Check plugin whitelist
         if let Some(ref allowed_plugins) = self.allowed_plugins {
             for server in &online_config.server {
-                if let Some(plugin) = server.config.plugin() {
-                    if !allowed_plugins.contains(&plugin.plugin) {
+                if let Some(plugin) = server.config.plugin()
+                    && !allowed_plugins.contains(&plugin.plugin) {
                         error!(
                             "server-loader task found not allowed plugin: {}, url: {}",
                             plugin.plugin, self.config_url
                         );
                         return Err(io::Error::other(format!("not allowed plugin: {}", plugin.plugin)));
                     }
-                }
             }
         }
 
