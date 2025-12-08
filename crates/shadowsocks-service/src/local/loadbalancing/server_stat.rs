@@ -193,7 +193,7 @@ impl ServerStat {
                 vlat_abs_diff.sort_unstable();
 
                 let abs_diff_median_mid = vlat_abs_diff.len() / 2;
-                self.data.latency_mad = if vlat_abs_diff.len() % 2 == 0 {
+                self.data.latency_mad = if vlat_abs_diff.len().is_multiple_of(2) {
                     (vlat_abs_diff[abs_diff_median_mid] + vlat_abs_diff[abs_diff_median_mid - 1]) / 2
                 } else {
                     vlat_abs_diff[abs_diff_median_mid]

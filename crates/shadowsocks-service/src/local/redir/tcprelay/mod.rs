@@ -63,11 +63,10 @@ async fn handle_redir_client(
     // Get forward address from socket
     //
     // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
-    if let SocketAddr::V6(ref a) = daddr {
-        if let Some(v4) = to_ipv4_mapped(a.ip()) {
+    if let SocketAddr::V6(ref a) = daddr
+        && let Some(v4) = to_ipv4_mapped(a.ip()) {
             daddr = SocketAddr::new(IpAddr::from(v4), a.port());
         }
-    }
     let target_addr = Address::from(daddr);
     establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr).await
 }

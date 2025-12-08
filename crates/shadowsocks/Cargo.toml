@@ -9,7 +9,7 @@ documentation = "https://docs.rs/shadowsocks-core"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [badges]
 maintenance = { status = "passively-maintained" }

@@ -296,11 +296,10 @@ impl RedirUdpServer {
                     }
 
                     // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
-                    if let SocketAddr::V6(ref a) = dst {
-                        if let Some(v4) = to_ipv4_mapped(a.ip()) {
+                    if let SocketAddr::V6(ref a) = dst
+                        && let Some(v4) = to_ipv4_mapped(a.ip()) {
                             dst = SocketAddr::new(IpAddr::from(v4), a.port());
                         }
-                    }
 
                     if let Err(err) = manager.send_to(src, Address::from(dst), pkt).await {
                         debug!(
