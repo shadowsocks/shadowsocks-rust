@@ -86,7 +86,7 @@ async fn tcp_tunnel_tfo() {
     .unwrap();
 
     client
-        .write_all(b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\nConnection: close\r\n\r\n")
+        .write_all(b"GET / HTTP/1.1\r\nHost: www.example.com\r\nAccept: */*\r\nConnection: close\r\n\r\n")
         .await
         .unwrap();
 
@@ -97,6 +97,6 @@ async fn tcp_tunnel_tfo() {
 
     println!("{:?}", ByteStr::new(&buffer));
 
-    const HTTP_RESPONSE_STATUS: &[u8] = b"HTTP/1.0 200 OK\r\n";
+    const HTTP_RESPONSE_STATUS: &[u8] = b"HTTP/1.1 200 OK\r\n";
     assert!(buffer.starts_with(HTTP_RESPONSE_STATUS));
 }
