@@ -1,3 +1,17 @@
+shadowsocks-rust (1.24.0) unstable; urgency=medium
+
+  ## Features
+
+  - #1993, #2044 Support logging to file and syslog
+  - #2026 HTTP Client support auto retry if cached connection was lost
+
+  ## Miscellaneous
+
+  - RUSTSEC-2025-0120, `json5` upgraded to v1.3
+  - MSRV bumps to v1.88
+
+  -- ty <zonyitoo@gmail.com>  Thur, 11 Dec 2025 07:37:00 +0800
+
 shadowsocks-rust (1.23.5) unstable; urgency=medium
 
   ## Features
