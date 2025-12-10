@@ -99,7 +99,7 @@ async fn socks5_relay_stream() {
     .await
     .unwrap();
 
-    let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+    let req = b"GET / HTTP/1.1\r\nHost: www.example.com\r\nAccept: */*\r\nConnection: close\r\n\r\n";
     c.write_all(req).await.unwrap();
     c.flush().await.unwrap();
 
@@ -108,8 +108,8 @@ async fn socks5_relay_stream() {
     let mut buf = Vec::new();
     r.read_until(b'\n', &mut buf).await.unwrap();
 
-    let http_status = b"HTTP/1.0 200 OK\r\n";
-    assert!(buf.starts_with(http_status));
+    let http_status = b"HTTP/1.1 200 OK\r\n";
+    assert!(buf.starts_with(http_status), "buf: {:?}", str::from_utf8(&buf));
 }
 
 #[tokio::test]
