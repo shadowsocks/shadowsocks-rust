@@ -126,11 +126,11 @@ dns-over-h3 = ["shadowsocks-service/dns-over-h3"]
 # Enable logging output
 logging = [
     "log4rs",
-    "syslog-tracing",
     "tracing",
     "tracing-subscriber",
     "time",
     "tracing-appender",
+    "tracing-syslog",
 ]
 
 # Enable DNS-relay
@@ -204,6 +204,9 @@ replay-attack-detect = [
     "security-replay-attack-detect",
 ] # Backward compatibility. DO NOT USE.
 
+# Logging to syslog (Unix only)
+tracing-syslog = ["dep:syslog-tracing"]
+
 [dependencies]
 log = "0.4"
 log4rs = { version = "1.2", optional = true }
@@ -216,6 +219,7 @@ tracing-subscriber = { version = "0.3", optional = true, features = [
     "local-time",
 ] }
 tracing-appender = { version = "0.2.3", optional = true, default-features = false }
+syslog-tracing = { version = "0.3", optional = true }
 time = { version = "0.3", optional = true }
 
 serde = { version = "1.0", features = ["derive"] }
@@ -250,7 +254,6 @@ windows-service = { version = "0.8", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 xdg = "3.0"
-syslog-tracing = { version = "0.3", optional = true }
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
 reqwest = { version = "0.12", features = [
