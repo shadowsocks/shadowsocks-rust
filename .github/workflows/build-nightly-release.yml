@@ -97,7 +97,7 @@ jobs:
           ./build-release -t ${{ matrix.platform.target }} $compile_features $compile_compress $compile_nightly $compile_cargo_flags
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.platform.target }}
           path: build/release/*
@@ -138,7 +138,7 @@ jobs:
           ./build/build-host-release -t ${{ matrix.target }}
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target }}
           path: build/release/*
@@ -164,7 +164,7 @@ jobs:
           pwsh ./build/build-host-release.ps1 "full winservice"
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: windows-native
           path: build/release/*
