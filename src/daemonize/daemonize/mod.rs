@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//!
 //! daemonize is a library for writing system daemons. Inspired by the Python library [thesharp/daemonize](https://github.com/thesharp/daemonize).
 //!
 //! The respository is located at <https://github.com/knsd/daemonize/>.
@@ -211,7 +210,6 @@ impl<T> Outcome<T> {
 ///   * change root directory;
 ///   * change the pid-file ownership to provided user (and/or) group;
 ///   * execute any provided action just before dropping privileges.
-///
 pub struct Daemonize<T> {
     directory: PathBuf,
     pid_file: Option<PathBuf>,
@@ -339,6 +337,7 @@ impl<T> Daemonize<T> {
         self.stderr = stdio.into();
         self
     }
+
     /// Start daemonization process, terminate parent after first fork, returns privileged action
     /// result to the child.
     pub fn start(self) -> Result<T, Error> {

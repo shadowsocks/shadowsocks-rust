@@ -160,9 +160,10 @@ where
         // Wakeup writer task because we have already received the salt
         #[cfg(feature = "aead-cipher-2022")]
         if let ProxyServerStreamWriteState::PrepareHeader(waker) = this.writer_state
-            && let Some(waker) = waker.take() {
-                waker.wake();
-            }
+            && let Some(waker) = waker.take()
+        {
+            waker.wake();
+        }
 
         Ok(()).into()
     }
@@ -190,9 +191,10 @@ where
                     } else {
                         // Reader didn't receive the salt from client yet.
                         if let Some(waker) = waker.take()
-                            && !waker.will_wake(cx.waker()) {
-                                waker.wake();
-                            }
+                            && !waker.will_wake(cx.waker())
+                        {
+                            waker.wake();
+                        }
                         *waker = Some(cx.waker().clone());
                         return Poll::Pending;
                     }

@@ -19,14 +19,15 @@ fn main() -> ExitCode {
 
     // Allow running `ssservice` as symlink of `sslocal`, `ssserver` and `ssmanager`
     if let Some(program_path) = env::args().next()
-        && let Some(program_name) = Path::new(&program_path).file_name() {
-            match program_name.to_str() {
-                Some("sslocal") => return local::main(&local::define_command_line_options(app).get_matches()),
-                Some("ssserver") => return server::main(&server::define_command_line_options(app).get_matches()),
-                Some("ssmanager") => return manager::main(&manager::define_command_line_options(app).get_matches()),
-                _ => {}
-            }
+        && let Some(program_name) = Path::new(&program_path).file_name()
+    {
+        match program_name.to_str() {
+            Some("sslocal") => return local::main(&local::define_command_line_options(app).get_matches()),
+            Some("ssserver") => return server::main(&server::define_command_line_options(app).get_matches()),
+            Some("ssmanager") => return manager::main(&manager::define_command_line_options(app).get_matches()),
+            _ => {}
         }
+    }
 
     let matches = app
         .subcommand_required(true)

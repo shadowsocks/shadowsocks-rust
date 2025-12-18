@@ -696,18 +696,20 @@ impl ServerConfig {
     /// Get server's TCP external address
     pub fn tcp_external_addr(&self) -> &ServerAddr {
         if let Some(plugin) = self.plugin()
-            && plugin.plugin_mode.enable_tcp() {
-                return self.plugin_addr.as_ref().unwrap_or(&self.addr);
-            }
+            && plugin.plugin_mode.enable_tcp()
+        {
+            return self.plugin_addr.as_ref().unwrap_or(&self.addr);
+        }
         &self.addr
     }
 
     /// Get server's UDP external address
     pub fn udp_external_addr(&self) -> &ServerAddr {
         if let Some(plugin) = self.plugin()
-            && plugin.plugin_mode.enable_udp() {
-                return self.plugin_addr.as_ref().unwrap_or(&self.addr);
-            }
+            && plugin.plugin_mode.enable_udp()
+        {
+            return self.plugin_addr.as_ref().unwrap_or(&self.addr);
+        }
         &self.addr
     }
 

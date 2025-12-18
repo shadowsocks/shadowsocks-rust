@@ -16,7 +16,7 @@ use crate::local::{
     context::ServiceContext, loadbalancing::PingBalancer, net::tcp::listener::create_standard_tcp_listener,
 };
 
-use super::{http_client::HttpClient, http_service::HttpService, tokio_rt::TokioIo};
+use super::{config::HttpAuthConfig, http_client::HttpClient, http_service::HttpService, tokio_rt::TokioIo};
 
 /// HTTP Local server builder
 pub struct HttpBuilder {
@@ -25,6 +25,7 @@ pub struct HttpBuilder {
     balancer: PingBalancer,
     #[cfg(target_os = "macos")]
     launchd_tcp_socket_name: Option<String>,
+    http_auth: HttpAuthConfig,
 }
 
 impl HttpBuilder {
@@ -42,12 +43,17 @@ impl HttpBuilder {
             balancer,
             #[cfg(target_os = "macos")]
             launchd_tcp_socket_name: None,
+            http_auth: HttpAuthConfig::default(),
         }
     }
 
     #[cfg(target_os = "macos")]
     pub fn set_launchd_tcp_socket_name(&mut self, n: String) {
         self.launchd_tcp_socket_name = Some(n);
+    }
+
+    pub fn set_http_auth(&mut self, auth: HttpAuthConfig) {
+        self.http_auth = auth;
     }
 
     /// Build HTTP server instance
@@ -77,6 +83,7 @@ impl HttpBuilder {
             context: self.context,
             listener,
             balancer: self.balancer,
+            http_auth: Arc::new(self.http_auth),
         })
     }
 }
@@ -86,6 +93,7 @@ pub struct Http {
     context: Arc<ServiceContext>,
     listener: TcpListener,
     balancer: PingBalancer,
+    http_auth: Arc<HttpAuthConfig>,
 }
 
 impl Http {
@@ -104,7 +112,7 @@ impl Http {
             self.listener.local_addr().expect("http local_addr")
         );
 
-        let handler = HttpConnectionHandler::new(self.context, self.balancer);
+        let handler = HttpConnectionHandler::new(self.context, self.balancer, self.http_auth);
 
         loop {
             let (stream, peer_addr) = match self.listener.accept().await {
@@ -135,15 +143,17 @@ pub struct HttpConnectionHandler {
     context: Arc<ServiceContext>,
     balancer: PingBalancer,
     http_client: HttpClient<body::Incoming>,
+    http_auth: Arc<HttpAuthConfig>,
 }
 
 impl HttpConnectionHandler {
     /// Create a new Handler
-    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer) -> Self {
+    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer, http_auth: Arc<HttpAuthConfig>) -> Self {
         Self {
             context,
             balancer,
             http_client: HttpClient::new(),
+            http_auth,
         }
     }
 
@@ -156,6 +166,7 @@ impl HttpConnectionHandler {
             context,
             balancer,
             http_client,
+            http_auth,
         } = self;
 
         let io = TokioIo::new(stream);
@@ -169,8 +180,14 @@ impl HttpConnectionHandler {
             .serve_connection(
                 io,
                 service::service_fn(move |req| {
-                    HttpService::new(context.clone(), peer_addr, http_client.clone(), balancer.clone())
-                        .serve_connection(req)
+                    HttpService::new(
+                        context.clone(),
+                        peer_addr,
+                        http_client.clone(),
+                        balancer.clone(),
+                        http_auth.clone(),
+                    )
+                    .serve_connection(req)
                 }),
             )
             .with_upgrades()

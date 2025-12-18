@@ -391,9 +391,10 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
     };
 
     if !config.udp.allow_fragmentation
-        && let Err(err) = set_disable_ip_fragmentation(af, &socket) {
-            warn!("failed to disable IP fragmentation, error: {}", err);
-        }
+        && let Err(err) = set_disable_ip_fragmentation(af, &socket)
+    {
+        warn!("failed to disable IP fragmentation, error: {}", err);
+    }
 
     // Set IP_BOUND_IF for BSD-like
     if let Some(ref iface) = config.bind_interface {

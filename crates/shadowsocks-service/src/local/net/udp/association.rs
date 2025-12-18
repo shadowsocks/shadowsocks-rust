@@ -515,11 +515,10 @@ where
             }
         };
 
-        if UDP_SOCKET_SUPPORT_DUAL_STACK
-            && let SocketAddr::V4(saddr) = target_addr {
-                let mapped_ip = saddr.ip().to_ipv6_mapped();
-                target_addr = SocketAddr::V6(SocketAddrV6::new(mapped_ip, saddr.port(), 0, 0));
-            }
+        if UDP_SOCKET_SUPPORT_DUAL_STACK && let SocketAddr::V4(saddr) = target_addr {
+            let mapped_ip = saddr.ip().to_ipv6_mapped();
+            target_addr = SocketAddr::V6(SocketAddrV6::new(mapped_ip, saddr.port(), 0, 0));
+        }
 
         let n = socket.send_to(data, target_addr).await?;
         if n != data.len() {

@@ -168,13 +168,14 @@ static IP_STACK_CAPABILITIES: LazyLock<IpStackCapabilities> = LazyLock::new(|| {
 
     // Check IPv6 (::1)
     if let Ok(ipv6_socket) = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP))
-        && ipv6_socket.set_only_v6(true).is_ok() {
-            let local_host = SockAddr::from(SocketAddr::new(Ipv6Addr::LOCALHOST.into(), 0));
-            if ipv6_socket.bind(&local_host).is_ok() {
-                caps.support_ipv6 = true;
-                debug!("IpStackCapability support_ipv6=true");
-            }
+        && ipv6_socket.set_only_v6(true).is_ok()
+    {
+        let local_host = SockAddr::from(SocketAddr::new(Ipv6Addr::LOCALHOST.into(), 0));
+        if ipv6_socket.bind(&local_host).is_ok() {
+            caps.support_ipv6 = true;
+            debug!("IpStackCapability support_ipv6=true");
         }
+    }
 
     // Check IPv4-mapped-IPv6 (127.0.0.1)
     if check_ipv4_mapped_ipv6_capability().is_ok() {

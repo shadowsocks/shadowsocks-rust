@@ -7,6 +7,7 @@ pub use self::{
     server::{Http, HttpBuilder, HttpConnectionHandler},
 };
 
+pub mod config;
 mod http_client;
 mod http_service;
 mod http_stream;

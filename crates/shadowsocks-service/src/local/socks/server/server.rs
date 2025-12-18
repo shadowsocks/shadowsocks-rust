@@ -5,7 +5,7 @@ use shadowsocks::{ServerAddr, config::Mode, net::TcpListener as ShadowTcpListene
 use tokio::{net::TcpStream, time};
 
 #[cfg(feature = "local-http")]
-use crate::local::http::HttpConnectionHandler;
+use crate::local::http::{HttpConnectionHandler, config::HttpAuthConfig};
 use crate::local::{
     context::ServiceContext, loadbalancing::PingBalancer, net::tcp::listener::create_standard_tcp_listener,
     socks::config::Socks5AuthConfig,
@@ -24,6 +24,8 @@ pub struct SocksTcpServerBuilder {
     socks5_auth: Arc<Socks5AuthConfig>,
     #[cfg(target_os = "macos")]
     launchd_socket_name: Option<String>,
+    #[cfg(feature = "local-http")]
+    http_auth: Arc<HttpAuthConfig>,
 }
 
 impl SocksTcpServerBuilder {
@@ -34,6 +36,7 @@ impl SocksTcpServerBuilder {
         balancer: PingBalancer,
         mode: Mode,
         socks5_auth: Socks5AuthConfig,
+        #[cfg(feature = "local-http")] http_auth: HttpAuthConfig,
     ) -> Self {
         Self {
             context,
@@ -44,6 +47,8 @@ impl SocksTcpServerBuilder {
             socks5_auth: Arc::new(socks5_auth),
             #[cfg(target_os = "macos")]
             launchd_socket_name: None,
+            #[cfg(feature = "local-http")]
+            http_auth: Arc::new(http_auth),
         }
     }
 
@@ -80,6 +85,8 @@ impl SocksTcpServerBuilder {
             balancer: self.balancer,
             mode: self.mode,
             socks5_auth: self.socks5_auth,
+            #[cfg(feature = "local-http")]
+            http_auth: self.http_auth,
         })
     }
 }
@@ -92,6 +99,8 @@ pub struct SocksTcpServer {
     balancer: PingBalancer,
     mode: Mode,
     socks5_auth: Arc<Socks5AuthConfig>,
+    #[cfg(feature = "local-http")]
+    http_auth: Arc<HttpAuthConfig>,
 }
 
 impl SocksTcpServer {
@@ -107,7 +116,8 @@ impl SocksTcpServer {
         // If UDP is enabled, SOCK5 UDP_ASSOCIATE command will let client to send requests to this address
         let udp_associate_addr = Arc::new(self.udp_associate_addr);
         #[cfg(feature = "local-http")]
-        let http_handler = HttpConnectionHandler::new(self.context.clone(), self.balancer.clone());
+        let http_handler =
+            HttpConnectionHandler::new(self.context.clone(), self.balancer.clone(), self.http_auth.clone());
 
         loop {
             let (stream, peer_addr) = match self.listener.accept().await {

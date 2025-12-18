@@ -164,9 +164,10 @@ impl PingBalancerBuilder {
 
     pub async fn build(self) -> io::Result<PingBalancer> {
         if let Some(intv) = self.check_best_interval
-            && intv > self.check_interval {
-                return Err(io::Error::other("check_interval must be >= check_best_interval"));
-            }
+            && intv > self.check_interval
+        {
+            return Err(io::Error::other("check_interval must be >= check_best_interval"));
+        }
 
         let (shared_context, task_abortable) = PingBalancerContext::new(
             self.servers,

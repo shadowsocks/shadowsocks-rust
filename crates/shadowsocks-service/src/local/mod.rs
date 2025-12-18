@@ -279,6 +279,8 @@ impl Server {
                     let mut server_builder = SocksBuilder::with_context(context.clone(), client_addr, balancer);
                     server_builder.set_mode(local_config.mode);
                     server_builder.set_socks5_auth(local_config.socks5_auth);
+                    #[cfg(feature = "local-http")]
+                    server_builder.set_http_auth(local_config.http_auth);
 
                     if let Some(c) = config.udp_max_associations {
                         server_builder.set_udp_capacity(c);
@@ -349,6 +351,7 @@ impl Server {
 
                     #[allow(unused_mut)]
                     let mut builder = HttpBuilder::with_context(context.clone(), client_addr, balancer);
+                    builder.set_http_auth(local_config.http_auth);
 
                     #[cfg(target_os = "macos")]
                     if let Some(n) = local_config.launchd_tcp_socket_name {

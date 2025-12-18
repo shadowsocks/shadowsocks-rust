@@ -21,6 +21,7 @@ use crate::local::{
 };
 
 use super::{
+    config::HttpAuthConfig,
     http_client::HttpClient,
     utils::{authority_addr, check_keep_alive, connect_host, host_addr},
 };
@@ -30,6 +31,7 @@ pub struct HttpService {
     peer_addr: SocketAddr,
     http_client: HttpClient<body::Incoming>,
     balancer: PingBalancer,
+    http_auth: Arc<HttpAuthConfig>,
 }
 
 impl HttpService {
@@ -38,12 +40,14 @@ impl HttpService {
         peer_addr: SocketAddr,
         http_client: HttpClient<body::Incoming>,
         balancer: PingBalancer,
+        http_auth: Arc<HttpAuthConfig>,
     ) -> Self {
         Self {
             context,
             peer_addr,
             http_client,
             balancer,
+            http_auth,
         }
     }
 
@@ -52,6 +56,31 @@ impl HttpService {
         mut req: Request<body::Incoming>,
     ) -> hyper::Result<Response<BoxBody<Bytes, hyper::Error>>> {
         trace!("request {} {:?}", self.peer_addr, req);
+
+        if self.http_auth.auth_required() {
+            // Only support Basic authentication for now
+            match req.headers().get(header::PROXY_AUTHORIZATION) {
+                Some(header_value) => {
+                    if let Ok(header_str) = header_value.to_str() {
+                        if !self.http_auth.verify_basic_auth(header_str) {
+                            debug!("HTTP {} invalid proxy authorization: {}", req.method(), header_str);
+                            return make_proxy_authentication_required();
+                        }
+                    } else {
+                        debug!(
+                            "HTTP {} invalid proxy authorization header encoding: {:?}",
+                            req.method(),
+                            header_value
+                        );
+                        return make_proxy_authentication_required();
+                    }
+                }
+                None => {
+                    debug!("HTTP {} missing proxy authorization", req.method());
+                    return make_proxy_authentication_required();
+                }
+            }
+        }
 
         // Parse URI
         //
@@ -200,6 +229,14 @@ fn empty_body() -> BoxBody<Bytes, hyper::Error> {
 fn make_bad_request() -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
     Ok(Response::builder()
         .status(StatusCode::BAD_REQUEST)
+        .body(empty_body())
+        .unwrap())
+}
+
+fn make_proxy_authentication_required() -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
+    Ok(Response::builder()
+        .status(StatusCode::PROXY_AUTHENTICATION_REQUIRED)
+        .header(header::PROXY_AUTHENTICATE, "Basic charset=\"UTF-8\"")
         .body(empty_body())
         .unwrap())
 }

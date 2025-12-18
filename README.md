@@ -614,7 +614,10 @@ Example configuration:
             "local_address": "127.0.0.1",
             "local_port": 3128,
             // OPTIONAL. macOS launchd activate socket
-            "launchd_tcp_socket_name": "TCPListener"
+            "launchd_tcp_socket_name": "TCPListener",
+            // OPTIONAL. Authentication configuration file
+            // Configuration file document could be found in the next section.
+            "http_auth_config_path": "/path/to/auth.json",
         },
         {
             // DNS local server (feature = "local-dns")
@@ -945,6 +948,24 @@ The configuration file is set by `socks5_auth_config_path` in `locals`.
 {
     // Password/Username Authentication (RFC1929)
     "password": {
+        "users": [
+            {
+                "user_name": "USERNAME in UTF-8",
+                "password": "PASSWORD in UTF-8"
+            }
+        ]
+    }
+}
+```
+
+### HTTP Authentication Configuration
+
+The configuration file is set by `http_auth_config_path` in `locals`.
+
+```jsonc
+{
+    // Basic Authentication (RFC9110)
+    "basic": {
         "users": [
             {
                 "user_name": "USERNAME in UTF-8",

@@ -11,6 +11,8 @@ pub use self::server::{SocksTcpServer, SocksTcpServerBuilder, SocksUdpServer};
 use self::socks5::Socks5UdpServerBuilder;
 
 use super::config::Socks5AuthConfig;
+#[cfg(feature = "local-http")]
+use crate::local::http::config::HttpAuthConfig;
 
 #[allow(clippy::module_inception)]
 mod server;
@@ -33,6 +35,8 @@ pub struct SocksBuilder {
     launchd_tcp_socket_name: Option<String>,
     #[cfg(target_os = "macos")]
     launchd_udp_socket_name: Option<String>,
+    #[cfg(feature = "local-http")]
+    http_auth: HttpAuthConfig,
 }
 
 impl SocksBuilder {
@@ -58,6 +62,8 @@ impl SocksBuilder {
             launchd_tcp_socket_name: None,
             #[cfg(target_os = "macos")]
             launchd_udp_socket_name: None,
+            #[cfg(feature = "local-http")]
+            http_auth: HttpAuthConfig::default(),
         }
     }
 
@@ -91,6 +97,12 @@ impl SocksBuilder {
     /// Set SOCKS5 Username/Password Authentication configuration
     pub fn set_socks5_auth(&mut self, p: Socks5AuthConfig) {
         self.socks5_auth = p;
+    }
+
+    /// Set HTTP Authentication configuration
+    #[cfg(feature = "local-http")]
+    pub fn set_http_auth(&mut self, p: HttpAuthConfig) {
+        self.http_auth = p;
     }
 
     /// macOS launchd activate socket
@@ -144,6 +156,8 @@ impl SocksBuilder {
                 self.balancer.clone(),
                 self.mode,
                 self.socks5_auth,
+                #[cfg(feature = "local-http")]
+                self.http_auth,
             );
 
             #[cfg(target_os = "macos")]

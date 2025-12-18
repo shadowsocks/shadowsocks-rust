@@ -594,13 +594,14 @@ impl UdpAssociationContext {
         control: &Option<UdpSocketControlData>,
     ) {
         if let Some(ref mut session) = self.client_session
-            && peer_addr != self.peer_addr {
-                debug!(
-                    "udp relay for {} changed to {}, session: {:?}",
-                    self.peer_addr, peer_addr, session.client_session_id
-                );
-                self.peer_addr = peer_addr;
-            }
+            && peer_addr != self.peer_addr
+        {
+            debug!(
+                "udp relay for {} changed to {}, session: {:?}",
+                self.peer_addr, peer_addr, session.client_session_id
+            );
+            self.peer_addr = peer_addr;
+        }
 
         trace!(
             "udp relay {} -> {} with {} bytes, control: {:?}",
@@ -737,9 +738,10 @@ impl UdpAssociationContext {
         // But for some implementations, they may expect the target address to be IPv4, because
         // the peer address is IPv4 when calling `sendto`.
         if let Address::SocketAddress(SocketAddr::V6(ref v6)) = addr
-            && let Some(v4) = to_ipv4_mapped(v6.ip()) {
-                addr = Address::SocketAddress(SocketAddr::new(v4.into(), v6.port()));
-            }
+            && let Some(v4) = to_ipv4_mapped(v6.ip())
+        {
+            addr = Address::SocketAddress(SocketAddr::new(v4.into(), v6.port()));
+        }
 
         match self.client_session {
             None => {

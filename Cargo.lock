@@ -3120,6 +3120,7 @@ name = "shadowsocks-service"
 version = "1.24.0"
 dependencies = [
  "arc-swap",
+ "base64",
  "brotli",
  "bson",
  "byte_string",
