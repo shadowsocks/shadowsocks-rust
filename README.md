@@ -11,7 +11,7 @@
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
 [![shadowsocks-rust](https://img.shields.io/archlinux/v/extra/x86_64/shadowsocks-rust)](https://archlinux.org/packages/extra/x86_64/shadowsocks-rust/)
 [![aur shadowsocks-rust-git](https://img.shields.io/aur/version/shadowsocks-rust-git)](https://aur.archlinux.org/packages/shadowsocks-rust-git)
-[![NixOS](https://img.shields.io/badge/NixOS-shadowsocks--rust-blue?logo=nixos)](https://github.com/NixOS/nixpkgs/tree/master/pkgs/tools/networking/shadowsocks-rust)
+[![NixOS](https://img.shields.io/badge/NixOS-shadowsocks--rust-blue?logo=nixos)](https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/sh/shadowsocks-rust/package.nix)
 [![snap shadowsocks-rust](https://snapcraft.io/shadowsocks-rust/badge.svg)](https://snapcraft.io/shadowsocks-rust)
 [![homebrew shadowsocks-rust](https://img.shields.io/homebrew/v/shadowsocks-rust)](https://formulae.brew.sh/formula/shadowsocks-rust#default)
 [![MacPorts shadowsocks-rust](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fports.macports.org%2Fapi%2Fv1%2Fports%2Fshadowsocks-rust%2F&query=%24.version&label=macports)](https://ports.macports.org/port/shadowsocks-rust/)
