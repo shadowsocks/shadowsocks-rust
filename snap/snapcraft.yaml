@@ -65,9 +65,11 @@ parts:
     rust-channel: stable
     rust-features: [full]
     override-pull: |
-      snapcraftctl pull
-      snapcraftctl set-version `git describe --tags --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
+      craftctl default
+      craftctl set version=`git describe --tags --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
     build-packages:
+      - rustc
+      - cargo
       - cmake
       - bindgen
       - llvm-dev
