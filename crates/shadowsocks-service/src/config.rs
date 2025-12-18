@@ -326,7 +326,7 @@ struct SSLocalExtConfig {
     socks5_auth_config_path: Option<String>,
 
     /// HTTP
-    #[cfg(feature = "local")]
+    #[cfg(feature = "local-http")]
     #[serde(skip_serializing_if = "Option::is_none")]
     http_auth_config_path: Option<String>,
 

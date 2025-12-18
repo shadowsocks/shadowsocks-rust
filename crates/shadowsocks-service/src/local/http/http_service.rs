@@ -63,20 +63,26 @@ impl HttpService {
                 Some(header_value) => {
                     if let Ok(header_str) = header_value.to_str() {
                         if !self.http_auth.verify_basic_auth(header_str) {
-                            debug!("HTTP {} invalid proxy authorization: {}", req.method(), header_str);
+                            error!(
+                                "HTTP {} URI {} invalid proxy-authorization: {}",
+                                req.method(),
+                                req.uri(),
+                                header_str
+                            );
                             return make_proxy_authentication_required();
                         }
                     } else {
-                        debug!(
-                            "HTTP {} invalid proxy authorization header encoding: {:?}",
+                        error!(
+                            "HTTP {} URI {} invalid proxy-authorization header encoding: {:?}",
                             req.method(),
+                            req.uri(),
                             header_value
                         );
                         return make_proxy_authentication_required();
                     }
                 }
                 None => {
-                    debug!("HTTP {} missing proxy authorization", req.method());
+                    error!("HTTP {} URI {} missing proxy-authorization", req.method(), req.uri());
                     return make_proxy_authentication_required();
                 }
             }
