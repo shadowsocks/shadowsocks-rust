@@ -1046,7 +1046,7 @@ pub struct LocalConfig {
     pub socks5_auth: Socks5AuthConfig,
 
     /// HTTP Authentication configuration
-    #[cfg(feature = "local")]
+    #[cfg(feature = "local-http")]
     pub http_auth: HttpAuthConfig,
 
     /// Fake DNS record expire seconds
