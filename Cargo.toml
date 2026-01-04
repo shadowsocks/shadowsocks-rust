@@ -241,6 +241,7 @@ futures = "0.3"
 tokio = { version = "1", features = ["rt", "signal"] }
 
 ipnet = { version = "2.10", optional = true }
+reqwest = { version = "0.13", features = ["blocking"], optional = true }
 
 mimalloc = { version = "0.1", default-features = false, optional = true }
 tcmalloc = { version = "0.3", optional = true }
@@ -254,19 +255,6 @@ windows-service = { version = "0.8", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 xdg = "3.0"
-
-[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-reqwest = { version = "0.13", features = [
-    "blocking",
-    "rustls-tls",
-    "rustls-tls-native-roots",
-], default-features = false, optional = true }
-
-[target.'cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-reqwest = { version = "0.13", features = [
-    "blocking",
-    "native-tls-vendored",
-], optional = true }
 
 [dev-dependencies]
 byteorder = "1.5"
