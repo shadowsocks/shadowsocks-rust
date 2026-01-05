@@ -74,9 +74,7 @@ where
     S: std::os::unix::io::AsFd,
 {
     let sock = SockRef::from(socket);
-    let result = socket_bind_dual_stack_inner(&sock, addr, ipv6_only);
-
-    result
+    socket_bind_dual_stack_inner(&sock, addr, ipv6_only)
 }
 
 /// Try to call `bind()` with dual-stack enabled.
@@ -88,9 +86,7 @@ where
     S: std::os::windows::io::AsSocket,
 {
     let sock = SockRef::from(socket);
-    let result = socket_bind_dual_stack_inner(&sock, addr, ipv6_only);
-
-    result
+    socket_bind_dual_stack_inner(&sock, addr, ipv6_only)
 }
 
 fn socket_bind_dual_stack_inner(socket: &Socket, addr: &SocketAddr, ipv6_only: bool) -> io::Result<()> {

@@ -101,8 +101,7 @@ where
     F: FnOnce(&Socket) -> io::Result<()>,
 {
     let socket = SockRef::from(stream);
-    let result = f(&socket);
-    result
+    f(&socket)
 }
 
 pub fn set_common_sockopt_after_connect<S>(stream: &S, opts: &ConnectOpts) -> io::Result<()>
