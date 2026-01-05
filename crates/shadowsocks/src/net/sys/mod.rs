@@ -6,7 +6,7 @@ use std::{
 
 use cfg_if::cfg_if;
 use log::{debug, warn};
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use socket2::{Domain, Protocol, SockAddr, SockRef, Socket, Type};
 use tokio::net::TcpSocket;
 
 use super::ConnectOpts;
@@ -71,15 +71,10 @@ fn set_common_sockopt_after_connect_sys(_: &tokio::net::TcpStream, _: &ConnectOp
 #[cfg(unix)]
 pub fn socket_bind_dual_stack<S>(socket: &S, addr: &SocketAddr, ipv6_only: bool) -> io::Result<()>
 where
-    S: std::os::unix::io::AsRawFd,
+    S: std::os::unix::io::AsFd,
 {
-    use std::os::unix::prelude::{FromRawFd, IntoRawFd};
-
-    let fd = socket.as_raw_fd();
-
-    let sock = unsafe { Socket::from_raw_fd(fd) };
+    let sock = SockRef::from(socket);
     let result = socket_bind_dual_stack_inner(&sock, addr, ipv6_only);
-    let _ = sock.into_raw_fd();
 
     result
 }
@@ -90,15 +85,10 @@ where
 #[cfg(windows)]
 pub fn socket_bind_dual_stack<S>(socket: &S, addr: &SocketAddr, ipv6_only: bool) -> io::Result<()>
 where
-    S: std::os::windows::io::AsRawSocket,
+    S: std::os::windows::io::AsSocket,
 {
-    use std::os::windows::prelude::{FromRawSocket, IntoRawSocket};
-
-    let handle = socket.as_raw_socket();
-
-    let sock = unsafe { Socket::from_raw_socket(handle) };
+    let sock = SockRef::from(socket);
     let result = socket_bind_dual_stack_inner(&sock, addr, ipv6_only);
-    let _ = sock.into_raw_socket();
 
     result
 }

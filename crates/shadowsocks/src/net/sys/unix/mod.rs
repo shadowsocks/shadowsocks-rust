@@ -1,12 +1,8 @@
-use std::{
-    io,
-    net::SocketAddr,
-    os::unix::io::{AsRawFd, FromRawFd, IntoRawFd},
-};
+use std::{io, net::SocketAddr, os::fd::AsFd};
 
 use cfg_if::cfg_if;
 use log::warn;
-use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
+use socket2::{Domain, Protocol, SockRef, Socket, TcpKeepalive, Type};
 use tokio::net::UdpSocket;
 
 use crate::net::{AcceptOpts, AddrFamily, ConnectOpts, TcpSocketOpts, is_dual_stack_addr, sys::socket_bind_dual_stack};
@@ -99,14 +95,20 @@ fn set_tcp_keepalive(socket: &Socket, tcp: &TcpSocketOpts) -> io::Result<()> {
 }
 
 #[inline(always)]
-fn socket_call_warp<S: AsRawFd, F: FnOnce(&Socket) -> io::Result<()>>(stream: &S, f: F) -> io::Result<()> {
-    let socket = unsafe { Socket::from_raw_fd(stream.as_raw_fd()) };
+fn socket_call_warp<S, F>(stream: &S, f: F) -> io::Result<()>
+where
+    S: AsFd,
+    F: FnOnce(&Socket) -> io::Result<()>,
+{
+    let socket = SockRef::from(stream);
     let result = f(&socket);
-    let _ = socket.into_raw_fd();
     result
 }
 
-pub fn set_common_sockopt_after_connect<S: AsRawFd>(stream: &S, opts: &ConnectOpts) -> io::Result<()> {
+pub fn set_common_sockopt_after_connect<S>(stream: &S, opts: &ConnectOpts) -> io::Result<()>
+where
+    S: AsFd,
+{
     socket_call_warp(stream, |socket| set_common_sockopt_after_connect_impl(socket, opts))
 }
 
@@ -120,7 +122,10 @@ fn set_common_sockopt_after_connect_impl(socket: &Socket, opts: &ConnectOpts) ->
     Ok(())
 }
 
-pub fn set_common_sockopt_after_accept<S: AsRawFd>(stream: &S, opts: &AcceptOpts) -> io::Result<()> {
+pub fn set_common_sockopt_after_accept<S>(stream: &S, opts: &AcceptOpts) -> io::Result<()>
+where
+    S: AsFd,
+{
     socket_call_warp(stream, |socket| set_common_sockopt_after_accept_impl(socket, opts))
 }
 

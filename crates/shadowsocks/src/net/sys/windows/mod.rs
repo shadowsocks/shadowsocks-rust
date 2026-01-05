@@ -7,7 +7,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     os::windows::{
         ffi::OsStringExt,
-        io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket},
+        io::{AsRawSocket, AsSocket, RawSocket},
     },
     pin::Pin,
     ptr, slice,
@@ -18,7 +18,7 @@ use std::{
 use bytes::BytesMut;
 use log::{error, warn};
 use pin_project::pin_project;
-use socket2::{Domain, Protocol, SockAddr, Socket, TcpKeepalive, Type};
+use socket2::{Domain, Protocol, SockAddr, SockRef, Socket, TcpKeepalive, Type};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
@@ -513,14 +513,20 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, opts: &ConnectOpts
 }
 
 #[inline(always)]
-fn socket_call_warp<S: AsRawSocket, F: FnOnce(&Socket) -> io::Result<()>>(stream: &S, f: F) -> io::Result<()> {
-    let socket = unsafe { Socket::from_raw_socket(stream.as_raw_socket()) };
+fn socket_call_warp<S, F>(stream: &S, f: F) -> io::Result<()>
+where
+    S: AsSocket,
+    F: FnOnce(&Socket) -> io::Result<()>,
+{
+    let socket = SockRef::from(stream);
     let result = f(&socket);
-    let _ = socket.into_raw_socket();
     result
 }
 
-pub fn set_common_sockopt_after_connect<S: AsRawSocket>(stream: &S, opts: &ConnectOpts) -> io::Result<()> {
+pub fn set_common_sockopt_after_connect<S>(stream: &S, opts: &ConnectOpts) -> io::Result<()>
+where
+    S: AsSocket,
+{
     socket_call_warp(stream, |socket| set_common_sockopt_after_connect_impl(socket, opts))
 }
 
@@ -537,7 +543,10 @@ fn set_common_sockopt_after_connect_impl(socket: &Socket, opts: &ConnectOpts) ->
     Ok(())
 }
 
-pub fn set_common_sockopt_after_accept<S: AsRawSocket>(stream: &S, opts: &AcceptOpts) -> io::Result<()> {
+pub fn set_common_sockopt_after_accept<S>(stream: &S, opts: &AcceptOpts) -> io::Result<()>
+where
+    S: AsSocket,
+{
     socket_call_warp(stream, |socket| set_common_sockopt_after_accept_impl(socket, opts))
 }
 

@@ -15,6 +15,7 @@ use shadowsocks::{
     net::{AcceptOpts, TcpStream as OutboundTcpStream},
     relay::tcprelay::{ProxyServerStream, utils::copy_encrypted_bidirectional},
 };
+use socket2::SockRef;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream as TokioTcpStream,
@@ -162,7 +163,10 @@ impl TcpServerClient {
                     // This will also prevent the socket entering TIME_WAIT state.
 
                     let stream = self.stream.into_inner().into_inner();
-                    let _ = stream.set_linger(Some(Duration::ZERO));
+
+                    // tokio's TcpStream.set_linger was marked as deprecated.
+                    // But we set linger(0), which won't block the thread when close() the socket.
+                    let _ = SockRef::from(&stream).set_linger(Some(Duration::ZERO));
 
                     return Ok(());
                 }
