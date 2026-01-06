@@ -165,8 +165,8 @@ pub fn set_tcp_fastopen<S: AsRawSocket>(socket: &S) -> io::Result<()> {
     unsafe {
         let ret = setsockopt(
             socket.as_raw_socket() as SOCKET,
-            IPPROTO_TCP as i32,
-            TCP_FASTOPEN as i32,
+            IPPROTO_TCP,
+            TCP_FASTOPEN,
             &enable as *const _ as PCSTR,
             mem::size_of_val(&enable) as i32,
         );
@@ -233,12 +233,12 @@ fn find_adapter_interface_index(addr: &SocketAddr, iface: &str) -> io::Result<Op
             let friendly_name_len: usize = libc::wcslen(ip_adapter_address.FriendlyName);
             let friendly_name_slice: &[u16] = slice::from_raw_parts(ip_adapter_address.FriendlyName, friendly_name_len);
             let friendly_name_os = OsString::from_wide(friendly_name_slice); // UTF-16 to UTF-8
-            if let Some(friendly_name) = friendly_name_os.to_str() {
-                if friendly_name == iface {
-                    match ip {
-                        IpAddr::V4(..) => return Ok(Some(ip_adapter_address.Anonymous1.Anonymous.IfIndex)),
-                        IpAddr::V6(..) => return Ok(Some(ip_adapter_address.Ipv6IfIndex)),
-                    }
+            if let Some(friendly_name) = friendly_name_os.to_str()
+                && friendly_name == iface
+            {
+                match ip {
+                    IpAddr::V4(..) => return Ok(Some(ip_adapter_address.Anonymous1.Anonymous.IfIndex)),
+                    IpAddr::V6(..) => return Ok(Some(ip_adapter_address.Ipv6IfIndex)),
                 }
             }
 
@@ -314,8 +314,8 @@ fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str)
                 let if_index = htonl(if_index);
                 setsockopt(
                     handle,
-                    IPPROTO_IP as i32,
-                    IP_UNICAST_IF as i32,
+                    IPPROTO_IP,
+                    IP_UNICAST_IF,
                     &if_index as *const _ as PCSTR,
                     mem::size_of_val(&if_index) as i32,
                 )
@@ -324,8 +324,8 @@ fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str)
                 // Interface index is in host byte order for IPPROTO_IPV6.
                 setsockopt(
                     handle,
-                    IPPROTO_IPV6 as i32,
-                    IPV6_UNICAST_IF as i32,
+                    IPPROTO_IPV6,
+                    IPV6_UNICAST_IF,
                     &if_index as *const _ as PCSTR,
                     mem::size_of_val(&if_index) as i32,
                 )
@@ -397,8 +397,8 @@ pub fn set_disable_ip_fragmentation<S: AsRawSocket>(af: AddrFamily, socket: &S) 
         let value = IP_PMTUDISC_DO;
         let ret = setsockopt(
             handle,
-            IPPROTO_IP as i32,
-            IP_MTU_DISCOVER as i32,
+            IPPROTO_IP,
+            IP_MTU_DISCOVER,
             &value as *const _ as PCSTR,
             mem::size_of_val(&value) as i32,
         );
@@ -412,8 +412,8 @@ pub fn set_disable_ip_fragmentation<S: AsRawSocket>(af: AddrFamily, socket: &S) 
             let value = IP_PMTUDISC_DO;
             let ret = setsockopt(
                 handle,
-                IPPROTO_IPV6 as i32,
-                IPV6_MTU_DISCOVER as i32,
+                IPPROTO_IPV6,
+                IPV6_MTU_DISCOVER,
                 &value as *const _ as PCSTR,
                 mem::size_of_val(&value) as i32,
             );
@@ -502,10 +502,10 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, opts: &ConnectOpts
     socket.set_nonblocking(true)?;
     let socket = UdpSocket::from_std(socket.into())?;
 
-    if !opts.udp.allow_fragmentation {
-        if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
-            warn!("failed to disable IP fragmentation, error: {}", err);
-        }
+    if !opts.udp.allow_fragmentation
+        && let Err(err) = set_disable_ip_fragmentation(af, &socket)
+    {
+        warn!("failed to disable IP fragmentation, error: {}", err);
     }
     disable_connection_reset(&socket)?;
 
@@ -519,8 +519,7 @@ where
     F: FnOnce(&Socket) -> io::Result<()>,
 {
     let socket = SockRef::from(stream);
-    let result = f(&socket);
-    result
+    f(&socket)
 }
 
 pub fn set_common_sockopt_after_connect<S>(stream: &S, opts: &ConnectOpts) -> io::Result<()>

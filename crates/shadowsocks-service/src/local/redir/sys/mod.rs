@@ -18,8 +18,7 @@ where
     S: std::os::unix::io::AsFd,
 {
     let sock = SockRef::from(socket);
-    let result = sock.set_only_v6(ipv6_only);
-    result
+    sock.set_only_v6(ipv6_only)
 }
 
 #[cfg(windows)]
@@ -29,6 +28,5 @@ where
     S: std::os::windows::io::AsSocket,
 {
     let sock = SockRef::from(socket);
-    let result = sock.set_only_v6(ipv6_only);
-    result
+    sock.set_only_v6(ipv6_only)
 }
