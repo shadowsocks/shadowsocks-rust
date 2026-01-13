@@ -83,7 +83,7 @@ local-socks4 = ["local"]
 # Enable Tun interface protocol for sslocal
 local-tun = ["local", "etherparse", "tun", "smoltcp"]
 # Enable Fake DNS
-local-fake-dns = ["local", "trust-dns", "rocksdb", "bson"]
+local-fake-dns = ["local", "trust-dns", "rocksdb", "bson", "xxhash-rust"]
 # sslocal support online URL (SIP008 Online Configuration Delivery)
 # https://shadowsocks.org/doc/sip008.html
 local-online-config = [
@@ -199,6 +199,7 @@ serde = { version = "1.0", features = ["derive"] }
 json5 = "1.3"
 serde_json = "1.0"
 bson = { version = "3.0.0", features = ["serde"], optional = true }
+xxhash-rust = { version = "0.8", features = ["xxh3"], optional = true }
 
 shadowsocks = { version = "1.24.0", path = "../shadowsocks", default-features = false }
 

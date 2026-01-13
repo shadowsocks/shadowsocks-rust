@@ -516,6 +516,9 @@ impl Server {
                     if let Some(p) = local_config.fake_dns_database_path {
                         builder.set_database_path(p);
                     }
+                    if let Some(stable) = local_config.fake_dns_stable_mapping {
+                        builder.set_stable_mapping(stable);
+                    }
                     let server = builder.build().await?;
                     #[cfg(feature = "local-fake-dns")]
                     context.add_fake_dns_manager(server.clone_manager()).await;
