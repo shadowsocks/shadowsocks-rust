@@ -25,6 +25,7 @@ pub struct FakeDnsBuilder {
     ipv4_network: Ipv4Net,
     ipv6_network: Ipv6Net,
     expire_duration: Duration,
+    stable_mapping: bool,
 }
 
 impl FakeDnsBuilder {
@@ -44,6 +45,7 @@ impl FakeDnsBuilder {
             ipv4_network: Ipv4Net::new(Ipv4Addr::new(172, 16, 0, 0), 12).unwrap(),
             ipv6_network: Ipv6Net::new(Ipv6Addr::new(0xfc00, 0, 0, 0, 0, 0, 0, 0), 7).unwrap(),
             expire_duration: Duration::from_secs(10),
+            stable_mapping: false,
         }
     }
 
@@ -67,6 +69,11 @@ impl FakeDnsBuilder {
         self.database_path = database_path.as_ref().to_path_buf();
     }
 
+    /// Set stable mapping
+    pub fn set_stable_mapping(&mut self, stable: bool) {
+        self.stable_mapping = stable;
+    }
+
     /// Build Fake DNS server
     pub async fn build(self) -> io::Result<FakeDns> {
         let manager = FakeDnsManager::open(
@@ -74,6 +81,7 @@ impl FakeDnsBuilder {
             self.ipv4_network,
             self.ipv6_network,
             self.expire_duration,
+            self.stable_mapping,
         )?;
         let manager = Arc::new(manager);
 

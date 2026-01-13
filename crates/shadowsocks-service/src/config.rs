@@ -343,6 +343,9 @@ struct SSLocalExtConfig {
     #[cfg(feature = "local-fake-dns")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fake_dns_database_path: Option<String>,
+    #[cfg(feature = "local-fake-dns")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fake_dns_stable_mapping: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     acl: Option<String>,
@@ -1061,6 +1064,9 @@ pub struct LocalConfig {
     /// Fake DNS storage database path
     #[cfg(feature = "local-fake-dns")]
     pub fake_dns_database_path: Option<PathBuf>,
+    /// Fake DNS stable mapping
+    #[cfg(feature = "local-fake-dns")]
+    pub fake_dns_stable_mapping: Option<bool>,
 }
 
 impl LocalConfig {
@@ -1130,6 +1136,8 @@ impl LocalConfig {
             fake_dns_ipv6_network: None,
             #[cfg(feature = "local-fake-dns")]
             fake_dns_database_path: None,
+            #[cfg(feature = "local-fake-dns")]
+            fake_dns_stable_mapping: None,
         }
     }
 
@@ -1877,7 +1885,10 @@ impl Config {
                                 }
                             }
                             if let Some(p) = local.fake_dns_database_path {
-                                local_config.fake_dns_database_path = Some(p.into());
+                                local_config.fake_dns_database_path = Some(PathBuf::from(p));
+                            }
+                            if let Some(stable) = local.fake_dns_stable_mapping {
+                                local_config.fake_dns_stable_mapping = Some(stable);
                             }
                         }
 
@@ -2936,6 +2947,8 @@ impl fmt::Display for Config {
                             .fake_dns_database_path
                             .as_ref()
                             .and_then(|n| n.to_str().map(ToOwned::to_owned)),
+                        #[cfg(feature = "local-fake-dns")]
+                        fake_dns_stable_mapping: local.fake_dns_stable_mapping,
 
                         acl: local_instance
                             .acl

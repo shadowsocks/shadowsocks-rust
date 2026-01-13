@@ -9,6 +9,8 @@ pub struct StorageMeta {
     pub ipv4_network: String,
     pub ipv6_network: String,
     pub version: u32,
+    #[serde(default)]
+    pub stable_mapping: bool,
 }
 
 impl StorageMeta {

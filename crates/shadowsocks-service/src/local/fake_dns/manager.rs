@@ -13,10 +13,11 @@ use ipnet::{Ipv4AddrRange, Ipv4Net, Ipv6AddrRange, Ipv6Net};
 use log::{error, trace, warn};
 use rocksdb::DB as RocksDB;
 use tokio::sync::Mutex;
+use xxhash_rust::xxh3::xxh3_64;
 
 use super::proto;
 
-const FAKE_DNS_MANAGER_STORAGE_VERSION: u32 = 3;
+const FAKE_DNS_MANAGER_STORAGE_VERSION: u32 = 4;
 
 /// Error type of FakeDns manager
 #[derive(thiserror::Error, Debug)]
@@ -46,7 +47,10 @@ pub struct FakeDnsManager {
     db: Mutex<RocksDB>,
     ipv4_network: Mutex<Cycle<Ipv4AddrRange>>,
     ipv6_network: Mutex<Cycle<Ipv6AddrRange>>,
+    ipv4_net: Ipv4Net,
+    ipv6_net: Ipv6Net,
     expire_duration: Duration,
+    stable_mapping: bool,
 }
 
 macro_rules! map_domain_ip {
@@ -152,6 +156,7 @@ impl FakeDnsManager {
         ipv4_network: Ipv4Net,
         ipv6_network: Ipv6Net,
         expire_duration: Duration,
+        stable_mapping: bool,
     ) -> FakeDnsResult<Self> {
         let db_path = db_path.as_ref();
 
@@ -182,11 +187,32 @@ impl FakeDnsManager {
             Ok(Some(v)) => {
                 if let Ok(c) = proto::StorageMeta::decode(&v) {
                     if c.version == FAKE_DNS_MANAGER_STORAGE_VERSION {
-                        if ipv4_network_str != c.ipv4_network || ipv6_network_str != c.ipv6_network {
+                        let network_mismatch = ipv4_network_str != c.ipv4_network || ipv6_network_str != c.ipv6_network;
+                        let stable_mismatch = c.stable_mapping != stable_mapping;
+
+                        if network_mismatch {
                             warn!(
                                 "IPv4 network {} (storage {}), IPv6 network {} (storage {}) not match",
                                 ipv4_network_str, c.ipv4_network, ipv6_network_str, c.ipv6_network
                             );
+                        }
+
+                        if stable_mismatch {
+                            warn!(
+                                "Stable mapping config changed. Storage: {}, Config: {}. Recreating database.",
+                                c.stable_mapping, stable_mapping
+                            );
+                        }
+
+                        if stable_mismatch {
+                            recreate_database = true;
+                        } else if network_mismatch {
+                             if stable_mapping {
+                                warn!("Stable mapping enabled and network changed. Recreating database.");
+                                recreate_database = true;
+                             } else {
+                                recreate_database = false;
+                             }
                         } else {
                             recreate_database = false;
                         }
@@ -227,6 +253,7 @@ impl FakeDnsManager {
                 ipv4_network: ipv4_network_str,
                 ipv6_network: ipv6_network_str,
                 version: FAKE_DNS_MANAGER_STORAGE_VERSION,
+                stable_mapping,
             };
 
             let v = c.encode_to_vec()?;
@@ -242,7 +269,10 @@ impl FakeDnsManager {
             db: Mutex::new(db),
             ipv4_network: Mutex::new(ipv4_network.hosts().cycle()),
             ipv6_network: Mutex::new(ipv6_network.hosts().cycle()),
+            ipv4_net: ipv4_network,
+            ipv6_net: ipv6_network,
             expire_duration,
+            stable_mapping,
         })
     }
 
@@ -266,12 +296,298 @@ impl FakeDnsManager {
 
     /// Get or create an IPv4 mapping for `domain`
     pub async fn map_domain_ipv4(&self, domain: &Name) -> FakeDnsResult<(Ipv4Addr, Duration)> {
-        map_domain_ip!(self, domain, Ipv4Addr, ipv4_addr, ipv4_network)
+        if self.stable_mapping {
+            self.map_domain_ipv4_stable(domain).await
+        } else {
+            map_domain_ip!(self, domain, Ipv4Addr, ipv4_addr, ipv4_network)
+        }
+    }
+
+    async fn map_domain_ipv4_stable(&self, domain: &Name) -> FakeDnsResult<(Ipv4Addr, Duration)> {
+        let db = self.db.lock().await;
+
+        // Use full domain name string including trailing dot
+        let domain_str = domain.to_string();
+
+        // 1. Check if mapping already exists (Name -> IP)
+        let name2ip_key = FakeDnsManager::get_name2ip_key(domain);
+        if let Some(v) = db.get(&name2ip_key)? {
+            let mut domain_name_mapping = proto::DomainNameMapping::decode(&v)?;
+            if !domain_name_mapping.ipv4_addr.is_empty() {
+                if let Ok(ip) = domain_name_mapping.ipv4_addr.parse::<Ipv4Addr>() {
+                    // Update expire time
+                    // Update expire time if remaining <= 20%
+                    let now = FakeDnsManager::get_current_timestamp();
+                    let remaining = domain_name_mapping.expire_time - now;
+                    let threshold = (self.expire_duration.as_secs() as i64) * 20 / 100;
+
+                    if remaining <= threshold {
+                        let expire_secs = now + self.expire_duration.as_secs() as i64;
+                        domain_name_mapping.expire_time = expire_secs;
+
+                        let nv = domain_name_mapping.encode_to_vec()?;
+                        db.put(&name2ip_key, nv)?;
+
+                        // Also update IP -> Name expire time to keep them in sync
+                        let ip2name_key = FakeDnsManager::get_ip2name_key(ip.into());
+                        if let Some(v) = db.get(&ip2name_key)? {
+                            let mut ip_mapping = proto::IpAddrMapping::decode(&v)?;
+                            if ip_mapping.domain_name == domain_str {
+                                ip_mapping.expire_time = expire_secs;
+                                let nv = ip_mapping.encode_to_vec()?;
+                                db.put(&ip2name_key, nv)?;
+                            }
+                        }
+                        trace!("fakedns stable mapping hit {} -> {}, refreshed", domain, ip);
+                    } else {
+                        trace!("fakedns stable mapping hit {} -> {}, ttl healthy", domain, ip);
+                    }
+
+                    return Ok((ip, self.expire_duration));
+                }
+            }
+        }
+
+        // 2. Stable allocation logic
+        // Calculate pool parameters
+        let _net_int: u32 = self.ipv4_net.network().into();
+        let prefix_len = self.ipv4_net.prefix_len();
+        
+        let (pool_size, start_offset) = if prefix_len < 31 {
+            // Standard subnet: exclude network and broadcast
+            let total = 1u64 << (32 - prefix_len);
+            (total.saturating_sub(2), 1)
+        } else {
+            // /31 and /32: Use all
+            let total = if prefix_len == 32 { 1 } else { 2 };
+            (total, 0)
+        };
+        
+        let net_host = u32::from(self.ipv4_net.network());
+
+        let hash = xxh3_64(domain_str.as_bytes());
+        let offset_start = (hash % pool_size) as u32;
+        let mut offset = offset_start;
+        let now = FakeDnsManager::get_current_timestamp();
+
+        for _ in 0..pool_size {
+            let candidate_ip_u32 = net_host.wrapping_add(start_offset + offset);
+            let candidate_ip = Ipv4Addr::from(candidate_ip_u32);
+
+            // Check usage in DB
+            let ip2name_key = FakeDnsManager::get_ip2name_key(candidate_ip.into());
+
+            let mut occupied = false;
+            let mut expired = false;
+            let mut current_domain = String::new();
+
+            if let Some(v) = db.get(&ip2name_key)? {
+                let ip_mapping = proto::IpAddrMapping::decode(&v)?;
+                if ip_mapping.expire_time > now {
+                    occupied = true;
+                    current_domain = ip_mapping.domain_name;
+                } else {
+                    expired = true;
+                }
+            }
+
+            if !occupied || expired {
+                // Found empty or expired slot
+                // If expired, we overwrite.
+
+                let expire_secs = now + self.expire_duration.as_secs() as i64;
+
+                // 1. Save IP -> Name
+                let mut new_ip_mapping = proto::IpAddrMapping::default();
+                new_ip_mapping.domain_name = domain_str.clone();
+                new_ip_mapping.expire_time = expire_secs;
+                let nv = new_ip_mapping.encode_to_vec()?;
+                db.put(&ip2name_key, nv)?;
+
+                // 2. Save Name -> IP
+                let mut domain_mapping = if let Some(v) = db.get(&name2ip_key)? {
+                    proto::DomainNameMapping::decode(&v).unwrap_or_default()
+                } else {
+                    proto::DomainNameMapping::default()
+                };
+                domain_mapping.ipv4_addr = candidate_ip.to_string();
+                domain_mapping.expire_time = expire_secs;
+                let nv = domain_mapping.encode_to_vec()?;
+                db.put(&name2ip_key, nv)?;
+
+                trace!("fakedns stable mapping new/overwrite {} -> {}", domain, candidate_ip);
+                return Ok((candidate_ip, self.expire_duration));
+            } else {
+                // Occupied and valid
+                if current_domain == domain_str {
+                    trace!("fakedns stable mapping match ip check {} -> {}", domain, candidate_ip);
+                    return Ok((candidate_ip, self.expire_duration));
+                }
+
+                // Collision, linear probe
+                offset = (offset + 1) % (pool_size as u32);
+            }
+        }
+
+        warn!("fakedns pool exhausted for stable mapping: {}", domain);
+        Err(io::Error::new(io::ErrorKind::Other, "fakedns pool exhausted").into())
     }
 
     /// Get or create an IPv6 mapping for `domain`
     pub async fn map_domain_ipv6(&self, domain: &Name) -> FakeDnsResult<(Ipv6Addr, Duration)> {
-        map_domain_ip!(self, domain, Ipv6Addr, ipv6_addr, ipv6_network)
+        if self.stable_mapping {
+            self.map_domain_ipv6_stable(domain).await
+        } else {
+            map_domain_ip!(self, domain, Ipv6Addr, ipv6_addr, ipv6_network)
+        }
+    }
+
+    async fn map_domain_ipv6_stable(&self, domain: &Name) -> FakeDnsResult<(Ipv6Addr, Duration)> {
+        let db = self.db.lock().await;
+
+        let domain_str = domain.to_string();
+        let name2ip_key = FakeDnsManager::get_name2ip_key(domain);
+
+        // 1. Check existing
+        if let Some(v) = db.get(&name2ip_key)? {
+            let mut domain_name_mapping = proto::DomainNameMapping::decode(&v)?;
+            if !domain_name_mapping.ipv6_addr.is_empty() {
+                if let Ok(ip) = domain_name_mapping.ipv6_addr.parse::<Ipv6Addr>() {
+                    let now = FakeDnsManager::get_current_timestamp();
+                    let remaining = domain_name_mapping.expire_time - now;
+                    let threshold = (self.expire_duration.as_secs() as i64) * 20 / 100;
+
+                    if remaining <= threshold {
+                        let expire_secs = now + self.expire_duration.as_secs() as i64;
+                        domain_name_mapping.expire_time = expire_secs;
+
+                        let nv = domain_name_mapping.encode_to_vec()?;
+                        db.put(&name2ip_key, nv)?;
+
+                        let ip2name_key = FakeDnsManager::get_ip2name_key(ip.into());
+                        if let Some(v) = db.get(&ip2name_key)? {
+                            let mut ip_mapping = proto::IpAddrMapping::decode(&v)?;
+                            if ip_mapping.domain_name == domain_str {
+                                ip_mapping.expire_time = expire_secs;
+                                let nv = ip_mapping.encode_to_vec()?;
+                                db.put(&ip2name_key, nv)?;
+                            }
+                        }
+                        trace!("fakedns stable mapping hit {} -> {}, refreshed", domain, ip);
+                    } else {
+                         trace!("fakedns stable mapping hit {} -> {}, ttl healthy", domain, ip);
+                    }
+
+                    return Ok((ip, self.expire_duration));
+                }
+            }
+        }
+
+        // 2. Stable allocation
+        let prefix_len = self.ipv6_net.prefix_len();
+        let bits_available = 128 - prefix_len;
+        
+        // ipnet for IPv6 skips the network address (all zeros in host part)
+        // so we have pool_size = total - 1
+        
+        let total_size_u128 = if bits_available >= 128 {
+            u128::MAX // Huge
+        } else {
+            1u128 << bits_available
+        };
+        
+        let pool_size_u128 = total_size_u128.saturating_sub(1);
+        
+        if pool_size_u128 == 0 {
+            warn!("fakedns ipv6 pool is empty (prefix length too large)");
+            return Err(io::Error::new(io::ErrorKind::Other, "fakedns pool empty").into());
+        }
+
+        let start_offset = 1u128; // Skip network address
+
+        // Network address as u128
+        let net_host = u128::from(self.ipv6_net.network());
+
+        let hash = xxh3_64(domain_str.as_bytes());
+        
+        // Offset logic:
+        let offset_start = if bits_available >= 64 {
+            // Hash is varying in 64 bits. If pool is huge, just mapping hash is not enough to cover it?
+            // But we only need *an* offset.
+            // If pool > 2^64, usage of u128 offset initialized with u64 hash means we only probe the first 2^64 slots roughly?
+            // That's fine for simple hashing. 
+            // Better: just cast.
+            hash as u128
+        } else {
+            (hash as u128) % pool_size_u128
+        };
+
+        let mut offset = offset_start;
+        let now = FakeDnsManager::get_current_timestamp();
+        
+        // Cap probing attempts.
+        let max_probes = if bits_available < 10 { pool_size_u128 as u64 } else { 1024 };
+
+        for _ in 0..max_probes {
+            let candidate_ip_u128 = net_host.wrapping_add(start_offset + offset);
+            let candidate_ip = Ipv6Addr::from(candidate_ip_u128);
+
+            let ip2name_key = FakeDnsManager::get_ip2name_key(candidate_ip.into());
+
+            let mut occupied = false;
+            let mut expired = false;
+            let mut current_domain = String::new();
+
+             if let Some(v) = db.get(&ip2name_key)? {
+                let ip_mapping = proto::IpAddrMapping::decode(&v)?;
+                if ip_mapping.expire_time > now {
+                    occupied = true;
+                    current_domain = ip_mapping.domain_name;
+                } else {
+                    expired = true;
+                }
+            }
+
+            if !occupied || expired {
+                let expire_secs = now + self.expire_duration.as_secs() as i64;
+                
+                // Save IP->Name
+                let mut new_ip_mapping = proto::IpAddrMapping::default();
+                new_ip_mapping.domain_name = domain_str.clone();
+                new_ip_mapping.expire_time = expire_secs;
+                let nv = new_ip_mapping.encode_to_vec()?;
+                db.put(&ip2name_key, nv)?;
+
+                // Save Name->IP
+                let mut domain_mapping = if let Some(v) = db.get(&name2ip_key)? {
+                    proto::DomainNameMapping::decode(&v).unwrap_or_default()
+                } else {
+                    proto::DomainNameMapping::default()
+                };
+                domain_mapping.ipv6_addr = candidate_ip.to_string();
+                domain_mapping.expire_time = expire_secs;
+                let nv = domain_mapping.encode_to_vec()?;
+                db.put(&name2ip_key, nv)?;
+                
+                trace!("fakedns stable mapping new/overwrite {} -> {}", domain, candidate_ip);
+                return Ok((candidate_ip, self.expire_duration));
+            } else {
+                if current_domain == domain_str {
+                    trace!("fakedns stable mapping match ip check {} -> {}", domain, candidate_ip);
+                    return Ok((candidate_ip, self.expire_duration));
+                }
+
+                // Probe
+                offset += 1;
+                if offset >= pool_size_u128 {
+                    offset = 0;
+                }
+            }
+        }
+        
+         warn!("fakedns pool exhausted for stable mapping: {}", domain);
+         Err(io::Error::new(io::ErrorKind::Other, "fakedns pool exhausted").into())
+
     }
 
     /// Get IP mapped domain name
