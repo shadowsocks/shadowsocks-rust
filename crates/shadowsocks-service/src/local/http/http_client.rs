@@ -249,6 +249,9 @@ where
                 if c.is_closed() {
                     continue;
                 }
+                if !c.is_ready() {
+                    continue;
+                }
                 return Some(c);
             }
         }
@@ -446,6 +449,13 @@ where
         match self {
             Self::Http1(r) => r.is_closed(),
             Self::Http2(r) => r.is_closed(),
+        }
+    }
+
+    pub fn is_ready(&self) -> bool {
+        match self {
+            Self::Http1(r) => r.is_ready(),
+            Self::Http2(r) => r.is_ready(),
         }
     }
 }
