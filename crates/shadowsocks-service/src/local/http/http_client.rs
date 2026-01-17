@@ -274,12 +274,23 @@ where
                 "HTTP connection keep-alive for host: {}, response: {:?}",
                 host, response
             );
-            self.cache_conn
-                .lock()
-                .await
-                .entry(host)
-                .or_insert_with(VecDeque::new)
-                .push_back((c, Instant::now()));
+            let cache_conn = self.cache_conn.clone();
+            tokio::spawn(async move {
+                match c.ready().await {
+                    Ok(_) => {
+                        trace!("HTTP connection for host: {host} is ready and will be cached");
+                        cache_conn
+                            .lock()
+                            .await
+                            .entry(host)
+                            .or_insert_with(VecDeque::new)
+                            .push_back((c, Instant::now()));
+                    }
+                    Err(e) => {
+                        trace!("HTTP connection for host: {host}  failed to become ready: {}", e);
+                    }
+                };
+            });
         }
 
         Ok(response)
@@ -456,6 +467,13 @@ where
         match self {
             Self::Http1(r) => r.is_ready(),
             Self::Http2(r) => r.is_ready(),
+        }
+    }
+
+    pub async fn ready(&mut self) -> Result<(), hyper::Error> {
+        match self {
+            HttpConnection::Http1(r) => r.ready().await,
+            HttpConnection::Http2(r) => r.ready().await,
         }
     }
 }
