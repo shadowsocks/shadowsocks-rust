@@ -204,7 +204,7 @@ shadowsocks = { version = "1.24.0", path = "../shadowsocks", default-features = 
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
-nix = { version = "0.30", features = ["ioctl"] }
+nix = { version = "0.31", features = ["ioctl"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock"] }
