@@ -1506,7 +1506,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -2145,6 +2145,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225e7cfe711e0ba79a68baeddb2982723e4235247aefce1482f2f16c27865b66"
+dependencies = [
+ "bitflags 2.10.0",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2515,7 +2527,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2553,7 +2565,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -3122,7 +3134,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "shadowsocks-crypto",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "spin",
  "thiserror 2.0.18",
  "tokio",
@@ -3231,7 +3243,7 @@ dependencies = [
  "lru_time_cache",
  "mime",
  "native-tls",
- "nix",
+ "nix 0.31.1",
  "pin-project",
  "rand",
  "regex",
@@ -3241,7 +3253,7 @@ dependencies = [
  "serde_json",
  "shadowsocks",
  "smoltcp",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "spin",
  "thiserror 2.0.18",
  "tokio",
@@ -3369,9 +3381,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17129e116933cf371d018bb80ae557e889637989d8638274fb25622827b03881"
+checksum = "86f4aa3ad99f2088c990dfa82d367e19cb29268ed67c574d10d0a4bfe71f07e0"
 dependencies = [
  "libc",
  "windows-sys 0.60.2",
@@ -3662,7 +3674,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "tokio-macros",
  "windows-sys 0.61.2",
 ]
@@ -3710,7 +3722,7 @@ dependencies = [
  "log",
  "once_cell",
  "pin-project",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "tokio",
  "windows-sys 0.60.2",
 ]
@@ -3878,7 +3890,7 @@ dependencies = [
  "ipnet",
  "libc",
  "log",
- "nix",
+ "nix 0.30.1",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
