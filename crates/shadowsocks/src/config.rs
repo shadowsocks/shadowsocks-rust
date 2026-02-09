@@ -516,7 +516,7 @@ where
         #[cfg(feature = "stream-cipher")]
         CipherKind::SS_TABLE => {
             // TABLE cipher doesn't need key derivation.
-            // Reference implemenation: shadowsocks-libev, shadowsocks (Python)
+            // Reference implementation: shadowsocks-libev, shadowsocks (Python)
             let enc_key = password.clone().into_bytes().into_boxed_slice();
             return Ok((password, enc_key, Vec::new()));
         }

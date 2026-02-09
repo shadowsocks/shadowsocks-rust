@@ -21,7 +21,7 @@ use windows_service::{
 
 const SERVICE_NAME: &str = "ssservice";
 const SERVICE_EXIT_CODE_ARGUMENT_ERROR: u32 = 100;
-const SERVICE_EXIT_CODE_EXITED_UNEXPECTLY: u32 = 101;
+const SERVICE_EXIT_CODE_EXITED_UNEXPECTEDLY: u32 = 101;
 const SERVICE_EXIT_CODE_CREATE_FAILED: u32 = 102;
 
 #[inline]
@@ -84,7 +84,7 @@ where
                             break true;
                         }
                         exit_code = main_fut => {
-                            info!("service exited unexpectly with code: {:?}", exit_code);
+                            info!("service exited unexpectedly with code: {:?}", exit_code);
                             break false;
                         }
                     }
@@ -98,7 +98,7 @@ where
                 if exited_by_ctrl {
                     ServiceExitCode::Win32(0)
                 } else {
-                    ServiceExitCode::ServiceSpecific(SERVICE_EXIT_CODE_EXITED_UNEXPECTLY)
+                    ServiceExitCode::ServiceSpecific(SERVICE_EXIT_CODE_EXITED_UNEXPECTEDLY)
                 },
                 Duration::default(),
             )?;

@@ -77,7 +77,7 @@ impl Debug for ServerScore {
     }
 }
 
-/// Identifer for a server
+/// Identifier for a server
 #[derive(Debug)]
 pub struct ServerIdent {
     tcp_score: ServerScore,

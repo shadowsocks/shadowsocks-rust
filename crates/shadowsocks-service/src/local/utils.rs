@@ -27,7 +27,7 @@ where
 {
     if shadow.is_proxied() {
         debug!(
-            "established tcp tunnel {} <-> {} through sever {} (outbound: {})",
+            "established tcp tunnel {} <-> {} through server {} (outbound: {})",
             peer_addr,
             target_addr,
             svr_cfg.tcp_external_addr(),

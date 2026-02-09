@@ -128,7 +128,7 @@ impl OnlineConfigService {
             }
         };
 
-        trace!("sever-loader task fetch response: {:?}", rsp);
+        trace!("server-loader task fetch response: {:?}", rsp);
 
         let fetch_time = Instant::now();
 

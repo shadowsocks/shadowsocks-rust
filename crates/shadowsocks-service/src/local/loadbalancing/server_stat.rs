@@ -90,7 +90,7 @@ impl ServerStat {
 
         // Normalize stdev
         // let nstdev = self.data.latency_stdev / self.max_latency_stdev;
-        // Mormalize mad
+        // Normalize mad
         let nmad = self.data.latency_mad as f64 / self.max_server_rtt as f64;
 
         const SCORE_RTT_WEIGHT: f64 = 1.0;

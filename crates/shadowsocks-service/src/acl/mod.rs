@@ -619,8 +619,8 @@ impl AccessControl {
                 // If no domain name rules matched,
                 // we need to resolve the hostname to IP addresses
 
-                // If mode is BlackList, host is allowed by default. If any of its' resolved IPs in outboud_block, then it is blocked.
-                // If mode is WhiteList, host is blocked by default. If any of its' resolved IPs in outbound_allow, then it is allowed.
+                // If mode is BlackList, host is allowed by default. If any of its resolved IPs is in outbound_block, then it is blocked.
+                // If mode is WhiteList, host is blocked by default. If any of its resolved IPs is in outbound_allow, then it is allowed.
                 let (check_rule, block_if_matched) = match self.outbound_mode {
                     Mode::BlackList => (&self.outbound_block, true),
                     Mode::WhiteList => (&self.outbound_allow, false),
