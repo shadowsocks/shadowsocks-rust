@@ -133,7 +133,7 @@ lru_time_cache = "0.11"
 bytes = "1.7"
 byte_string = "1.0"
 byteorder = "1.5"
-rand = { version = "0.9", features = ["small_rng"] }
+rand = { version = "0.10", features = ["small_rng"] }
 rocksdb = { version = "0.24", optional = true }
 
 futures = "0.3"
