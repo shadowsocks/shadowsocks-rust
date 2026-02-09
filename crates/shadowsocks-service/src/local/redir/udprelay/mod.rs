@@ -260,7 +260,7 @@ impl RedirUdpServer {
                 }
 
                 peer_addr_opt = keepalive_rx.recv() => {
-                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectly");
+                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectedly");
                     manager.keep_alive(&peer_addr).await;
                 }
 

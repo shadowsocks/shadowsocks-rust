@@ -883,7 +883,7 @@ impl DnsClient {
                     .map_err(From::from)
             }
             Mode::TcpAndUdp => {
-                // Query TCP & UDP simutaneously
+                // Query TCP & UDP simultaneously
 
                 let message2 = message.clone();
                 let tcp_fut = async {
@@ -952,7 +952,7 @@ impl DnsClient {
                     self.client_cache
                         .lookup_local(ns, message.clone(), self.context.connect_opts_ref(), true);
                 let tcp_query = async move {
-                    // Send TCP query after 500ms, because UDP will always return faster than TCP, there is no need to send queries simutaneously
+                    // Send TCP query after 500ms, because UDP will always return faster than TCP, there is no need to send queries simultaneously
                     time::sleep(Duration::from_millis(500)).await;
 
                     self.client_cache

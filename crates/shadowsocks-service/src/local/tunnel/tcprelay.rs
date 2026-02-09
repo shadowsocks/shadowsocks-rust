@@ -133,7 +133,7 @@ async fn handle_tcp_client(
     let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
     trace!(
-        "establishing tcp tunnel {} <-> {} through sever {} (outbound: {})",
+        "establishing tcp tunnel {} <-> {} through server {} (outbound: {})",
         peer_addr,
         forward_addr,
         svr_cfg.tcp_external_addr(),
