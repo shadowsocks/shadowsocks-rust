@@ -6,7 +6,7 @@ use bytes::Bytes;
 use futures::future;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
-use rand::{Rng, SeedableRng, rngs::SmallRng};
+use rand::{RngExt, rngs::SmallRng};
 use shadowsocks::{
     ServerConfig,
     config::ServerUser,
@@ -456,7 +456,7 @@ impl Drop for UdpAssociationContext {
 }
 
 thread_local! {
-    static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_os_rng());
+    static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(rand::make_rng());
 }
 
 #[inline]

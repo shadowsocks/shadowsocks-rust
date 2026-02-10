@@ -38,6 +38,7 @@ aead-cipher-extra = ["aead-cipher", "shadowsocks-crypto/v1-aead-extra"]
 aead-cipher-2022 = [
     "shadowsocks-crypto/v2",
     "shadowsocks-crypto/ring",
+    "rand",
     "aes",
     "lru_time_cache",
 ] # Enable AEAD 2022
