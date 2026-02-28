@@ -3548,9 +3548,9 @@ dependencies = [
 
 [[package]]
 name = "sysexits"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9069f08b6264d1ad8823d1237144e6e26c0a80a3a43e685e1bc2b7eb0d399976"
+checksum = "5dffab7eaf1889aaff43c92ee7ffaeeb0d34de8214867c41c6e7587361f867f7"
 
 [[package]]
 name = "syslog-tracing"
