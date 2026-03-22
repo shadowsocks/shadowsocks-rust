@@ -1,0 +1,74 @@
+---
+description: shadowsocks-rust workspace orientation (binaries, crates, features, hot paths)
+alwaysApply: true
+---
+
+# shadowsocks-rust orientation
+
+## Toolchain
+
+- **Edition**: 2024. **MSRV**: `1.91` (root + both crates; `clippy.toml` matches). Breaking bumps are semver-major for this repo.
+- **Workspace**: root `shadowsocks-rust` + `crates/shadowsocks` + `crates/shadowsocks-service` (see root `Cargo.toml` `[workspace]`).
+
+## Dependency direction
+
+```
+shadowsocks-rust (binaries, CLI, logging, allocators)
+    └── shadowsocks-service (roles, config load, ACL, DNS helpers, local modes)
+            └── shadowsocks (protocol, relay I/O, crypto facade)
+                    └── shadowsocks-crypto (ciphers; optional ring / AEAD-2022, etc.)
+```
+
+- **Do not** make `shadowsocks` depend on `shadowsocks-service`. New shared logic belongs in `shadowsocks` or a small shared module, not the reverse.
+
+## Root crate (`shadowsocks-rust`)
+
+- **`bin/*.rs`**: thin `main` — build `clap` `Command`, delegate to `shadowsocks_rust::service::{local,server,manager,...}` (`src/service/*.rs`).
+- **`src/lib.rs`**: `VERSION`, re-exports service entrypoints.
+- **`src/config.rs`**, **`src/logging/*`**, **`src/daemonize/*`**, **`src/monitor/*`**, **`src/allocator/*`**: process-wide concerns (not protocol).
+- **Features**: root features mostly **forward** to `shadowsocks-service/...` (e.g. `local` → `shadowsocks-service/local`, `local-tun` → `local-tun` + `ipnet`). Prefer enabling capability on the service crate when adding optional deps.
+
+## `crates/shadowsocks` (core)
+
+- **Role**: `ServerConfig`, relay primitives, SOCKS5 `Address`, manager wire protocol, `Context`, sockets (`net`), plugins.
+- **High-signal paths**:
+  - **TCP / stream tunneling**: `relay/tcprelay/` (`ProxyListener`, `ProxyClientStream`, proxy stream protocol under `proxy_stream/`).
+  - **UDP**: `relay/udprelay/` (`ProxySocket`), **`net/udp.rs`** (socket wrapper, `batch_send` / `batch_recv`), **`net/sys/unix/*`** (Linux batching via `sendmmsg`/`recvmmsg`-style APIs).
+  - **Manager**: `manager/`.
+  - **DNS resolver hook**: `dns_resolver/`.
+
+## `crates/shadowsocks-service`
+
+- **Role**: runnable **local** (`sslocal`), **server** (`ssserver`), **manager** (`ssmanager`); loads JSON5 config; ACL; Hickory DNS integration; platform redir/tun/http.
+- **Layout** (under `src/`):
+  - **`local/`** — SOCKS4/5 (`local/socks/`), HTTP proxy (`local/http/`), transparent **redir** (`local/redir/`, per-OS `sys/` subdirs), **tunnel**, **TUN** (`local/tun/` — `smoltcp` user stack when `local-tun`), **fake-dns**, **online_config** (SIP008), **dns** relay, **net/tcp|udp** listeners, **loadbalancing** (`PingBalancer`), **`context.rs`** (`ServiceContext`).
+  - **`server/`** — TCP/UDP relay servers (`tcprelay.rs`, `udprelay.rs`), `server.rs`, `context.rs`.
+  - **`manager/`** — manager daemon.
+  - **`acl/`** — ACL matching.
+  - **`dns/`**, **`net/`** — shared service-layer DNS / flow / sockets.
+  - **`config.rs`** — service config types and loading.
+- **`local/context.rs`**: central handle for accept opts, balancer, ACL, DNS — most local features thread through here.
+
+## Main binaries (feature-gated)
+
+| Binary        | Feature     | Typical entry |
+|---------------|-------------|----------------|
+| `sslocal`     | `local`     | `src/service/local.rs` → `shadowsocks_service::run_local` |
+| `ssserver`    | `server`    | `src/service/server.rs` |
+| `ssmanager`   | `manager`   | `src/service/manager.rs` |
+| `ssurl`       | `utility`   | own bin + optional `utility-url-outline` / `reqwest` |
+| `ssservice`   | `service`   | wrapper for packaged multi-role |
+| `sswinservice`| `winservice`| Windows service |
+
+## Where to look (common tasks)
+
+- **Local UDP association / performance**: `crates/shadowsocks-service/src/local/net/udp/association.rs` + core `crates/shadowsocks/src/net/udp.rs` + `crates/shadowsocks/src/net/sys/unix/*`.
+- **TCP local accept / upstream**: `local/net/tcp/`, `relay/tcprelay/` (core).
+- **TLS to local HTTP / DNS-over-TLS**: `shadowsocks-service` optional `tokio-rustls`, `rustls-native-certs`, Hickory features (`dns-over-tls`, etc.).
+- **TUN / smoltcp**: `local/tun/*.rs` (device bridge, TCP manager thread, IP parsing); dep `smoltcp` with `medium-ip`, TCP/UDP sockets.
+
+## Design notes
+
+- **Async**: Tokio throughout service layer; core relay types are often used from async contexts.
+- **Config**: JSON5 files + CLI; many structs under `shadowsocks`/`shadowsocks-service` `config` modules — search `Config` / `ServerConfig` before duplicating options.
+- **Tests**: workspace integration tests in `tests/*.rs`; `crates/shadowsocks/tests/`; `#[cfg(test)]` modules beside sources.

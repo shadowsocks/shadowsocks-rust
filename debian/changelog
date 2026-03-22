@@ -1,3 +1,11 @@
+shadowsocks-rust (1.25.0) unstable; urgency=medium
+
+  ## Miscellaneous
+
+  - MSRV bumps to v1.91 (breaking change for downstream toolchains; required by `smoltcp` 0.13)
+
+  -- ty <zonyitoo@gmail.com>  Sun, 22 Mar 2026 12:00:00 +0800
+
 shadowsocks-rust (1.24.0) unstable; urgency=medium
 
   ## Features
