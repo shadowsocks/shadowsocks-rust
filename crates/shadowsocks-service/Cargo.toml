@@ -182,7 +182,7 @@ zstd = { version = "0.13", optional = true }
 base64 = { version = "0.22", optional = true }
 
 etherparse = { version = "0.19", optional = true }
-smoltcp = { version = "0.12", optional = true, default-features = false, features = [
+smoltcp = { version = "0.13", optional = true, default-features = false, features = [
     "std",
     "log",
     "medium-ip",
