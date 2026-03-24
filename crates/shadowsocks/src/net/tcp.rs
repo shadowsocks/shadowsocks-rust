@@ -12,6 +12,7 @@ use std::{
     task::{self, Poll},
 };
 
+use log::warn;
 use futures::{future, ready};
 use pin_project::pin_project;
 use tokio::{
@@ -159,7 +160,11 @@ impl TcpListener {
         // Enable TFO if supported
         // macos requires TCP_FASTOPEN to be set after listen(), but other platform doesn't have this constraint
         if accept_opts.tcp.fastopen {
-            set_tcp_fastopen(&inner)?;
+            if accept_opts.tcp.mptcp {
+                warn!("TCP_FASTOPEN is not compatible with MPTCP, skipping");
+            } else {
+                set_tcp_fastopen(&inner)?;
+            }
         }
 
         Ok(Self { inner, accept_opts })
@@ -170,7 +175,11 @@ impl TcpListener {
         // Enable TFO if supported
         // macos requires TCP_FASTOPEN to be set after listen(), but other platform doesn't have this constraint
         if accept_opts.tcp.fastopen {
-            set_tcp_fastopen(&listener)?;
+            if accept_opts.tcp.mptcp {
+                warn!("TCP_FASTOPEN is not compatible with MPTCP, skipping");
+            } else {
+                set_tcp_fastopen(&listener)?;
+            }
         }
 
         Ok(Self {
