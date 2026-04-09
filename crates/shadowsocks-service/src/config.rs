@@ -98,13 +98,42 @@ impl Debug for OutboundProxyAuth {
     }
 }
 
-/// Configuration for an outbound SOCKS5 proxy hop
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OutboundProxyProtocol {
+    Socks5,
+    Http,
+    Https,
+}
+
+impl OutboundProxyProtocol {
+    fn from_scheme(scheme: &str) -> Result<Self, String> {
+        match scheme {
+            "socks5" => Ok(Self::Socks5),
+            "http" => Ok(Self::Http),
+            "https" => Ok(Self::Https),
+            _ => Err(format!(
+                "unsupported proxy scheme, only socks5://, http:// and https:// are supported: {scheme}://"
+            )),
+        }
+    }
+
+    fn as_scheme(self) -> &'static str {
+        match self {
+            Self::Socks5 => "socks5",
+            Self::Http => "http",
+            Self::Https => "https",
+        }
+    }
+}
+
+/// Configuration for an outbound proxy hop
 ///
 /// `ssserver` will route its outbound TCP connections through this proxy.
-/// Config file format accepts either a single string `"socks5://host:port"`
-/// or a chain `["socks5://host:port", ...]`.
+/// Config file format accepts either a single string like `"socks5://host:port"`
+/// or a chain like `["socks5://host:port", "http://host:port", "https://host:port"]`.
 #[derive(Clone, Eq, PartialEq)]
 pub struct OutboundProxy {
+    pub protocol: OutboundProxyProtocol,
     pub host: String,
     pub port: u16,
     pub auth: Option<OutboundProxyAuth>,
@@ -113,6 +142,7 @@ pub struct OutboundProxy {
 impl Debug for OutboundProxy {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("OutboundProxy")
+            .field("protocol", &self.protocol)
             .field("host", &self.host)
             .field("port", &self.port)
             .field("auth", &self.auth)
@@ -122,12 +152,10 @@ impl Debug for OutboundProxy {
 
 impl OutboundProxy {
     /// Parse from a URL string like `socks5://127.0.0.1:1080`,
-    /// `socks5://user:pass@127.0.0.1:1080` or `socks5://[::1]:1080`
+    /// `http://user:pass@127.0.0.1:3128` or `https://[::1]:443`
     pub fn from_url(url: &str) -> Result<Self, String> {
         let parsed = Url::parse(url).map_err(|e| format!("invalid proxy url {url}: {e}"))?;
-        if parsed.scheme() != "socks5" {
-            return Err(format!("unsupported proxy scheme, only socks5:// is supported: {url}"));
-        }
+        let protocol = OutboundProxyProtocol::from_scheme(parsed.scheme())?;
 
         let host = parsed
             .host_str()
@@ -160,7 +188,12 @@ impl OutboundProxy {
             Some(OutboundProxyAuth { username, password })
         };
 
-        Ok(OutboundProxy { host, port, auth })
+        Ok(OutboundProxy {
+            protocol,
+            host,
+            port,
+            auth,
+        })
     }
 
     pub fn address(&self) -> Address {
@@ -179,8 +212,15 @@ impl OutboundProxy {
         };
 
         match self.auth {
-            Some(ref auth) => format!("socks5://{}:{}@{}:{}", auth.username, auth.password, host, self.port),
-            None => format!("socks5://{}:{}", host, self.port),
+            Some(ref auth) => format!(
+                "{}://{}:{}@{}:{}",
+                self.protocol.as_scheme(),
+                auth.username,
+                auth.password,
+                host,
+                self.port
+            ),
+            None => format!("{}://{}:{}", self.protocol.as_scheme(), host, self.port),
         }
     }
 }

@@ -64,7 +64,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                 .long("outbound-proxy")
                 .num_args(1)
                 .action(ArgAction::Append)
-                .help("Outbound SOCKS5 proxy hop for ssserver TCP relay; supports socks5://host:port and socks5://user:pass@host:port, repeat in order for chaining"),
+                .help("Outbound proxy hop for ssserver TCP relay; supports socks5://, http:// and https:// with optional user:pass@, repeat in order for chaining"),
         )
         .arg(
             Arg::new("SERVER_ADDR")

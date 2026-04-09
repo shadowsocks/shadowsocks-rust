@@ -60,8 +60,8 @@ local-dns-relay = ["local-dns"]
 # Currently is only used in Android
 local-flow-stat = ["local"]
 # Enable HTTP protocol for sslocal
-local-http = ["local", "hyper", "http", "http-body-util", "base64"]
-local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
+local-http = ["local", "hyper", "http", "http-body-util"]
+local-http-native-tls = ["local-http"]
 local-http-native-tls-vendored = [
     "local-http-native-tls",
     "tokio-native-tls/vendored",
@@ -146,8 +146,8 @@ tokio = { version = "1.38", features = [
     "sync",
     "time",
 ] }
-tokio-native-tls = { version = "0.3", optional = true }
-native-tls = { version = "0.2.8", optional = true, features = ["alpn"] }
+tokio-native-tls = { version = "0.3" }
+native-tls = { version = "0.2.8", features = ["alpn"] }
 webpki-roots = { version = "1.0", optional = true }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
     "logging",
@@ -179,7 +179,7 @@ mime = { version = "0.3", optional = true }
 flate2 = { version = "1.0", optional = true }
 brotli = { version = "8.0", optional = true }
 zstd = { version = "0.13", optional = true }
-base64 = { version = "0.22", optional = true }
+base64 = { version = "0.22" }
 
 etherparse = { version = "0.19", optional = true }
 smoltcp = { version = "0.13", optional = true, default-features = false, features = [
