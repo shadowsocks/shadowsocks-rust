@@ -488,7 +488,14 @@ ssserver -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
 ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "v2ray-plugin" --plugin-opts "server;tls;host=github.com"
+
+# Route outbound TCP traffic through a SOCKS5 proxy chain
+ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" \
+  --outbound-proxy socks5://user:pass@127.0.0.1:1080 \
+  --outbound-proxy socks5://127.0.0.1:1081
 ```
+
+Repeat `--outbound-proxy` in hop order. A single occurrence keeps the previous single-hop behavior.
 
 ### Server Manager
 
@@ -781,6 +788,18 @@ Example configuration:
             "outbound_bind_addr": "11.22.33.44",
             // Outbound UDP socket allows IP fragmentation (default false)
             "outbound_udp_allow_fragmentation": false,
+            // Route outbound TCP connections through a SOCKS5 proxy or proxy chain
+            // (ssserver only, UDP not proxied)
+            // Useful for chaining ssserver behind Cloudflare WARP, Tor, etc.
+            // Single hop:
+            "outbound_proxy": "socks5://127.0.0.1:1080",
+            // Single hop with username/password:
+            // "outbound_proxy": "socks5://user:pass@127.0.0.1:1080",
+            // Multi-hop:
+            // "outbound_proxy": [
+            //     "socks5://user:pass@127.0.0.1:1080",
+            //     "socks5://127.0.0.1:1081"
+            // ],
         }
     ],
 
@@ -845,6 +864,18 @@ Example configuration:
     "outbound_bind_addr": "11.22.33.44",
     // Outbound UDP socket allows IP fragmentation (default false)
     "outbound_udp_allow_fragmentation": false,
+    // Route outbound TCP connections through a SOCKS5 proxy or proxy chain
+    // (ssserver only, UDP not proxied)
+    // Useful for chaining ssserver behind Cloudflare WARP, Tor, etc.
+    // Single hop:
+    "outbound_proxy": "socks5://127.0.0.1:1080",
+    // Single hop with username/password:
+    // "outbound_proxy": "socks5://user:pass@127.0.0.1:1080",
+    // Multi-hop:
+    // "outbound_proxy": [
+    //     "socks5://user:pass@127.0.0.1:1080",
+    //     "socks5://127.0.0.1:1081"
+    // ],
 
     // Balancer customization
     "balancer": {

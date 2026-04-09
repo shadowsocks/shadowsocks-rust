@@ -4,7 +4,9 @@ use std::{
     future::Future,
     io::{self, ErrorKind},
     net::SocketAddr,
+    pin::Pin,
     sync::Arc,
+    task::{self, Poll},
     time::Duration,
 };
 
@@ -16,14 +18,54 @@ use shadowsocks::{
     relay::tcprelay::{ProxyServerStream, utils::copy_encrypted_bidirectional},
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::TcpStream as TokioTcpStream,
     time,
 };
 
-use crate::net::{MonProxyStream, utils::ignore_until_end};
+use crate::net::{MonProxyStream, Socks5TcpClient, utils::ignore_until_end};
 
 use super::context::ServiceContext;
+
+/// Unified outbound stream: either direct or via SOCKS5 proxy
+enum RemoteStream {
+    Direct(OutboundTcpStream),
+    Proxied(Socks5TcpClient),
+}
+
+impl AsyncRead for RemoteStream {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            Self::Direct(s) => Pin::new(s).poll_read(cx, buf),
+            Self::Proxied(s) => Pin::new(s).poll_read(cx, buf),
+        }
+    }
+}
+
+impl AsyncWrite for RemoteStream {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            Self::Direct(s) => Pin::new(s).poll_write(cx, buf),
+            Self::Proxied(s) => Pin::new(s).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            Self::Direct(s) => Pin::new(s).poll_flush(cx),
+            Self::Proxied(s) => Pin::new(s).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            Self::Direct(s) => Pin::new(s).poll_shutdown(cx),
+            Self::Proxied(s) => Pin::new(s).poll_shutdown(cx),
+        }
+    }
+}
+
+impl Unpin for RemoteStream {}
 
 /// TCP server instance
 pub struct TcpServer {
@@ -202,14 +244,21 @@ impl TcpServerClient {
             return Ok(());
         }
 
-        let mut remote_stream = match timeout_fut(
-            self.timeout,
-            OutboundTcpStream::connect_remote_with_opts(
-                self.context.context_ref(),
-                &target_addr,
-                self.context.connect_opts_ref(),
-            ),
-        )
+        let mut remote_stream = match timeout_fut(self.timeout, async {
+            match self.context.outbound_proxies() {
+                [] => OutboundTcpStream::connect_remote_with_opts(
+                    self.context.context_ref(),
+                    &target_addr,
+                    self.context.connect_opts_ref(),
+                )
+                .await
+                .map(RemoteStream::Direct),
+                proxies => Socks5TcpClient::connect_chain(target_addr.clone(), proxies)
+                    .await
+                    .map(RemoteStream::Proxied)
+                    .map_err(io::Error::other),
+            }
+        })
         .await
         {
             Ok(s) => s,

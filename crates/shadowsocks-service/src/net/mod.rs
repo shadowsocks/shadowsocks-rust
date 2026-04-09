@@ -1,6 +1,8 @@
 //! Shadowsocks Service Network Utilities
 
-pub use self::{flow::FlowStat, mon_socket::MonProxySocket, mon_stream::MonProxyStream};
+pub use self::{
+    flow::FlowStat, mon_socket::MonProxySocket, mon_stream::MonProxyStream, socks5_client::Socks5TcpClient,
+};
 
 pub mod flow;
 #[cfg(target_os = "macos")]
@@ -8,6 +10,7 @@ pub mod launch_activate_socket;
 pub mod mon_socket;
 pub mod mon_stream;
 pub mod packet_window;
+pub mod socks5_client;
 pub mod utils;
 
 /// Packet size for all UDP associations' send queue
