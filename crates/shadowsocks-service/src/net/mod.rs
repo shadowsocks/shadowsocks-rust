@@ -5,6 +5,7 @@ pub use self::{
 };
 
 pub mod flow;
+pub mod http_stream;
 #[cfg(target_os = "macos")]
 pub mod launch_activate_socket;
 pub mod mon_socket;

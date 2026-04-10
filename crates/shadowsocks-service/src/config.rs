@@ -66,7 +66,6 @@ use ipnet::IpNet;
 use ipnet::{Ipv4Net, Ipv6Net};
 use log::warn;
 use serde::{Deserialize, Serialize};
-#[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
@@ -160,6 +159,8 @@ impl OutboundProxy {
         let host = parsed
             .host_str()
             .ok_or_else(|| format!("missing proxy host in {url}"))?
+            .trim_start_matches('[')
+            .trim_end_matches(']')
             .to_owned();
         let port = parsed.port().ok_or_else(|| format!("missing proxy port in {url}"))?;
 

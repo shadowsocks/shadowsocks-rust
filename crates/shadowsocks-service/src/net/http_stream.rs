@@ -1,7 +1,7 @@
-//! Proxied HTTP stream
+//! Shared HTTP/HTTPS transport stream wrapper
 
 use std::{
-    io::{self, ErrorKind},
+    io::{self},
     pin::Pin,
     task::{self, Poll},
 };
@@ -9,25 +9,26 @@ use std::{
 use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::local::net::AutoProxyClientStream;
-
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = ProxyHttpStreamProj)]
-pub enum ProxyHttpStream {
-    Http(#[pin] AutoProxyClientStream),
-    #[cfg(feature = "local-http-native-tls")]
-    Https(#[pin] tokio_native_tls::TlsStream<AutoProxyClientStream>, bool),
+pub enum ProxyHttpStream<S> {
+    Http(#[pin] S),
+    #[cfg(not(feature = "local-http-rustls"))]
+    Https(#[pin] tokio_native_tls::TlsStream<S>, bool),
     #[cfg(feature = "local-http-rustls")]
-    Https(#[pin] tokio_rustls::client::TlsStream<AutoProxyClientStream>, bool),
+    Https(#[pin] tokio_rustls::client::TlsStream<S>, bool),
 }
 
-impl ProxyHttpStream {
-    pub fn connect_http(stream: AutoProxyClientStream) -> Self {
+impl<S> ProxyHttpStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    pub fn connect_http(stream: S) -> Self {
         Self::Http(stream)
     }
 
-    #[cfg(feature = "local-http-native-tls")]
-    pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
+    #[cfg(not(feature = "local-http-rustls"))]
+    pub async fn connect_https(stream: S, domain: &str) -> io::Result<Self> {
         use native_tls::TlsConnector;
 
         let cx = match TlsConnector::builder().request_alpns(&["h2", "http/1.1"]).build() {
@@ -49,7 +50,7 @@ impl ProxyHttpStream {
                     }
                 };
 
-                Ok(ProxyHttpStream::Https(s, negotiated_h2))
+                Ok(Self::Https(s, negotiated_h2))
             }
             Err(err) => {
                 let ierr = io::Error::other(format!("tls connect: {err}"));
@@ -59,7 +60,7 @@ impl ProxyHttpStream {
     }
 
     #[cfg(feature = "local-http-rustls")]
-    pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<Self> {
+    pub async fn connect_https(stream: S, domain: &str) -> io::Result<Self> {
         use log::warn;
         use rustls_native_certs::CertificateResult;
         use std::sync::{Arc, LazyLock};
@@ -71,7 +72,6 @@ impl ProxyHttpStream {
         static TLS_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
             let mut config = ClientConfig::builder()
                 .with_root_certificates({
-                    // Load WebPKI roots (Mozilla's root certificates)
                     let mut store = RootCertStore::empty();
                     store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
@@ -92,7 +92,6 @@ impl ProxyHttpStream {
                 })
                 .with_no_client_auth();
 
-            // Try to negotiate HTTP/2
             config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
             Arc::new(config)
         });
@@ -103,7 +102,7 @@ impl ProxyHttpStream {
             Ok(n) => n,
             Err(_) => {
                 return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
+                    io::ErrorKind::InvalidInput,
                     format!("invalid dnsname \"{domain}\""),
                 ));
             }
@@ -117,18 +116,9 @@ impl ProxyHttpStream {
         Ok(Self::Https(tls_stream, negotiated_http2))
     }
 
-    #[cfg(not(any(feature = "local-http-native-tls", feature = "local-http-rustls")))]
-    pub async fn connect_https(_stream: AutoProxyClientStream, _domain: &str) -> io::Result<ProxyHttpStream> {
-        let err = io::Error::other(
-            "https is not supported, consider enable it by feature \"local-http-native-tls\" or \"local-http-rustls\"",
-        );
-        Err(err)
-    }
-
     pub fn negotiated_http2(&self) -> bool {
         match *self {
             Self::Http(..) => false,
-            #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
             Self::Https(_, n) => n,
         }
     }
@@ -138,19 +128,24 @@ macro_rules! forward_call {
     ($self:expr, $method:ident $(, $param:expr)*) => {
         match $self.as_mut().project() {
             ProxyHttpStreamProj::Http(stream) => stream.$method($($param),*),
-            #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
             ProxyHttpStreamProj::Https(stream, ..) => stream.$method($($param),*),
         }
     };
 }
 
-impl AsyncRead for ProxyHttpStream {
+impl<S> AsyncRead for ProxyHttpStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_read, cx, buf)
     }
 }
 
-impl AsyncWrite for ProxyHttpStream {
+impl<S> AsyncWrite for ProxyHttpStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         forward_call!(self, poll_write, cx, buf)
     }

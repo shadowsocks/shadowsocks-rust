@@ -2,24 +2,30 @@
 
 use std::{
     io,
+    net::SocketAddr,
     pin::Pin,
     task::{self, Poll},
 };
 
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use log::trace;
-use native_tls::TlsConnector;
-use shadowsocks::relay::socks5::{
-    self, Address, Command, Error, HandshakeRequest, HandshakeResponse, PasswdAuthRequest, PasswdAuthResponse, Reply,
-    TcpRequestHeader, TcpResponseHeader,
+use shadowsocks::{
+    context::Context,
+    net::{ConnectOpts, TcpStream as OutboundTcpStream},
+    relay::socks5::{
+        self, Address, Command, Error, HandshakeRequest, HandshakeResponse, PasswdAuthRequest, PasswdAuthResponse, Reply,
+        TcpRequestHeader, TcpResponseHeader,
+    },
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::{TcpStream, ToSocketAddrs},
 };
-use tokio_native_tls::TlsConnector as TokioTlsConnector;
 
-use crate::config::{OutboundProxy, OutboundProxyAuth, OutboundProxyProtocol};
+use crate::{
+    config::{OutboundProxy, OutboundProxyAuth, OutboundProxyProtocol},
+    net::http_stream::ProxyHttpStream,
+};
 
 trait ProxyStream: AsyncRead + AsyncWrite + Send + Unpin {}
 
@@ -27,7 +33,7 @@ impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Unpin {}
 
 type BoxProxyStream = Box<dyn ProxyStream>;
 
-fn address_authority(addr: &Address) -> String {
+pub(crate) fn address_authority(addr: &Address) -> String {
     match addr {
         Address::SocketAddress(sa) => {
             if sa.is_ipv6() {
@@ -41,13 +47,11 @@ fn address_authority(addr: &Address) -> String {
 }
 
 async fn tls_wrap(stream: BoxProxyStream, host: &str) -> io::Result<BoxProxyStream> {
-    let connector = TlsConnector::builder().build().map_err(io::Error::other)?;
-    let connector = TokioTlsConnector::from(connector);
-    let stream = connector.connect(host, stream).await.map_err(io::Error::other)?;
+    let stream = ProxyHttpStream::connect_https(stream, host).await?;
     Ok(Box::new(stream))
 }
 
-async fn socks5_handshake<S>(stream: &mut S, auth: Option<&OutboundProxyAuth>) -> Result<(), Error>
+pub(crate) async fn socks5_handshake<S>(stream: &mut S, auth: Option<&OutboundProxyAuth>) -> Result<(), Error>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -93,7 +97,7 @@ where
     }
 }
 
-async fn socks5_command<S, A>(stream: &mut S, command: Command, addr: A) -> Result<TcpResponseHeader, Error>
+pub(crate) async fn socks5_command<S, A>(stream: &mut S, command: Command, addr: A) -> Result<TcpResponseHeader, Error>
 where
     S: AsyncRead + AsyncWrite + Unpin,
     A: Into<Address>,
@@ -110,7 +114,7 @@ where
     }
 }
 
-async fn http_connect<S>(stream: &mut S, proxy: &OutboundProxy, target: &Address) -> io::Result<()>
+pub(crate) async fn http_connect<S>(stream: &mut S, proxy: &OutboundProxy, target: &Address) -> io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -182,6 +186,7 @@ async fn connect_via_proxy(stream: &mut BoxProxyStream, proxy: &OutboundProxy, t
 /// TCP client for outbound proxy chains
 pub struct Socks5TcpClient {
     stream: BoxProxyStream,
+    local_addr: SocketAddr,
 }
 
 impl Socks5TcpClient {
@@ -192,10 +197,14 @@ impl Socks5TcpClient {
         P: ToSocketAddrs,
     {
         let mut s = TcpStream::connect(proxy).await?;
+        let local_addr = s.local_addr()?;
         socks5_handshake(&mut s, None).await?;
         socks5_command(&mut s, Command::TcpConnect, addr).await?;
 
-        Ok(Self { stream: Box::new(s) })
+        Ok(Self {
+            stream: Box::new(s),
+            local_addr,
+        })
     }
 
     /// Connects to `addr` via an outbound proxy chain
@@ -208,8 +217,9 @@ impl Socks5TcpClient {
         };
 
         let target_addr = addr.into();
-        let mut stream: BoxProxyStream =
-            Box::new(TcpStream::connect((first_proxy.host.as_str(), first_proxy.port)).await?);
+        let first_stream = TcpStream::connect((first_proxy.host.as_str(), first_proxy.port)).await?;
+        let local_addr = first_stream.local_addr()?;
+        let mut stream: BoxProxyStream = Box::new(first_stream);
 
         for (idx, proxy) in proxies.iter().enumerate() {
             let next_target = proxies
@@ -226,7 +236,46 @@ impl Socks5TcpClient {
                 .map_err(Error::from)?;
         }
 
-        Ok(Self { stream })
+        Ok(Self { stream, local_addr })
+    }
+
+    /// Connects to `addr` via an outbound proxy chain, using shadowsocks connect options
+    /// for the first outbound hop.
+    pub async fn connect_chain_with_opts<A>(
+        context: &Context,
+        addr: A,
+        proxies: &[OutboundProxy],
+        opts: &ConnectOpts,
+    ) -> Result<Self, Error>
+    where
+        A: Into<Address>,
+    {
+        let Some(first_proxy) = proxies.first() else {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty outbound proxy chain").into());
+        };
+
+        let target_addr = addr.into();
+        let first_proxy_addr = first_proxy.address();
+        let first_stream = OutboundTcpStream::connect_remote_with_opts(context, &first_proxy_addr, opts).await?;
+        let local_addr = first_stream.local_addr()?;
+        let mut stream: BoxProxyStream = Box::new(first_stream);
+
+        for (idx, proxy) in proxies.iter().enumerate() {
+            let next_target = proxies
+                .get(idx + 1)
+                .map(OutboundProxy::address)
+                .unwrap_or_else(|| target_addr.clone());
+
+            if proxy.protocol == OutboundProxyProtocol::Https {
+                stream = tls_wrap(stream, &proxy.host).await.map_err(Error::from)?;
+            }
+
+            connect_via_proxy(&mut stream, proxy, &next_target)
+                .await
+                .map_err(Error::from)?;
+        }
+
+        Ok(Self { stream, local_addr })
     }
 
     /// UDP Associate `addr` via SOCKS5 `proxy`
@@ -238,10 +287,21 @@ impl Socks5TcpClient {
         P: ToSocketAddrs,
     {
         let mut s = TcpStream::connect(proxy).await?;
+        let local_addr = s.local_addr()?;
         socks5_handshake(&mut s, None).await?;
         let hp = socks5_command(&mut s, Command::UdpAssociate, addr).await?;
 
-        Ok((Self { stream: Box::new(s) }, hp.address))
+        Ok((Self { stream: Box::new(s), local_addr }, hp.address))
+    }
+
+    /// Returns the local socket address of the underlying connection
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        Ok(self.local_addr)
+    }
+
+    /// No-op: TCP_NODELAY cannot be set on a type-erased proxy stream after connect
+    pub fn set_nodelay(&self, _nodelay: bool) -> io::Result<()> {
+        Ok(())
     }
 }
 

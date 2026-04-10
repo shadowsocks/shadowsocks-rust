@@ -10,7 +10,6 @@ pub use self::{
 pub mod config;
 mod http_client;
 mod http_service;
-mod http_stream;
 pub mod server;
 mod tokio_rt;
 mod utils;

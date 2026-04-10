@@ -253,10 +253,15 @@ impl TcpServerClient {
                 )
                 .await
                 .map(RemoteStream::Direct),
-                proxies => Socks5TcpClient::connect_chain(target_addr.clone(), proxies)
-                    .await
-                    .map(RemoteStream::Proxied)
-                    .map_err(io::Error::other),
+                proxies => Socks5TcpClient::connect_chain_with_opts(
+                    self.context.context_ref(),
+                    target_addr.clone(),
+                    proxies,
+                    self.context.connect_opts_ref(),
+                )
+                .await
+                .map(RemoteStream::Proxied)
+                .map_err(io::Error::other),
             }
         })
         .await
