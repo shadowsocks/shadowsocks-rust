@@ -61,7 +61,7 @@ local-dns-relay = ["local-dns"]
 local-flow-stat = ["local"]
 # Enable HTTP protocol for sslocal
 local-http = ["local", "hyper", "http", "http-body-util"]
-local-http-native-tls = ["local-http"]
+local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
 local-http-native-tls-vendored = [
     "local-http-native-tls",
     "tokio-native-tls/vendored",
@@ -146,8 +146,8 @@ tokio = { version = "1.38", features = [
     "sync",
     "time",
 ] }
-tokio-native-tls = { version = "0.3" }
-native-tls = { version = "0.2.8", features = ["alpn"] }
+tokio-native-tls = { version = "0.3", optional = true }
+native-tls = { version = "0.2.8", optional = true, features = ["alpn"] }
 webpki-roots = { version = "1.0", optional = true }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
     "logging",
