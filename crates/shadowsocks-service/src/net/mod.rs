@@ -12,6 +12,7 @@ pub mod mon_socket;
 pub mod mon_stream;
 pub mod packet_window;
 pub mod socks5_client;
+pub mod outbound_proxy;
 pub mod utils;
 
 /// Packet size for all UDP associations' send queue

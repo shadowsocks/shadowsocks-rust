@@ -163,19 +163,21 @@ impl AutoProxyClientStream {
                 Ok(Self::Proxied(stream))
             }
             proxies => {
-                use super::outbound_proxy::connect_outbound_chain;
+                use super::outbound_proxy::connect_outbound_proxy_chain;
 
                 let addr = addr.into();
                 let ss_addr = server.server_config().tcp_external_addr().into();
-                let proxy_stream = match connect_outbound_chain(context.clone(), ss_addr, proxies, connect_opts).await {
-                    Ok(s) => s,
-                    Err(err) => {
-                        server.tcp_score().report_failure().await;
-                        return Err(err);
-                    }
-                };
+                let proxy_stream =
+                    match connect_outbound_proxy_chain(context.clone(), ss_addr, proxies, connect_opts).await {
+                        Ok(s) => s,
+                        Err(err) => {
+                            server.tcp_score().report_failure().await;
+                            return Err(err);
+                        }
+                    };
                 let mon_stream = MonProxyStream::from_stream(proxy_stream, flow_stat);
-                let stream = ProxyClientStream::from_stream(context.context(), mon_stream, server.server_config(), addr);
+                let stream =
+                    ProxyClientStream::from_stream(context.context(), mon_stream, server.server_config(), addr);
                 Ok(Self::ProxiedViaChain(stream))
             }
         }

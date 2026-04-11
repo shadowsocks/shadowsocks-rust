@@ -22,7 +22,8 @@ use crate::{
     local::context::ServiceContext,
     net::{
         http_stream::ProxyHttpStream,
-        socks5_client::{http_connect, socks5_command, socks5_handshake},
+        outbound_proxy::connect_via_proxy,
+        socks5_client::{socks5_command, socks5_handshake},
     },
 };
 
@@ -82,14 +83,17 @@ impl AsyncWrite for OutboundProxyStream {
 /// which uses the shadowsocks infrastructure (DNS, connect opts, etc.).
 /// HTTPS proxies use the shared `ProxyHttpStream::connect_https()` helper,
 /// the same transport used by the local HTTP client for TLS connections.
-pub async fn connect_outbound_chain(
+pub async fn connect_outbound_proxy_chain(
     context: Arc<ServiceContext>,
     target: Address,
     proxies: &[OutboundProxy],
     connect_opts: &ConnectOpts,
 ) -> io::Result<OutboundProxyStream> {
     let Some(first_proxy) = proxies.first() else {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty outbound proxy chain"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "empty outbound proxy chain",
+        ));
     };
 
     let first_addr = first_proxy.address();
@@ -102,8 +106,19 @@ pub async fn connect_outbound_chain(
     // For the first proxy: if it's HTTPS, TLS-wrap with the shared helper that is
     // also used by the local HTTP client. Otherwise box directly.
     let mut stream: OutboundProxyStream = if first_proxy.protocol == OutboundProxyProtocol::Https {
-        let tls = ProxyHttpStream::connect_https(initial, &first_proxy.host).await?;
-        OutboundProxyStream::new(tls, local_addr)
+        #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
+        {
+            let tls = ProxyHttpStream::connect_https(initial, &first_proxy.host).await?;
+            OutboundProxyStream::new(tls, local_addr)
+        }
+
+        #[cfg(not(any(feature = "local-http-native-tls", feature = "local-http-rustls")))]
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "HTTPS outbound proxy requires either local-http-native-tls or local-http-rustls feature",
+            ));
+        }
     } else {
         OutboundProxyStream::new(initial, local_addr)
     };
@@ -111,9 +126,20 @@ pub async fn connect_outbound_chain(
     // Process each proxy hop in order.
     for (idx, proxy) in proxies.iter().enumerate() {
         if idx > 0 && proxy.protocol == OutboundProxyProtocol::Https {
-            let local_addr = stream.local_addr()?;
-            let tls = ProxyHttpStream::connect_https(stream, &proxy.host).await?;
-            stream = OutboundProxyStream::new(tls, local_addr);
+            #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
+            {
+                let local_addr = stream.local_addr()?;
+                let tls = ProxyHttpStream::connect_https(stream, &proxy.host).await?;
+                stream = OutboundProxyStream::new(tls, local_addr);
+            }
+
+            #[cfg(not(any(feature = "local-http-native-tls", feature = "local-http-rustls")))]
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "HTTPS outbound proxy requires either local-http-native-tls or local-http-rustls feature",
+                ));
+            }
         }
 
         let next_target = proxies
@@ -121,22 +147,7 @@ pub async fn connect_outbound_chain(
             .map(OutboundProxy::address)
             .unwrap_or_else(|| target.clone());
 
-        match proxy.protocol {
-            OutboundProxyProtocol::Socks5 => {
-                socks5_handshake(&mut stream, proxy.auth.as_ref())
-                    .await
-                    .map_err(io::Error::other)?;
-                socks5_command(&mut stream, Command::TcpConnect, next_target)
-                    .await
-                    .map_err(io::Error::other)?;
-            }
-            OutboundProxyProtocol::Http => {
-                http_connect(&mut stream, proxy, &next_target).await?;
-            }
-            OutboundProxyProtocol::Https => {
-                http_connect(&mut stream, proxy, &next_target).await?;
-            }
-        }
+        connect_via_proxy(&mut stream, proxy, &next_target).await?;
     }
 
     Ok(stream)

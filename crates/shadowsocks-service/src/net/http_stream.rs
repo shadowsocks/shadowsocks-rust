@@ -13,7 +13,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 #[pin_project(project = ProxyHttpStreamProj)]
 pub enum ProxyHttpStream<S> {
     Http(#[pin] S),
-    #[cfg(not(feature = "local-http-rustls"))]
+    #[cfg(all(feature = "local-http-native-tls", not(feature = "local-http-rustls")))]
     Https(#[pin] tokio_native_tls::TlsStream<S>, bool),
     #[cfg(feature = "local-http-rustls")]
     Https(#[pin] tokio_rustls::client::TlsStream<S>, bool),
@@ -27,7 +27,7 @@ where
         Self::Http(stream)
     }
 
-    #[cfg(not(feature = "local-http-rustls"))]
+    #[cfg(all(feature = "local-http-native-tls", not(feature = "local-http-rustls")))]
     pub async fn connect_https(stream: S, domain: &str) -> io::Result<Self> {
         use native_tls::TlsConnector;
 
@@ -119,6 +119,7 @@ where
     pub fn negotiated_http2(&self) -> bool {
         match *self {
             Self::Http(..) => false,
+            #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
             Self::Https(_, n) => n,
         }
     }
@@ -128,6 +129,7 @@ macro_rules! forward_call {
     ($self:expr, $method:ident $(, $param:expr)*) => {
         match $self.as_mut().project() {
             ProxyHttpStreamProj::Http(stream) => stream.$method($($param),*),
+            #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
             ProxyHttpStreamProj::Https(stream, ..) => stream.$method($($param),*),
         }
     };

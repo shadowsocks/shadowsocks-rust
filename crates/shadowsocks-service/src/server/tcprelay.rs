@@ -23,7 +23,7 @@ use tokio::{
     time,
 };
 
-use crate::net::{MonProxyStream, Socks5TcpClient, utils::ignore_until_end};
+use crate::net::{outbound_proxy::connect_chain_with_opts, MonProxyStream, Socks5TcpClient, utils::ignore_until_end};
 
 use super::context::ServiceContext;
 
@@ -253,7 +253,7 @@ impl TcpServerClient {
                 )
                 .await
                 .map(RemoteStream::Direct),
-                proxies => Socks5TcpClient::connect_chain_with_opts(
+                proxies => connect_chain_with_opts(
                     self.context.context_ref(),
                     target_addr.clone(),
                     proxies,

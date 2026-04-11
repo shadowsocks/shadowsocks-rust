@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::future;
-use log::trace;
+use log::{info, trace};
 use shadowsocks::net::{AcceptOpts, ConnectOpts, UdpSocketOpts};
 
 use crate::{
@@ -110,6 +110,7 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     for inst in config.server {
         let svr_cfg = inst.config;
+        let svr_enable_udp = svr_cfg.mode().enable_udp();
         let mut server_builder = ServerBuilder::new(svr_cfg);
 
         if let Some(ref r) = resolver {
@@ -141,10 +142,17 @@ pub async fn run(config: Config) -> io::Result<()> {
             connect_opts.udp.allow_fragmentation = udp_allow_fragmentation;
         }
 
-        if !inst.outbound_proxy.is_empty() {
-            server_builder.set_outbound_proxies(inst.outbound_proxy.clone());
-        } else if !config.outbound_proxy.is_empty() {
-            server_builder.set_outbound_proxies(config.outbound_proxy.clone());
+        let has_outbound_proxies = !inst.outbound_proxy.is_empty() || !config.outbound_proxy.is_empty();
+        if has_outbound_proxies {
+            server_builder.set_outbound_proxies(if !inst.outbound_proxy.is_empty() {
+                inst.outbound_proxy.clone()
+            } else {
+                config.outbound_proxy.clone()
+            });
+        }
+
+        if has_outbound_proxies && svr_enable_udp {
+            info!("outbound proxy chain only supports TCP; UDP traffic may not be proxied and may behave unexpectedly");
         }
 
         server_builder.set_connect_opts(connect_opts);
