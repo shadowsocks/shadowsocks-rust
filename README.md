@@ -372,6 +372,24 @@ Start local client with configuration file
 sslocal -c /path/to/shadowsocks.json
 ```
 
+`sslocal` also supports routing its outbound TCP connection to the Shadowsocks server through a proxy or proxy chain with the `outbound_proxy` config key. Supported hop types are `socks5://`, `http://`, and `https://`, with optional `user:pass@` credentials. This option is currently available through the configuration file for `sslocal`; `ssserver` supports both the config file and repeated `--outbound-proxy` command line flags.
+
+```jsonc
+{
+    "server": "server.example.com",
+    "server_port": 8388,
+    "password": "hello-kitty",
+    "method": "aes-256-gcm",
+    "local_address": "127.0.0.1",
+    "local_port": 1080,
+    "outbound_proxy": [
+        "socks5://user:pass@127.0.0.1:1080",
+        "https://proxy.example.com:443",
+        "http://127.0.0.1:1081"
+    ]
+}
+```
+
 ### Socks5 Local client
 
 ```bash
@@ -488,7 +506,16 @@ ssserver -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
 ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "v2ray-plugin" --plugin-opts "server;tls;host=github.com"
+
+# Route outbound TCP traffic through a proxy chain
+ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" \
+  --outbound-proxy socks5://user:pass@127.0.0.1:1080 \
+  --outbound-proxy https://proxy.example.com:443 \
+  --outbound-proxy http://127.0.0.1:1081
 ```
+
+Repeat `--outbound-proxy` in hop order. A single occurrence keeps the previous single-hop behavior.
+Supported hop types are `socks5://`, `http://`, and `https://`. The same `outbound_proxy` setting can also be used in configuration files for both `sslocal` and `ssserver`, but UDP traffic is not proxied.
 
 ### Server Manager
 
@@ -781,6 +808,20 @@ Example configuration:
             "outbound_bind_addr": "11.22.33.44",
             // Outbound UDP socket allows IP fragmentation (default false)
             "outbound_udp_allow_fragmentation": false,
+            // Route outbound TCP connections through a proxy or proxy chain
+            // (TCP only; UDP is not proxied)
+            // Works for both sslocal and ssserver
+            // sslocal: configure in JSON; ssserver: JSON or repeated --outbound-proxy
+            // Single hop:
+            "outbound_proxy": "socks5://127.0.0.1:1080",
+            // Single hop with username/password:
+            // "outbound_proxy": "socks5://user:pass@127.0.0.1:1080",
+            // Multi-hop:
+            // "outbound_proxy": [
+            //     "socks5://user:pass@127.0.0.1:1080",
+            //     "https://proxy.example.com:443",
+            //     "http://127.0.0.1:1081"
+            // ],
         }
     ],
 
@@ -845,6 +886,20 @@ Example configuration:
     "outbound_bind_addr": "11.22.33.44",
     // Outbound UDP socket allows IP fragmentation (default false)
     "outbound_udp_allow_fragmentation": false,
+    // Route outbound TCP connections through a proxy or proxy chain
+    // (TCP only; UDP is not proxied)
+    // Works for both sslocal and ssserver
+    // sslocal: configure in JSON; ssserver: JSON or repeated --outbound-proxy
+    // Single hop:
+    "outbound_proxy": "socks5://127.0.0.1:1080",
+    // Single hop with username/password:
+    // "outbound_proxy": "socks5://user:pass@127.0.0.1:1080",
+    // Multi-hop:
+    // "outbound_proxy": [
+    //     "socks5://user:pass@127.0.0.1:1080",
+    //     "https://proxy.example.com:443",
+    //     "http://127.0.0.1:1081"
+    // ],
 
     // Balancer customization
     "balancer": {

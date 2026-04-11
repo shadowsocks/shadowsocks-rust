@@ -180,6 +180,10 @@ impl Server {
 
         context.set_security_config(&config.security);
 
+        if !config.outbound_proxy.is_empty() {
+            context.set_outbound_proxies(config.outbound_proxy);
+        }
+
         assert!(!config.local.is_empty(), "no valid local server configuration");
 
         // Create a service balancer for choosing between multiple servers

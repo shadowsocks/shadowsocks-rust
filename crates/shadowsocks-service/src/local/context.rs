@@ -18,7 +18,7 @@ use tokio::sync::Mutex;
 #[cfg(feature = "local-fake-dns")]
 use tokio::sync::RwLock;
 
-use crate::{acl::AccessControl, config::SecurityConfig, net::FlowStat};
+use crate::{acl::AccessControl, config::{OutboundProxy, SecurityConfig}, net::FlowStat};
 
 #[cfg(feature = "local-fake-dns")]
 use super::fake_dns::manager::FakeDnsManager;
@@ -35,6 +35,9 @@ pub struct ServiceContext {
 
     // Flow statistic report
     flow_stat: Arc<FlowStat>,
+
+    // Outbound proxy chain (sslocal → ss-server connection goes through these proxies)
+    outbound_proxies: Vec<OutboundProxy>,
 
     // For DNS relay's ACL domain name reverse lookup -- whether the IP shall be forwarded
     #[cfg(feature = "local-dns")]
@@ -59,6 +62,7 @@ impl ServiceContext {
             accept_opts: AcceptOpts::default(),
             acl: None,
             flow_stat: Arc::new(FlowStat::new()),
+            outbound_proxies: Vec::new(),
             #[cfg(feature = "local-dns")]
             reverse_lookup_cache: Arc::new(Mutex::new(LruCache::with_expiry_duration_and_capacity(
                 Duration::from_secs(3 * 24 * 60 * 60),
@@ -107,6 +111,16 @@ impl ServiceContext {
     /// Get Access Control List reference
     pub fn acl(&self) -> Option<&AccessControl> {
         self.acl.as_deref()
+    }
+
+    /// Set outbound proxy chain (connection to SS server routes through these proxies)
+    pub fn set_outbound_proxies(&mut self, proxies: Vec<OutboundProxy>) {
+        self.outbound_proxies = proxies;
+    }
+
+    /// Get outbound proxy chain
+    pub fn outbound_proxies(&self) -> &[OutboundProxy] {
+        &self.outbound_proxies
     }
 
     /// Get cloned flow statistic

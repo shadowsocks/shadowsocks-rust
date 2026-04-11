@@ -3331,6 +3331,7 @@ dependencies = [
  "tokio-rustls",
  "trait-variant",
  "tun",
+ "url",
  "webpki-roots 1.0.6",
  "windows-sys 0.61.2",
  "zstd",

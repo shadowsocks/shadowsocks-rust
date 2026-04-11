@@ -12,7 +12,7 @@ use tokio::{
 
 use shadowsocks_service::{
     acl::AccessControl,
-    config::{Config, ConfigType, ManagerConfig, ServerInstanceConfig, read_variable_field_value},
+    config::{Config, ConfigType, ManagerConfig, OutboundProxy, ServerInstanceConfig, read_variable_field_value},
     run_server,
     shadowsocks::{
         config::{ManagerAddr, Mode, ServerAddr, ServerConfig},
@@ -58,6 +58,13 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                 .num_args(1)
                 .action(ArgAction::Set)
                 .help("Set SO_BINDTODEVICE / IP_BOUND_IF / IP_UNICAST_IF option for outbound socket"),
+        )
+        .arg(
+            Arg::new("OUTBOUND_PROXY")
+                .long("outbound-proxy")
+                .num_args(1)
+                .action(ArgAction::Append)
+                .help("Outbound proxy hop for ssserver TCP relay; supports socks5://, http:// and https:// with optional user:pass@, repeat in order for chaining"),
         )
         .arg(
             Arg::new("SERVER_ADDR")
@@ -417,6 +424,16 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
 
         if let Some(iface) = matches.get_one::<String>("OUTBOUND_BIND_INTERFACE").cloned() {
             config.outbound_bind_interface = Some(iface);
+        }
+
+        if let Some(proxy_urls) = matches.get_many::<String>("OUTBOUND_PROXY") {
+            let mut proxies = Vec::new();
+            for proxy_url in proxy_urls {
+                let proxy = OutboundProxy::from_url(proxy_url)
+                    .map_err(|e| ShadowsocksError::LoadConfigFailure(format!("invalid --outbound-proxy: {e}")))?;
+                proxies.push(proxy);
+            }
+            config.outbound_proxy = proxies;
         }
 
         if let Some(addr) = matches.get_one::<ManagerAddr>("MANAGER_ADDR").cloned() {

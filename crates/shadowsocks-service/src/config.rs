@@ -66,7 +66,6 @@ use ipnet::IpNet;
 use ipnet::{Ipv4Net, Ipv6Net};
 use log::warn;
 use serde::{Deserialize, Serialize};
-#[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
@@ -76,10 +75,182 @@ use shadowsocks::{
     crypto::CipherKind,
     plugin::PluginConfig,
 };
+use url::Url;
 
 use crate::acl::AccessControl;
 #[cfg(feature = "local-dns")]
 use crate::local::dns::NameServerAddr;
+
+/// Configuration for outbound SOCKS5 username/password authentication
+#[derive(Clone, Eq, PartialEq)]
+pub struct OutboundProxyAuth {
+    pub username: String,
+    pub password: String,
+}
+
+impl Debug for OutboundProxyAuth {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OutboundProxyAuth")
+            .field("username", &self.username)
+            .field("password", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OutboundProxyProtocol {
+    Socks5,
+    Http,
+    Https,
+}
+
+impl OutboundProxyProtocol {
+    fn from_scheme(scheme: &str) -> Result<Self, String> {
+        match scheme {
+            "socks5" => Ok(Self::Socks5),
+            "http" => Ok(Self::Http),
+            "https" => Ok(Self::Https),
+            _ => Err(format!(
+                "unsupported proxy scheme, only socks5://, http:// and https:// are supported: {scheme}://"
+            )),
+        }
+    }
+
+    fn as_scheme(self) -> &'static str {
+        match self {
+            Self::Socks5 => "socks5",
+            Self::Http => "http",
+            Self::Https => "https",
+        }
+    }
+}
+
+/// Configuration for an outbound proxy hop
+///
+/// `ssserver` will route its outbound TCP connections through this proxy.
+/// Config file format accepts either a single string like `"socks5://host:port"`
+/// or a chain like `["socks5://host:port", "http://host:port", "https://host:port"]`.
+#[derive(Clone, Eq, PartialEq)]
+pub struct OutboundProxy {
+    pub protocol: OutboundProxyProtocol,
+    pub host: String,
+    pub port: u16,
+    pub auth: Option<OutboundProxyAuth>,
+}
+
+impl Debug for OutboundProxy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OutboundProxy")
+            .field("protocol", &self.protocol)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("auth", &self.auth)
+            .finish()
+    }
+}
+
+impl OutboundProxy {
+    /// Parse from a URL string like `socks5://127.0.0.1:1080`,
+    /// `http://user:pass@127.0.0.1:3128` or `https://[::1]:443`
+    pub fn from_url(url: &str) -> Result<Self, String> {
+        let parsed = Url::parse(url).map_err(|e| format!("invalid proxy url {url}: {e}"))?;
+        let protocol = OutboundProxyProtocol::from_scheme(parsed.scheme())?;
+
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| format!("missing proxy host in {url}"))?
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_owned();
+        let port = parsed.port().ok_or_else(|| format!("missing proxy port in {url}"))?;
+
+        let auth = if parsed.username().is_empty() && parsed.password().is_none() {
+            None
+        } else {
+            let username = parsed.username().to_owned();
+            let password = parsed
+                .password()
+                .ok_or_else(|| format!("missing proxy password in {url}"))?
+                .to_owned();
+
+            if username.is_empty() {
+                return Err(format!("missing proxy username in {url}"));
+            }
+            if username.len() > u8::MAX as usize {
+                return Err(format!("proxy username is too long in {url}"));
+            }
+            if password.is_empty() {
+                return Err(format!("missing proxy password in {url}"));
+            }
+            if password.len() > u8::MAX as usize {
+                return Err(format!("proxy password is too long in {url}"));
+            }
+
+            Some(OutboundProxyAuth { username, password })
+        };
+
+        Ok(OutboundProxy {
+            protocol,
+            host,
+            port,
+            auth,
+        })
+    }
+
+    pub fn address(&self) -> Address {
+        match self.host.parse::<IpAddr>() {
+            Ok(ip) => Address::SocketAddress(SocketAddr::new(ip, self.port)),
+            Err(..) => Address::DomainNameAddress(self.host.clone(), self.port),
+        }
+    }
+
+    /// Serialize back to URL form, with brackets for IPv6 hosts
+    pub fn to_url(&self) -> String {
+        let host = if self.host.contains(':') {
+            format!("[{}]", self.host)
+        } else {
+            self.host.clone()
+        };
+
+        match self.auth {
+            Some(ref auth) => format!(
+                "{}://{}:{}@{}:{}",
+                self.protocol.as_scheme(),
+                auth.username,
+                auth.password,
+                host,
+                self.port
+            ),
+            None => format!("{}://{}:{}", self.protocol.as_scheme(), host, self.port),
+        }
+    }
+}
+
+/// Serde helper for single-hop and multi-hop outbound proxy configuration
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+enum SSOutboundProxyConfig {
+    Single(String),
+    Chain(Vec<String>),
+}
+
+impl SSOutboundProxyConfig {
+    fn into_proxies(self) -> Result<Vec<OutboundProxy>, String> {
+        match self {
+            Self::Single(s) => Ok(vec![OutboundProxy::from_url(&s)?]),
+            Self::Chain(v) => v.iter().map(|s| OutboundProxy::from_url(s)).collect(),
+        }
+    }
+
+    fn from_proxies(proxies: &[OutboundProxy]) -> Option<Self> {
+        match proxies.len() {
+            0 => None,
+            1 => Some(Self::Single(proxies[0].to_url())),
+            _ => Some(Self::Chain(proxies.iter().map(|p| p.to_url()).collect())),
+        }
+    }
+}
+
 #[cfg(feature = "local-http")]
 use crate::local::http::config::HttpAuthConfig;
 #[cfg(feature = "local")]
@@ -219,6 +390,9 @@ struct SSConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     outbound_udp_allow_fragmentation: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outbound_proxy: Option<SSOutboundProxyConfig>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     security: Option<SSSecurityConfig>,
@@ -418,6 +592,9 @@ struct SSServerExtConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     outbound_udp_allow_fragmentation: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outbound_proxy: Option<SSOutboundProxyConfig>,
 }
 
 #[cfg(feature = "local-online-config")]
@@ -1270,6 +1447,8 @@ pub struct ServerInstanceConfig {
     pub outbound_bind_addr: Option<IpAddr>,
     pub outbound_bind_interface: Option<String>,
     pub outbound_udp_allow_fragmentation: Option<bool>,
+    /// Outbound SOCKS5 proxy chain for this server instance (empty = no proxy)
+    pub outbound_proxy: Vec<OutboundProxy>,
 }
 
 impl ServerInstanceConfig {
@@ -1285,6 +1464,7 @@ impl ServerInstanceConfig {
             outbound_bind_addr: None,
             outbound_bind_interface: None,
             outbound_udp_allow_fragmentation: None,
+            outbound_proxy: Vec::new(),
         }
     }
 }
@@ -1376,6 +1556,8 @@ pub struct Config {
     /// Path to protect callback unix address, only for Android
     #[cfg(target_os = "android")]
     pub outbound_vpn_protect_path: Option<PathBuf>,
+    /// Outbound SOCKS5 proxy chain for ssserver (global, can be overridden per server; empty = no proxy)
+    pub outbound_proxy: Vec<OutboundProxy>,
 
     /// Set `SO_SNDBUF` for inbound sockets
     pub inbound_send_buffer_size: Option<u32>,
@@ -1521,6 +1703,7 @@ impl Config {
             outbound_udp_allow_fragmentation: false,
             #[cfg(target_os = "android")]
             outbound_vpn_protect_path: None,
+            outbound_proxy: Vec::new(),
 
             inbound_send_buffer_size: None,
             inbound_recv_buffer_size: None,
@@ -2237,6 +2420,12 @@ impl Config {
                     server_instance.outbound_udp_allow_fragmentation = Some(outbound_udp_allow_fragmentation);
                 }
 
+                if let Some(proxy_config) = svr.outbound_proxy {
+                    server_instance.outbound_proxy = proxy_config
+                        .into_proxies()
+                        .map_err(|e| Error::new(ErrorKind::Invalid, "invalid outbound_proxy", Some(e)))?;
+                }
+
                 nconfig.server.push(server_instance);
             }
         }
@@ -2404,6 +2593,12 @@ impl Config {
 
         if let Some(b) = config.outbound_udp_allow_fragmentation {
             nconfig.outbound_udp_allow_fragmentation = b;
+        }
+
+        if let Some(proxy_config) = config.outbound_proxy {
+            nconfig.outbound_proxy = proxy_config
+                .into_proxies()
+                .map_err(|e| Error::new(ErrorKind::Invalid, "invalid outbound_proxy", Some(e)))?;
         }
 
         // Security
@@ -2989,6 +3184,8 @@ impl fmt::Display for Config {
                 jconf.timeout = svr.timeout().map(|t| t.as_secs());
                 jconf.mode = Some(svr.mode().to_string());
 
+                jconf.outbound_proxy = SSOutboundProxyConfig::from_proxies(&inst.outbound_proxy);
+
                 if let Some(ref acl) = inst.acl {
                     jconf.acl = Some(acl.file_path().to_str().unwrap().to_owned());
                 }
@@ -3067,6 +3264,7 @@ impl fmt::Display for Config {
                         outbound_bind_addr: inst.outbound_bind_addr,
                         outbound_bind_interface: inst.outbound_bind_interface.clone(),
                         outbound_udp_allow_fragmentation: inst.outbound_udp_allow_fragmentation,
+                        outbound_proxy: SSOutboundProxyConfig::from_proxies(&inst.outbound_proxy),
                     });
                 }
 
@@ -3172,6 +3370,9 @@ impl fmt::Display for Config {
         jconf.outbound_bind_addr = self.outbound_bind_addr.map(|i| i.to_string());
         jconf.outbound_bind_interface.clone_from(&self.outbound_bind_interface);
         jconf.outbound_udp_allow_fragmentation = Some(self.outbound_udp_allow_fragmentation);
+        if jconf.outbound_proxy.is_none() {
+            jconf.outbound_proxy = SSOutboundProxyConfig::from_proxies(&self.outbound_proxy);
+        }
 
         // Security
         if self.security.replay_attack.policy != ReplayAttackPolicy::default() {
@@ -3230,4 +3431,28 @@ pub fn read_variable_field_value(value: &str) -> Cow<'_, str> {
     }
 
     value.into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OutboundProxy;
+
+    #[test]
+    fn outbound_proxy_url_without_auth() {
+        let proxy = OutboundProxy::from_url("socks5://127.0.0.1:1080").expect("proxy");
+        assert_eq!(proxy.host, "127.0.0.1");
+        assert_eq!(proxy.port, 1080);
+        assert!(proxy.auth.is_none());
+        assert_eq!(proxy.to_url(), "socks5://127.0.0.1:1080");
+    }
+
+    #[test]
+    fn outbound_proxy_url_with_auth() {
+        let proxy = OutboundProxy::from_url("socks5://user:pass@[::1]:1080").expect("proxy");
+        assert_eq!(proxy.host, "::1");
+        assert_eq!(proxy.port, 1080);
+        let auth = proxy.auth.expect("auth");
+        assert_eq!(auth.username, "user");
+        assert_eq!(auth.password, "pass");
+    }
 }

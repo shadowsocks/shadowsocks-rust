@@ -13,7 +13,12 @@ use shadowsocks::{
 };
 use tokio::time;
 
-use crate::{acl::AccessControl, config::SecurityConfig, net::FlowStat, utils::ServerHandle};
+use crate::{
+    acl::AccessControl,
+    config::{OutboundProxy, SecurityConfig},
+    net::FlowStat,
+    utils::ServerHandle,
+};
 
 use super::{context::ServiceContext, tcprelay::TcpServer, udprelay::UdpServer};
 
@@ -103,6 +108,11 @@ impl ServerBuilder {
     /// Set security config
     pub fn set_security_config(&mut self, security: &SecurityConfig) {
         self.context.set_security_config(security)
+    }
+
+    /// Set outbound SOCKS5 proxy chain
+    pub fn set_outbound_proxies(&mut self, proxies: Vec<OutboundProxy>) {
+        self.context.set_outbound_proxies(proxies);
     }
 
     /// Start the server

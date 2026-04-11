@@ -21,13 +21,14 @@ use crate::{
     net::MonProxyStream,
 };
 
-use super::auto_proxy_io::AutoProxyIo;
+use super::{auto_proxy_io::AutoProxyIo, outbound_proxy::OutboundProxyStream};
 
 /// Unified stream for bypassed and proxied connections
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = AutoProxyClientStreamProj)]
 pub enum AutoProxyClientStream {
     Proxied(#[pin] ProxyClientStream<MonProxyStream<TcpStream>>),
+    ProxiedViaChain(#[pin] ProxyClientStream<MonProxyStream<OutboundProxyStream>>),
     Bypassed(#[pin] TcpStream),
 }
 
@@ -142,27 +143,48 @@ impl AutoProxyClientStream {
         A: Into<Address>,
     {
         let flow_stat = context.flow_stat();
-        let stream = match ProxyClientStream::connect_with_opts_map(
-            context.context(),
-            server.server_config(),
-            addr,
-            connect_opts,
-            |stream| MonProxyStream::from_stream(stream, flow_stat),
-        )
-        .await
-        {
-            Ok(s) => s,
-            Err(err) => {
-                server.tcp_score().report_failure().await;
-                return Err(err);
+        match context.outbound_proxies() {
+            [] => {
+                let stream = match ProxyClientStream::connect_with_opts_map(
+                    context.context(),
+                    server.server_config(),
+                    addr,
+                    connect_opts,
+                    |stream| MonProxyStream::from_stream(stream, flow_stat),
+                )
+                .await
+                {
+                    Ok(s) => s,
+                    Err(err) => {
+                        server.tcp_score().report_failure().await;
+                        return Err(err);
+                    }
+                };
+                Ok(Self::Proxied(stream))
             }
-        };
-        Ok(Self::Proxied(stream))
+            proxies => {
+                use super::outbound_proxy::connect_outbound_chain;
+
+                let addr = addr.into();
+                let ss_addr = server.server_config().tcp_external_addr().into();
+                let proxy_stream = match connect_outbound_chain(context.clone(), ss_addr, proxies, connect_opts).await {
+                    Ok(s) => s,
+                    Err(err) => {
+                        server.tcp_score().report_failure().await;
+                        return Err(err);
+                    }
+                };
+                let mon_stream = MonProxyStream::from_stream(proxy_stream, flow_stat);
+                let stream = ProxyClientStream::from_stream(context.context(), mon_stream, server.server_config(), addr);
+                Ok(Self::ProxiedViaChain(stream))
+            }
+        }
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         match *self {
             Self::Proxied(ref s) => s.get_ref().get_ref().local_addr(),
+            Self::ProxiedViaChain(ref s) => s.get_ref().get_ref().local_addr(),
             Self::Bypassed(ref s) => s.local_addr(),
         }
     }
@@ -170,6 +192,7 @@ impl AutoProxyClientStream {
     pub fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
         match *self {
             Self::Proxied(ref s) => s.get_ref().get_ref().set_nodelay(nodelay),
+            Self::ProxiedViaChain(..) => Ok(()),
             Self::Bypassed(ref s) => s.set_nodelay(nodelay),
         }
     }
@@ -177,7 +200,7 @@ impl AutoProxyClientStream {
 
 impl AutoProxyIo for AutoProxyClientStream {
     fn is_proxied(&self) -> bool {
-        matches!(*self, Self::Proxied(..))
+        matches!(*self, Self::Proxied(..) | Self::ProxiedViaChain(..))
     }
 }
 
@@ -185,6 +208,7 @@ impl AsyncRead for AutoProxyClientStream {
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_read(cx, buf),
+            AutoProxyClientStreamProj::ProxiedViaChain(s) => s.poll_read(cx, buf),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_read(cx, buf),
         }
     }
@@ -194,6 +218,7 @@ impl AsyncWrite for AutoProxyClientStream {
     fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_write(cx, buf),
+            AutoProxyClientStreamProj::ProxiedViaChain(s) => s.poll_write(cx, buf),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_write(cx, buf),
         }
     }
@@ -201,6 +226,7 @@ impl AsyncWrite for AutoProxyClientStream {
     fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_flush(cx),
+            AutoProxyClientStreamProj::ProxiedViaChain(s) => s.poll_flush(cx),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_flush(cx),
         }
     }
@@ -208,6 +234,7 @@ impl AsyncWrite for AutoProxyClientStream {
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_shutdown(cx),
+            AutoProxyClientStreamProj::ProxiedViaChain(s) => s.poll_shutdown(cx),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_shutdown(cx),
         }
     }
@@ -219,6 +246,7 @@ impl AsyncWrite for AutoProxyClientStream {
     ) -> Poll<io::Result<usize>> {
         match self.project() {
             AutoProxyClientStreamProj::Proxied(s) => s.poll_write_vectored(cx, bufs),
+            AutoProxyClientStreamProj::ProxiedViaChain(s) => s.poll_write_vectored(cx, bufs),
             AutoProxyClientStreamProj::Bypassed(s) => s.poll_write_vectored(cx, bufs),
         }
     }

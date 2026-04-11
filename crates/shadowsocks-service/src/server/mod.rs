@@ -141,6 +141,12 @@ pub async fn run(config: Config) -> io::Result<()> {
             connect_opts.udp.allow_fragmentation = udp_allow_fragmentation;
         }
 
+        if !inst.outbound_proxy.is_empty() {
+            server_builder.set_outbound_proxies(inst.outbound_proxy.clone());
+        } else if !config.outbound_proxy.is_empty() {
+            server_builder.set_outbound_proxies(config.outbound_proxy.clone());
+        }
+
         server_builder.set_connect_opts(connect_opts);
         server_builder.set_accept_opts(accept_opts);
 

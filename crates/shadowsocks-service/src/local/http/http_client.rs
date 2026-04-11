@@ -26,10 +26,12 @@ use pin_project::pin_project;
 use shadowsocks::relay::Address;
 use tokio::sync::Mutex;
 
-use crate::local::{context::ServiceContext, loadbalancing::PingBalancer, net::AutoProxyClientStream};
+use crate::{
+    local::{context::ServiceContext, loadbalancing::PingBalancer, net::AutoProxyClientStream},
+    net::http_stream::ProxyHttpStream,
+};
 
 use super::{
-    http_stream::ProxyHttpStream,
     tokio_rt::{TokioExecutor, TokioIo},
     utils::{check_keep_alive, connect_host, host_addr},
 };
