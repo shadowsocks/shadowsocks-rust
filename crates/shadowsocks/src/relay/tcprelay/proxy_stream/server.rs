@@ -100,6 +100,12 @@ impl<S> ProxyServerStream<S> {
     pub fn into_inner(self) -> S {
         self.stream.into_inner()
     }
+
+    /// Get authenticated user key after handshake (AEAD2022 multi-user mode).
+    /// Returns `None` in single-user mode or before the handshake completes.
+    pub fn user_key(&self) -> Option<&[u8]> {
+        self.stream.user_key()
+    }
 }
 
 impl<S> ProxyServerStream<S>
