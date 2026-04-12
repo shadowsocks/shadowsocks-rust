@@ -110,6 +110,21 @@ impl Socks5TcpClient {
         })
     }
 
+    /// Negotiate SOCKS5 handshake and connect to `addr` on an existing stream (for proxy chains)
+    pub async fn conduct_handshake_and_connect<S, A>(
+        stream: &mut S,
+        addr: A,
+        auth: Option<(&[u8], &[u8])>,
+    ) -> Result<(), Error>
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+        A: Into<Address>,
+    {
+        socks5_handshake(stream, auth).await?;
+        socks5_command(stream, Command::TcpConnect, addr).await?;
+        Ok(())
+    }
+
     pub(crate) fn from_stream(stream: BoxProxyStream, local_addr: SocketAddr) -> Self {
         Self { stream, local_addr }
     }

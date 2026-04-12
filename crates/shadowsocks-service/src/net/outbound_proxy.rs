@@ -4,29 +4,16 @@ use std::io;
 
 use crate::config::{OutboundProxy, OutboundProxyProtocol};
 use crate::net::{
+    http_connect::HttpConnectClient,
     http_stream::ProxyHttpStream,
-    socks5_client::{BoxProxyStream, Socks5TcpClient, socks5_command, socks5_handshake},
+    socks5_client::{BoxProxyStream, Socks5TcpClient},
 };
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use shadowsocks::{
     context::Context,
     net::{ConnectOpts, TcpStream as OutboundTcpStream},
-    relay::socks5::{Address, Command},
+    relay::socks5::Address,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-
-pub(crate) fn address_authority(addr: &Address) -> String {
-    match addr {
-        Address::SocketAddress(sa) => {
-            if sa.is_ipv6() {
-                format!("[{}]:{}", sa.ip(), sa.port())
-            } else {
-                sa.to_string()
-            }
-        }
-        Address::DomainNameAddress(host, port) => format!("{host}:{port}"),
-    }
-}
+use tokio::io::{AsyncRead, AsyncWrite};
 
 #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
 async fn tls_wrap(stream: BoxProxyStream, host: &str) -> io::Result<BoxProxyStream> {
@@ -42,60 +29,6 @@ async fn tls_wrap(_stream: BoxProxyStream, _host: &str) -> io::Result<BoxProxySt
     ))
 }
 
-pub(crate) async fn http_connect<S>(stream: &mut S, proxy: &OutboundProxy, target: &Address) -> io::Result<()>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    let authority = address_authority(target);
-    let mut request = format!("CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\nProxy-Connection: Keep-Alive\r\n");
-
-    if let Some(ref auth) = proxy.auth {
-        let encoded = BASE64_STANDARD.encode(format!("{}:{}", auth.username, auth.password));
-        request.push_str(&format!("Proxy-Authorization: Basic {encoded}\r\n"));
-    }
-
-    request.push_str("\r\n");
-    stream.write_all(request.as_bytes()).await?;
-
-    let mut response = Vec::with_capacity(1024);
-    let mut buf = [0u8; 1024];
-
-    let header_end = loop {
-        if response.len() > 16 * 1024 {
-            return Err(io::Error::other("HTTP CONNECT response header is too large"));
-        }
-
-        let n = stream.read(&mut buf).await?;
-        if n == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "unexpected EOF while reading HTTP CONNECT response",
-            ));
-        }
-
-        response.extend_from_slice(&buf[..n]);
-        if let Some(pos) = response.windows(4).position(|w| w == b"\r\n\r\n") {
-            break pos + 4;
-        }
-    };
-
-    let header = String::from_utf8_lossy(&response[..header_end]);
-    let status_line = header.lines().next().unwrap_or_default();
-    let status_code = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|code| code.parse::<u16>().ok())
-        .ok_or_else(|| io::Error::other(format!("invalid HTTP CONNECT response: {status_line}")))?;
-
-    if status_code != 200 {
-        return Err(io::Error::other(format!(
-            "HTTP CONNECT proxy rejected tunnel with status {status_code}: {status_line}"
-        )));
-    }
-
-    Ok(())
-}
-
 pub(crate) async fn connect_via_proxy<S>(stream: &mut S, proxy: &OutboundProxy, target: &Address) -> io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -106,13 +39,17 @@ where
                 .auth
                 .as_ref()
                 .map(|auth| (auth.username.as_bytes(), auth.password.as_bytes()));
-            socks5_handshake(stream, auth).await.map_err(io::Error::other)?;
-            socks5_command(stream, Command::TcpConnect, target.clone())
+            Socks5TcpClient::conduct_handshake_and_connect(stream, target.clone(), auth)
                 .await
-                .map_err(io::Error::other)?;
-            Ok(())
+                .map_err(io::Error::other)
         }
-        OutboundProxyProtocol::Http | OutboundProxyProtocol::Https => http_connect(stream, proxy, target).await,
+        OutboundProxyProtocol::Http | OutboundProxyProtocol::Https => {
+            let proxy_auth = proxy
+                .auth
+                .as_ref()
+                .map(|auth| (auth.username.as_str(), auth.password.as_str()));
+            HttpConnectClient::conduct_connect(stream, target, proxy_auth).await
+        }
     }
 }
 
