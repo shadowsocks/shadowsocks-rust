@@ -450,6 +450,14 @@ impl<S> CryptoStream<S> {
         self.dec.nonce()
     }
 
+    /// Get authenticated user key (AEAD2022).
+    /// Returns the key of the user that was authenticated during the handshake,
+    /// or `None` for single-user mode or non-AEAD2022 ciphers.
+    #[inline]
+    pub fn user_key(&self) -> Option<&[u8]> {
+        self.dec.user_key()
+    }
+
     /// Get sent IV (Stream) or Salt (AEAD, AEAD2022)
     #[inline]
     pub fn sent_nonce(&self) -> &[u8] {
