@@ -1344,10 +1344,9 @@ impl LocalConfig {
             }
             #[cfg(feature = "local-tunnel")]
             ProtocolType::Tunnel => {
-                if self.forward_addr.is_none() {
-                    let err = Error::new(ErrorKind::MissingField, "missing `forward_addr` in configuration", None);
-                    return Err(err);
-                }
+                // forward_addr is optional:
+                // - Some: static tunnel (all connections forwarded to fixed address)
+                // - None: dynamic tunnel (target address read from each client stream)
             }
 
             #[cfg(feature = "local-http")]
