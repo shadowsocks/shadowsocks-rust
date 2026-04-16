@@ -3163,7 +3163,7 @@ impl fmt::Display for Config {
                 jconf.password = if svr.method().is_none() {
                     None
                 } else {
-                    Some(svr.password().to_string())
+                    Some(svr.export_password())
                 };
                 jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
                 jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opts.clone());
@@ -3209,7 +3209,7 @@ impl fmt::Display for Config {
                         password: if svr.method().is_none() {
                             None
                         } else {
-                            Some(svr.password().to_string())
+                            Some(svr.export_password())
                         },
                         method: svr.method().to_string(),
                         users: svr.user_manager().map(|m| {
