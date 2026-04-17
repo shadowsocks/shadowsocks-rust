@@ -134,7 +134,7 @@ async fn handle_tcp_client(
             owned_addr = Address::read_from(&mut stream)
                 .await
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("read target address: {}", e)))?;
-            trace!("dynamic tunnel {} -> {} read target address", peer_addr, owned_addr);
+            trace!("dynamic tunnel {} -> {}", peer_addr, owned_addr);
             &owned_addr
         }
     };

@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use bytes::BytesMut;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use shadowsocks::{
     ServerAddr,
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
@@ -270,6 +270,8 @@ impl TunnelUdpServer {
 
                     let header_len = cursor.position() as usize;
                     let payload = &buffer[header_len..n];
+
+                    trace!("dynamic tunnel {} -> {}", peer_addr, target_addr);
 
                     if let Err(err) = manager.send_to(peer_addr, target_addr.clone(), payload).await {
                         debug!(
