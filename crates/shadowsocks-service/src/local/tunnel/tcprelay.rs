@@ -131,9 +131,13 @@ async fn handle_tcp_client(
     let target_addr: &Address = match forward_addr {
         Some(ref a) => a,
         None => {
-            owned_addr = Address::read_from(&mut stream)
-                .await
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("read target address: {}", e)))?;
+            owned_addr = match Address::read_from(&mut stream).await {
+                Ok(addr) => addr,
+                Err(err) => {
+                    error!("received invalid TCP tunnel connection from {}: {}", peer_addr, err);
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, format!("read target address: {}", err)));
+                }
+            };
             trace!("dynamic tunnel {} -> {}", peer_addr, owned_addr);
             &owned_addr
         }
