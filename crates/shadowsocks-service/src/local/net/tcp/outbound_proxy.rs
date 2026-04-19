@@ -11,20 +11,13 @@ use std::{
     task::{self, Poll},
 };
 
-use shadowsocks::{
-    net::ConnectOpts,
-    relay::socks5::{Address, Command},
-};
+use shadowsocks::{net::ConnectOpts, relay::socks5::Address};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     config::{OutboundProxy, OutboundProxyProtocol},
     local::context::ServiceContext,
-    net::{
-        http_stream::ProxyHttpStream,
-        outbound_proxy::connect_via_proxy,
-        socks5_client::{socks5_command, socks5_handshake},
-    },
+    net::{http_stream::ProxyHttpStream, outbound_proxy::connect_via_proxy},
 };
 
 use super::auto_proxy_stream::AutoProxyClientStream;
