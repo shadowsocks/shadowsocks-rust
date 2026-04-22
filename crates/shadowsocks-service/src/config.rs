@@ -1342,12 +1342,6 @@ impl LocalConfig {
                     return Err(err);
                 }
             }
-            #[cfg(feature = "local-tunnel")]
-            ProtocolType::Tunnel => {
-                // forward_addr is optional:
-                // - Some: static tunnel (all connections forwarded to fixed address)
-                // - None: dynamic tunnel (target address read from each client stream)
-            }
 
             #[cfg(feature = "local-http")]
             ProtocolType::Http => {

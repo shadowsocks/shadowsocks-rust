@@ -29,16 +29,33 @@ pub struct TunnelBuilder {
 
 impl TunnelBuilder {
     /// Create a new Tunnel server forwarding to `forward_addr`
-    ///
-    /// If `forward_addr` is `None`, the tunnel operates in dynamic mode:
-    /// it reads the target address (ATYP+ADDR+PORT) from each client stream.
-    pub fn new(forward_addr: Option<Address>, client_addr: ServerAddr, balancer: PingBalancer) -> Self {
+    pub fn new(forward_addr: Address, client_addr: ServerAddr, balancer: PingBalancer) -> Self {
         let context = ServiceContext::new();
         Self::with_context(Arc::new(context), forward_addr, client_addr, balancer)
     }
 
+    /// Create a new dynamic Tunnel server
+    pub fn new_dynamic(client_addr: ServerAddr, balancer: PingBalancer) -> Self {
+        let context = ServiceContext::new();
+        Self::with_context_dynamic(Arc::new(context), client_addr, balancer)
+    }
+
     /// Create a new Tunnel server with context
     pub fn with_context(
+        context: Arc<ServiceContext>,
+        forward_addr: Address,
+        client_addr: ServerAddr,
+        balancer: PingBalancer,
+    ) -> Self {
+        Self::with_context_forward_addr(context, Some(forward_addr), client_addr, balancer)
+    }
+
+    /// Create a new dynamic Tunnel server with context
+    pub fn with_context_dynamic(context: Arc<ServiceContext>, client_addr: ServerAddr, balancer: PingBalancer) -> Self {
+        Self::with_context_forward_addr(context, None, client_addr, balancer)
+    }
+
+    fn with_context_forward_addr(
         context: Arc<ServiceContext>,
         forward_addr: Option<Address>,
         client_addr: ServerAddr,

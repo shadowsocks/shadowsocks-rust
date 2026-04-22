@@ -324,8 +324,12 @@ impl Server {
                         None => return Err(io::Error::other("tunnel requires local address")),
                     };
 
-                    let mut server_builder =
-                        TunnelBuilder::with_context(context.clone(), local_config.forward_addr, client_addr, balancer);
+                    let mut server_builder = match local_config.forward_addr {
+                        Some(forward_addr) => {
+                            TunnelBuilder::with_context(context.clone(), forward_addr, client_addr, balancer)
+                        }
+                        None => TunnelBuilder::with_context_dynamic(context.clone(), client_addr, balancer),
+                    };
 
                     if let Some(c) = config.udp_max_associations {
                         server_builder.set_udp_capacity(c);

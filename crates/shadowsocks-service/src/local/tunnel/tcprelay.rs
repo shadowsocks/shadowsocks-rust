@@ -125,8 +125,6 @@ async fn handle_tcp_client(
     peer_addr: SocketAddr,
     forward_addr: Option<Arc<Address>>,
 ) -> io::Result<()> {
-    // Static mode: use pre-configured forward_addr.
-    // Dynamic mode: read ATYP+ADDR+PORT from the client stream.
     let owned_addr: Address;
     let target_addr: &Address = match forward_addr {
         Some(ref a) => a,
