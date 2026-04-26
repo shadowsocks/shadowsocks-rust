@@ -17,7 +17,7 @@ pub struct TunnelTcpServerBuilder {
     context: Arc<ServiceContext>,
     client_config: ServerAddr,
     balancer: PingBalancer,
-    forward_addr: Address,
+    forward_addr: Option<Address>,
     #[cfg(target_os = "macos")]
     launchd_socket_name: Option<String>,
 }
@@ -27,7 +27,7 @@ impl TunnelTcpServerBuilder {
         context: Arc<ServiceContext>,
         client_config: ServerAddr,
         balancer: PingBalancer,
-        forward_addr: Address,
+        forward_addr: Option<Address>,
     ) -> Self {
         Self {
             context,
@@ -79,7 +79,7 @@ pub struct TunnelTcpServer {
     context: Arc<ServiceContext>,
     listener: ShadowTcpListener,
     balancer: PingBalancer,
-    forward_addr: Address,
+    forward_addr: Option<Address>,
 }
 
 impl TunnelTcpServer {
@@ -90,9 +90,13 @@ impl TunnelTcpServer {
 
     /// Start serving
     pub async fn run(self) -> io::Result<()> {
-        info!("shadowsocks TCP tunnel listening on {}", self.listener.local_addr()?);
+        if let Some(ref addr) = self.forward_addr {
+            info!("shadowsocks TCP tunnel listening on {}, forward to {}", self.listener.local_addr()?, addr);
+        } else {
+            info!("shadowsocks TCP tunnel listening on {}, dynamic forward", self.listener.local_addr()?);
+        }
 
-        let forward_addr = Arc::new(self.forward_addr);
+        let forward_addr = self.forward_addr.map(Arc::new);
         loop {
             let (stream, peer_addr) = match self.listener.accept().await {
                 Ok(s) => s,
@@ -119,15 +123,29 @@ async fn handle_tcp_client(
     mut stream: TcpStream,
     balancer: PingBalancer,
     peer_addr: SocketAddr,
-    forward_addr: Arc<Address>,
+    forward_addr: Option<Arc<Address>>,
 ) -> io::Result<()> {
-    let forward_addr: &Address = &forward_addr;
+    let owned_addr: Address;
+    let target_addr: &Address = match forward_addr {
+        Some(ref a) => a,
+        None => {
+            owned_addr = match Address::read_from(&mut stream).await {
+                Ok(addr) => addr,
+                Err(err) => {
+                    error!("received invalid TCP tunnel connection from {}: {}", peer_addr, err);
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, format!("read target address: {}", err)));
+                }
+            };
+            trace!("dynamic tunnel {} -> {}", peer_addr, owned_addr);
+            &owned_addr
+        }
+    };
 
     if balancer.is_empty() {
-        trace!("establishing tcp tunnel {} <-> {} direct", peer_addr, forward_addr);
+        trace!("establishing tcp tunnel {} <-> {} direct", peer_addr, target_addr);
 
-        let mut remote = AutoProxyClientStream::connect_bypassed(context, forward_addr).await?;
-        return establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, forward_addr).await;
+        let mut remote = AutoProxyClientStream::connect_bypassed(context, target_addr).await?;
+        return establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, target_addr).await;
     }
 
     let server = balancer.best_tcp_server();
@@ -135,13 +153,13 @@ async fn handle_tcp_client(
     trace!(
         "establishing tcp tunnel {} <-> {} through server {} (outbound: {})",
         peer_addr,
-        forward_addr,
+        target_addr,
         svr_cfg.tcp_external_addr(),
         svr_cfg.addr(),
     );
 
     let mut remote =
-        AutoProxyClientStream::connect_proxied_with_opts(context, &server, forward_addr, server.connect_opts_ref())
+        AutoProxyClientStream::connect_proxied_with_opts(context, &server, target_addr, server.connect_opts_ref())
             .await?;
-    establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, forward_addr).await
+    establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, target_addr).await
 }

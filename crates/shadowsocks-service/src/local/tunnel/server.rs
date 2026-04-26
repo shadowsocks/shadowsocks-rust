@@ -14,7 +14,7 @@ use super::{
 
 pub struct TunnelBuilder {
     context: Arc<ServiceContext>,
-    forward_addr: Address,
+    forward_addr: Option<Address>,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
@@ -34,10 +34,30 @@ impl TunnelBuilder {
         Self::with_context(Arc::new(context), forward_addr, client_addr, balancer)
     }
 
+    /// Create a new dynamic Tunnel server
+    pub fn new_dynamic(client_addr: ServerAddr, balancer: PingBalancer) -> Self {
+        let context = ServiceContext::new();
+        Self::with_context_dynamic(Arc::new(context), client_addr, balancer)
+    }
+
     /// Create a new Tunnel server with context
     pub fn with_context(
         context: Arc<ServiceContext>,
         forward_addr: Address,
+        client_addr: ServerAddr,
+        balancer: PingBalancer,
+    ) -> Self {
+        Self::with_context_forward_addr(context, Some(forward_addr), client_addr, balancer)
+    }
+
+    /// Create a new dynamic Tunnel server with context
+    pub fn with_context_dynamic(context: Arc<ServiceContext>, client_addr: ServerAddr, balancer: PingBalancer) -> Self {
+        Self::with_context_forward_addr(context, None, client_addr, balancer)
+    }
+
+    fn with_context_forward_addr(
+        context: Arc<ServiceContext>,
+        forward_addr: Option<Address>,
         client_addr: ServerAddr,
         balancer: PingBalancer,
     ) -> Self {

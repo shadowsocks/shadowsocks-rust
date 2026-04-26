@@ -1342,13 +1342,6 @@ impl LocalConfig {
                     return Err(err);
                 }
             }
-            #[cfg(feature = "local-tunnel")]
-            ProtocolType::Tunnel => {
-                if self.forward_addr.is_none() {
-                    let err = Error::new(ErrorKind::MissingField, "missing `forward_addr` in configuration", None);
-                    return Err(err);
-                }
-            }
 
             #[cfg(feature = "local-http")]
             ProtocolType::Http => {

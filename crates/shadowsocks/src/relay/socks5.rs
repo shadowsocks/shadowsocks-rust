@@ -236,7 +236,8 @@ impl Address {
             }
             consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
                 let domain_len = cur.get_u8() as usize;
-                if cur.remaining() < domain_len {
+                // domain_len + 2: leave room for PORT, otherwise get_u16() below panics.
+                if cur.remaining() < domain_len + 2 {
                     return Err(Error::AddressDomainInvalidEncoding);
                 }
                 let mut buf = vec![0u8; domain_len];
