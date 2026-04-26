@@ -380,9 +380,11 @@ impl DnsResolver {
             },
             #[cfg(feature = "hickory-dns")]
             Self::HickoryDnsSystem { ref inner, .. } => match inner.resolver.load().lookup_ip(addr).await {
-                Ok(lookup_result) => Ok(EitherResolved::HickoryDnsSystem(
-                    lookup_result.into_iter().map(move |ip| SocketAddr::new(ip, port)),
-                )),
+                Ok(lookup_result) => {
+                    let result: Vec<SocketAddr> =
+                        lookup_result.iter().map(move |ip| SocketAddr::new(ip, port)).collect();
+                    Ok(EitherResolved::HickoryDnsSystem(result.into_iter()))
+                }
                 Err(err) => {
                     let err = Error::other(format!("dns resolve {addr}:{port} error: {err}"));
                     Err(err)
@@ -390,9 +392,11 @@ impl DnsResolver {
             },
             #[cfg(feature = "hickory-dns")]
             Self::HickoryDns(ref resolver) => match resolver.lookup_ip(addr).await {
-                Ok(lookup_result) => Ok(EitherResolved::HickoryDns(
-                    lookup_result.into_iter().map(move |ip| SocketAddr::new(ip, port)),
-                )),
+                Ok(lookup_result) => {
+                    let result: Vec<SocketAddr> =
+                        lookup_result.iter().map(move |ip| SocketAddr::new(ip, port)).collect();
+                    Ok(EitherResolved::HickoryDns(result.into_iter()))
+                }
                 Err(err) => {
                     let err = Error::other(format!("dns resolve {addr}:{port} error: {err}"));
                     Err(err)

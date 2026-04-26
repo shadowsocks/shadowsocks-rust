@@ -3,7 +3,7 @@
 use std::io;
 
 use hickory_resolver::proto::{
-    op::{Header, Message, OpCode, header::MessageType, response_code::ResponseCode},
+    op::{Message, MessageType, OpCode, ResponseCode, UpdateMessage},
     rr::{
         DNSClass, RData, Record, RecordType,
         rdata::{A, AAAA},
@@ -14,14 +14,12 @@ use log::{debug, trace, warn};
 use super::manager::FakeDnsManager;
 
 pub async fn handle_dns_request(req_message: &Message, manager: &FakeDnsManager) -> io::Result<Message> {
-    let mut rsp_message = Message::new();
-    let rsp_header = Header::response_from_request(req_message.header());
-    rsp_message.set_header(rsp_header);
+    let mut rsp_message = Message::response(req_message.id(), req_message.op_code);
 
-    if req_message.op_code() != OpCode::Query || req_message.message_type() != MessageType::Query {
-        rsp_message.set_response_code(ResponseCode::NotImp);
+    if req_message.op_code != OpCode::Query || req_message.message_type != MessageType::Query {
+        rsp_message.metadata.response_code = ResponseCode::NotImp;
     } else {
-        for query in req_message.queries() {
+        for query in req_message.queries.iter() {
             // Copy all the queries into response.
             rsp_message.add_query(query.clone());
 
@@ -45,7 +43,7 @@ pub async fn handle_dns_request(req_message: &Message, manager: &FakeDnsManager)
                         expire_duration.as_secs() as u32,
                         RData::A(A(ip_addr)),
                     );
-                    record.set_dns_class(query.query_class());
+                    record.dns_class = query.query_class();
                     rsp_message.add_answer(record);
                 }
                 RecordType::AAAA => {
@@ -56,7 +54,7 @@ pub async fn handle_dns_request(req_message: &Message, manager: &FakeDnsManager)
                         expire_duration.as_secs() as u32,
                         RData::AAAA(AAAA(ip_addr)),
                     );
-                    record.set_dns_class(query.query_class());
+                    record.dns_class = query.query_class();
                     rsp_message.add_answer(record);
                 }
                 _ => {
