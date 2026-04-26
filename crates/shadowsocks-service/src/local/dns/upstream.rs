@@ -12,11 +12,7 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use hickory_resolver::proto::{
-    ProtoError,
-    op::{Message, UpdateMessage},
-    serialize::binary::DecodeError,
-};
+use hickory_resolver::proto::{ProtoError, op::Message, serialize::binary::DecodeError};
 use log::{error, trace};
 use lru_time_cache::{Entry, LruCache};
 use shadowsocks::{
