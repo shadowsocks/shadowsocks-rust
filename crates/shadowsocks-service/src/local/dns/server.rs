@@ -765,12 +765,12 @@ impl DnsClient {
                     match rec.data {
                         RData::A(ip) => {
                             self.context
-                                .add_to_reverse_lookup_cache(Ipv4Addr::from(*ip).into(), forward)
+                                .add_to_reverse_lookup_cache(Ipv4Addr::from(ip).into(), forward)
                                 .await
                         }
                         RData::AAAA(ip) => {
                             self.context
-                                .add_to_reverse_lookup_cache(Ipv6Addr::from(*ip).into(), forward)
+                                .add_to_reverse_lookup_cache(Ipv6Addr::from(ip).into(), forward)
                                 .await
                         }
                         _ => (),
