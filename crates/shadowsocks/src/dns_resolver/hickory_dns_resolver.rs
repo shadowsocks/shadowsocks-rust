@@ -12,13 +12,9 @@ use std::{
 
 use futures::ready;
 use hickory_resolver::{
-    ResolveError, Resolver,
+    Resolver,
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
-    name_server::GenericConnector,
-    proto::{
-        runtime::{RuntimeProvider, TokioHandle, TokioTime, iocompat::AsyncIoTokioAsStd},
-        udp::DnsUdpSocket,
-    },
+    net::runtime::{DnsUdpSocket, RuntimeProvider, TokioHandle, TokioTime, iocompat::AsyncIoTokioAsStd},
 };
 use log::{error, trace};
 use tokio::{io::ReadBuf, net::UdpSocket};
@@ -130,29 +126,23 @@ impl RuntimeProvider for ShadowDnsRuntimeProvider {
     }
 }
 
-/// Shadowsocks DNS ConnectionProvider
-pub type ShadowDnsConnectionProvider = GenericConnector<ShadowDnsRuntimeProvider>;
-
 /// Shadowsocks DNS resolver
 ///
 /// A customized hickory-dns-resolver
-pub type DnsResolver = Resolver<ShadowDnsConnectionProvider>;
+pub type DnsResolver = Resolver<ShadowDnsRuntimeProvider>;
 
 /// Create a `hickory-dns` asynchronous DNS resolver
 pub async fn create_resolver(
     dns: Option<ResolverConfig>,
     opts: Option<ResolverOpts>,
     connect_opts: ConnectOpts,
-) -> Result<DnsResolver, ResolveError> {
+) -> io::Result<DnsResolver> {
     // Customized dns resolution
     match dns {
         Some(conf) => {
             trace!("initializing DNS resolver with config {:?}", conf,);
 
-            let mut builder = DnsResolver::builder_with_config(
-                conf,
-                ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(connect_opts)),
-            );
+            let mut builder = DnsResolver::builder_with_config(conf, ShadowDnsRuntimeProvider::new(connect_opts));
             if let Some(opts) = opts {
                 *builder.options_mut() = opts;
             }
@@ -167,15 +157,19 @@ pub async fn create_resolver(
 
             trace!("initializing DNS resolver with opts {:?}", resolver_opts);
 
-            Ok(builder.build())
+            match builder.build() {
+                Ok(resolver) => Ok(resolver),
+                Err(err) => {
+                    error!("initialize DNS resolver with config failed, error: {}", err);
+                    Err(io::Error::new(io::ErrorKind::Other, err))
+                }
+            }
         }
 
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration
         // Android doesn't have /etc/resolv.conf.
         None => {
-            match DnsResolver::builder(ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(
-                connect_opts,
-            ))) {
+            match DnsResolver::builder(ShadowDnsRuntimeProvider::new(connect_opts)) {
                 Ok(mut builder) => {
                     let opts = builder.options_mut();
                     // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
@@ -188,13 +182,17 @@ pub async fn create_resolver(
 
                     trace!("initializing DNS resolver with system-config opts {:?}", opts);
 
-                    Ok(builder.build())
+                    match builder.build() {
+                        Ok(resolver) => Ok(resolver),
+                        Err(err) => {
+                            error!("initialize DNS resolver with config failed, error: {}", err);
+                            Err(io::Error::new(io::ErrorKind::Other, err))
+                        }
+                    }
                 }
                 Err(err) => {
                     error!("initialize DNS resolver with system-config failed, error: {}", err);
-                    Err(ResolveError::from(
-                        "current platform doesn't support hickory-dns resolver with system configured".to_owned(),
-                    ))
+                    Err(io::Error::new(io::ErrorKind::Other, err))
                 }
             }
         }

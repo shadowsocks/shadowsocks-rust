@@ -19,7 +19,7 @@ use futures::{
     future::{self, Either},
 };
 use hickory_resolver::proto::{
-    op::{Message, OpCode, Query, header::MessageType, response_code::ResponseCode},
+    op::{Message, MessageType, OpCode, Query, ResponseCode},
     rr::{DNSClass, Name, RData, RecordType},
 };
 use log::{debug, error, info, trace, warn};
@@ -321,7 +321,7 @@ impl DnsTcpServer {
                 Ok(m) => m,
                 Err(err) => {
                     error!("dns tcp {} parse message failed, error: {}", peer_addr, err);
-                    return Err(err.into());
+                    return Err(io::Error::new(io::ErrorKind::Other, err));
                 }
             };
 
@@ -329,11 +329,14 @@ impl DnsTcpServer {
                 Ok(m) => m,
                 Err(err) => {
                     error!("dns tcp {} lookup error: {}", peer_addr, err);
-                    return Err(err);
+                    return Err(io::Error::new(io::ErrorKind::Other, err));
                 }
             };
 
-            let mut buf = respond_message.to_vec()?;
+            let mut buf = match respond_message.to_vec() {
+                Ok(buf) => buf,
+                Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
+            };
             let length = buf.len();
             buf.resize(length + 2, 0);
             buf.copy_within(..length, 2);
@@ -480,7 +483,10 @@ impl DnsUdpServer {
             }
         };
 
-        let buf = respond_message.to_vec()?;
+        let buf = match respond_message.to_vec() {
+            Ok(buf) => buf,
+            Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
+        };
         listener.send_to(&buf, peer_addr).await?;
 
         Ok(())
@@ -639,10 +645,10 @@ fn should_forward_by_response(
     if let Some(acl) = acl {
         if let Ok(local_response) = local_response {
             let mut names = HashSet::new();
-            names.insert(query.name());
+            names.insert(query.name.clone());
             macro_rules! examine_name {
                 ($name:expr_2021, $is_answer:expr_2021) => {{
-                    names.insert($name);
+                    names.insert($name.to_owned());
                     if $is_answer {
                         if let Some(value) = check_name_in_proxy_list(acl, $name) {
                             value
@@ -656,13 +662,14 @@ fn should_forward_by_response(
             }
             macro_rules! examine_record {
                 ($rec:ident, $is_answer:expr_2021) => {
-                    if let RData::CNAME(name) = $rec.data() {
+                    if let RData::CNAME(ref cname) = $rec.data {
+                        let name = &cname.0;
                         if $is_answer {
                             if let Some(value) = check_name_in_proxy_list(acl, name) {
                                 return value;
                             }
                         }
-                        names.insert(name);
+                        names.insert(name.to_owned());
                         continue;
                     }
                     if $is_answer && !query.query_type().is_any() && $rec.record_type() != query.query_type() {
@@ -673,13 +680,13 @@ fn should_forward_by_response(
                         );
                         return true;
                     }
-                    let forward = match $rec.data() {
-                        RData::A(ip) => acl.check_ip_in_proxy_list(&IpAddr::V4((*ip).into())),
-                        RData::AAAA(ip) => acl.check_ip_in_proxy_list(&IpAddr::V6((*ip).into())),
+                    let forward = match $rec.data {
+                        RData::A(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V4((*ip).into())),
+                        RData::AAAA(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V6((*ip).into())),
                         // MX records cause type A additional section processing for the host specified by EXCHANGE.
-                        RData::MX(mx) => examine_name!(mx.exchange(), $is_answer),
+                        RData::MX(ref mx) => examine_name!(&mx.exchange, $is_answer),
                         // NS records cause both the usual additional section processing to locate a type A record...
-                        RData::NS(name) => examine_name!(name, $is_answer),
+                        RData::NS(ref name) => examine_name!(&name.0, $is_answer),
                         RData::PTR(_) => unreachable!(),
                         _ => acl.is_default_in_proxy_list(),
                     };
@@ -688,19 +695,18 @@ fn should_forward_by_response(
                     }
                 };
             }
-            for rec in local_response.answers() {
-                if !names.contains(rec.name()) {
+            for rec in local_response.answers.iter() {
+                if !names.contains(&rec.name) {
                     warn!(
                         "local DNS response contains unexpected name {} for query {}",
-                        rec.name(),
-                        query
+                        rec.name, query
                     );
                     return true;
                 }
                 examine_record!(rec, true);
             }
-            for rec in local_response.additionals() {
-                if names.contains(rec.name()) {
+            for rec in local_response.additionals.iter() {
+                if names.contains(&rec.name) {
                     examine_record!(rec, false);
                 }
             }
@@ -736,46 +742,44 @@ impl DnsClient {
         local_addr: &NameServerAddr,
         remote_addr: &Address,
     ) -> io::Result<Message> {
-        let mut message = Message::new();
-        message.set_id(request.id());
-        message.set_recursion_desired(true);
-        message.set_recursion_available(true);
-        message.set_message_type(MessageType::Response);
+        let mut message = Message::response(request.id, request.op_code);
+        message.metadata.recursion_desired = true;
+        message.metadata.recursion_available = true;
 
-        if !request.recursion_desired() {
+        if !request.metadata.recursion_desired {
             // RD is required by default. Otherwise it may not get valid respond from remote servers
 
-            message.set_recursion_desired(false);
-            message.set_response_code(ResponseCode::NotImp);
-        } else if request.op_code() != OpCode::Query || request.message_type() != MessageType::Query {
+            message.metadata.recursion_desired = false;
+            message.metadata.response_code = ResponseCode::NotImp;
+        } else if request.op_code != OpCode::Query || request.message_type != MessageType::Query {
             // Other ops are not supported
 
-            message.set_response_code(ResponseCode::NotImp);
-        } else if request.query_count() > 0 {
+            message.metadata.response_code = ResponseCode::NotImp;
+        } else if !request.queries.is_empty() {
             // Make queries according to ACL rules
 
-            let (r, forward) = self.acl_lookup(&request.queries()[0], local_addr, remote_addr).await;
+            let (r, forward) = self.acl_lookup(&request.queries[0], local_addr, remote_addr).await;
             if let Ok(result) = r {
-                for rec in result.answers() {
+                for rec in result.answers.iter() {
                     trace!("dns answer: {:?}", rec);
-                    match rec.data() {
+                    match rec.data {
                         RData::A(ip) => {
                             self.context
-                                .add_to_reverse_lookup_cache(Ipv4Addr::from(*ip).into(), forward)
+                                .add_to_reverse_lookup_cache(Ipv4Addr::from(ip).into(), forward)
                                 .await
                         }
                         RData::AAAA(ip) => {
                             self.context
-                                .add_to_reverse_lookup_cache(Ipv6Addr::from(*ip).into(), forward)
+                                .add_to_reverse_lookup_cache(Ipv6Addr::from(ip).into(), forward)
                                 .await
                         }
                         _ => (),
                     }
                 }
                 message = result;
-                message.set_id(request.id());
+                message.metadata.id = request.id;
             } else {
-                message.set_response_code(ResponseCode::ServFail);
+                message.metadata.response_code = ResponseCode::ServFail;
             }
         }
         Ok(message)
@@ -860,9 +864,8 @@ impl DnsClient {
     }
 
     async fn lookup_remote_inner(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
-        let mut message = Message::new();
-        message.set_id(rand::random());
-        message.set_recursion_desired(true);
+        let mut message = Message::query();
+        message.metadata.recursion_desired = true;
         message.add_query(query.clone());
 
         // Query UDP and TCP
@@ -873,14 +876,14 @@ impl DnsClient {
                 self.client_cache
                     .lookup_remote(&self.context, server.server_config(), remote_addr, message, false)
                     .await
-                    .map_err(From::from)
+                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
             }
             Mode::UdpOnly => {
                 let server = self.balancer.best_udp_server();
                 self.client_cache
                     .lookup_remote(&self.context, server.server_config(), remote_addr, message, true)
                     .await
-                    .map_err(From::from)
+                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
             }
             Mode::TcpAndUdp => {
                 // Query TCP & UDP simultaneously
@@ -912,11 +915,11 @@ impl DnsClient {
                 match future::select(tcp_fut, udp_fut).await {
                     Either::Left((res, next)) => match res {
                         Ok(o) => Ok(o),
-                        Err(..) => next.await.map_err(From::from),
+                        Err(..) => next.await.map_err(|err| io::Error::new(io::ErrorKind::Other, err)),
                     },
                     Either::Right((res, next)) => match res {
                         Ok(o) => Ok(o),
-                        Err(..) => next.await.map_err(From::from),
+                        Err(..) => next.await.map_err(|err| io::Error::new(io::ErrorKind::Other, err)),
                     },
                 }
             }
@@ -939,9 +942,8 @@ impl DnsClient {
     }
 
     async fn lookup_local_inner(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
-        let mut message = Message::new();
-        message.set_id(rand::random());
-        message.set_recursion_desired(true);
+        let mut message = Message::query();
+        message.metadata.recursion_desired = true;
         message.add_query(query.clone());
 
         match *local_addr {
@@ -965,9 +967,13 @@ impl DnsClient {
 
                 match future::select(udp_query, tcp_query).await {
                     Either::Left((Ok(m), ..)) => Ok(m),
-                    Either::Left((Err(..), next)) => next.await.map_err(From::from),
+                    Either::Left((Err(..), next)) => {
+                        next.await.map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                    }
                     Either::Right((Ok(m), ..)) => Ok(m),
-                    Either::Right((Err(..), next)) => next.await.map_err(From::from),
+                    Either::Right((Err(..), next)) => {
+                        next.await.map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                    }
                 }
             }
             #[cfg(unix)]
@@ -975,7 +981,7 @@ impl DnsClient {
                 .client_cache
                 .lookup_unix_stream(path, message)
                 .await
-                .map_err(From::from),
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, err)),
         }
     }
 }

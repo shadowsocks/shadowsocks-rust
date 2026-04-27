@@ -76,7 +76,7 @@ impl DnsResolver {
                     {
                         Ok(msg) => return Ok(msg),
                         Err(err) => {
-                            last_err = err.into();
+                            last_err = io::Error::new(io::ErrorKind::Other, err);
                         }
                     }
                 }
@@ -85,7 +85,7 @@ impl DnsResolver {
                     match self.client_cache.lookup_local(ns, msg, &self.connect_opts, false).await {
                         Ok(msg) => return Ok(msg),
                         Err(err) => {
-                            last_err = err.into();
+                            last_err = io::Error::new(io::ErrorKind::Other, err);
                         }
                     }
                 }
@@ -98,14 +98,17 @@ impl DnsResolver {
                 .client_cache
                 .lookup_unix_stream(path, msg)
                 .await
-                .map_err(From::from),
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, err)),
         }
     }
 }
 
 impl DnsResolve for DnsResolver {
     async fn resolve(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
-        let mut name = Name::from_utf8(host)?;
+        let mut name = match Name::from_utf8(host) {
+            Ok(name) => name,
+            Err(err) => return Err(io::Error::new(ErrorKind::InvalidInput, err)),
+        };
         name.set_fqdn(true);
 
         let mut queryv4 = Query::new();
@@ -116,12 +119,12 @@ impl DnsResolve for DnsResolver {
         queryv4.set_query_type(RecordType::A);
         queryv6.set_query_type(RecordType::AAAA);
 
-        let mut msgv4 = Message::new();
-        msgv4.set_recursion_desired(true);
+        let mut msgv4 = Message::query();
+        msgv4.metadata.recursion_desired = true;
         msgv4.add_query(queryv4);
 
-        let mut msgv6 = Message::new();
-        msgv6.set_recursion_desired(true);
+        let mut msgv6 = Message::query();
+        msgv6.metadata.recursion_desired = true;
         msgv6.add_query(queryv6);
 
         match future::join(self.lookup(msgv4), self.lookup(msgv6)).await {
@@ -171,10 +174,10 @@ impl DnsResolve for DnsResolver {
 
 fn store_dns(res: Message, port: u16) -> Vec<SocketAddr> {
     let mut vaddr = Vec::new();
-    for record in res.answers() {
-        match record.data() {
-            RData::A(addr) => vaddr.push(SocketAddr::new(Ipv4Addr::from(*addr).into(), port)),
-            RData::AAAA(addr) => vaddr.push(SocketAddr::new(Ipv6Addr::from(*addr).into(), port)),
+    for record in res.answers {
+        match record.data {
+            RData::A(addr) => vaddr.push(SocketAddr::new(Ipv4Addr::from(addr).into(), port)),
+            RData::AAAA(addr) => vaddr.push(SocketAddr::new(Ipv6Addr::from(addr).into(), port)),
             rdata => {
                 trace!("skipped rdata {:?}", rdata);
             }
