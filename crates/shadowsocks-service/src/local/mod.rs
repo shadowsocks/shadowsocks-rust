@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::future;
-use log::{info, trace};
+use log::trace;
 use shadowsocks::{
     config::Mode,
     net::{AcceptOpts, ConnectOpts},
@@ -183,9 +183,13 @@ impl Server {
         if !config.outbound_proxy.is_empty() {
             let has_udp = config.local.iter().any(|local| local.config.mode.enable_udp());
             if has_udp {
-                info!(
-                    "outbound proxy chain only supports TCP; UDP traffic may not be proxied and may behave unexpectedly"
-                );
+                let preview = crate::net::OutboundProxyClient::from_config(&config.outbound_proxy);
+                if !preview.supports_udp() {
+                    log::warn!(
+                        "outbound proxy chain contains non-SOCKS5 hop(s); UDP traffic will bypass the chain. \
+                         Configure a SOCKS5-only chain to enable UDP relay."
+                    );
+                }
             }
             context.set_outbound_proxies(config.outbound_proxy);
         }
