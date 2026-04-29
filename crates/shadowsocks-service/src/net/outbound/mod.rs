@@ -23,7 +23,11 @@
 
 use std::{io, sync::Arc};
 
-use shadowsocks::relay::socks5::Address;
+use shadowsocks::{
+    context::SharedContext,
+    net::ConnectOpts,
+    relay::socks5::Address,
+};
 
 use crate::config::{OutboundProxy, OutboundProxyProtocol};
 
@@ -34,10 +38,12 @@ pub mod http_connect;
 pub mod socks5;
 pub mod stream;
 pub mod tls;
+pub mod udp;
 
 pub use auth::{HttpProxyAuth, Socks5Auth};
 pub use socks5::Socks5Negotiator;
 pub use stream::OutboundProxyStream;
+pub use udp::OutboundProxyDatagram;
 
 #[cfg(feature = "local-http")]
 pub use http_connect::{HttpConnectClient, HttpConnectTunnel};
@@ -140,6 +146,25 @@ impl OutboundProxyClient {
     /// Currently this is equivalent to "every hop is SOCKS5".
     pub fn supports_udp(&self) -> bool {
         !self.hops.is_empty() && self.hops.iter().all(OutboundProxyHop::supports_udp)
+    }
+
+    /// Establish a multi-hop UDP relay through the chain.
+    ///
+    /// Requires every hop to be SOCKS5 (see [`Self::supports_udp`]).
+    /// `target` is the inner-most destination address baked into every
+    /// outgoing datagram's SOCKS5 UDP header (typically the ss-server's
+    /// UDP external address).
+    pub async fn associate_udp<D>(
+        &self,
+        context: &SharedContext,
+        dialer: &D,
+        connect_opts: &ConnectOpts,
+        target: Address,
+    ) -> io::Result<OutboundProxyDatagram>
+    where
+        D: TcpDialer + Sync,
+    {
+        OutboundProxyDatagram::associate(self, context, dialer, connect_opts, target).await
     }
 }
 

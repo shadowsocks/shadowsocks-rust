@@ -70,6 +70,39 @@ where
     Ok(stream)
 }
 
+/// Build a TCP control connection that *terminates at* `hops[hop_index]`
+/// (i.e. previous hops are traversed via SOCKS5 TcpConnect, but the last
+/// hop is left in its post-handshake "ready for an arbitrary command"
+/// state — typically `UDP ASSOCIATE`).
+///
+/// All hops in `hops[..=hop_index]` must be SOCKS5; this helper is used
+/// exclusively by the UDP outbound path which only supports
+/// SOCKS5-only chains.
+pub(crate) async fn connect_chain_for_udp_associate<D>(
+    hops: &[OutboundProxyHop],
+    hop_index: usize,
+    dialer: &D,
+) -> io::Result<OutboundProxyStream>
+where
+    D: TcpDialer + Sync,
+{
+    debug_assert!(hop_index < hops.len());
+    let prefix = &hops[..hop_index];
+    let target_hop = &hops[hop_index];
+
+    if hop_index == 0 {
+        // Direct dial.
+        let tcp = dialer.dial(&target_hop.addr).await?;
+        return OutboundProxyStream::from_tcp(tcp);
+    }
+
+    // Reuse `connect_chain`: target = hops[hop_index].addr; the chain
+    // builder will SOCKS5-TcpConnect through prefix and leave the byte
+    // stream pointed at `hops[hop_index]` ready for the caller to issue
+    // its own SOCKS5 handshake / UdpAssociate command on top.
+    connect_chain(prefix, dialer, &target_hop.addr).await
+}
+
 async fn negotiate_hop(
     mut stream: OutboundProxyStream,
     hop: &OutboundProxyHop,

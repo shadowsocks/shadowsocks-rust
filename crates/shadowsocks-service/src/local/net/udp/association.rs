@@ -17,21 +17,108 @@ use rand::{RngExt, rngs::SmallRng};
 use tokio::{sync::mpsc, task::JoinHandle, time};
 
 use shadowsocks::{
+    config::ServerConfig,
     lookup_then,
-    net::{AddrFamily, UdpSocket as ShadowUdpSocket},
+    net::{AddrFamily, ConnectOpts, TcpStream as ShadowTcpStream, UdpSocket as ShadowUdpSocket},
     relay::{
         Address,
-        udprelay::{MAXIMUM_UDP_PAYLOAD_SIZE, ProxySocket, options::UdpSocketControlData},
+        udprelay::{
+            MAXIMUM_UDP_PAYLOAD_SIZE, ProxySocket,
+            options::UdpSocketControlData,
+            proxy_socket::UdpSocketType,
+        },
     },
 };
 
 use crate::{
     local::{context::ServiceContext, loadbalancing::PingBalancer},
     net::{
-        MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
+        MonProxySocket, OutboundProxyDatagram, TcpDialer,
+        UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
         packet_window::PacketWindowFilter,
     },
 };
+
+/// Build the proxied socket appropriate for `svr_cfg`, transparently
+/// going through the configured outbound chain when one is present and
+/// fully SOCKS5 (otherwise the chain is bypassed for UDP).
+async fn create_proxied_socket(
+    context: &ServiceContext,
+    svr_cfg: &ServerConfig,
+    connect_opts: &ConnectOpts,
+) -> io::Result<ProxiedSocket> {
+    let use_chain = context
+        .outbound_client()
+        .map(|c| c.supports_udp())
+        .unwrap_or(false);
+
+    if use_chain {
+        let client = context
+            .outbound_client()
+            .expect("outbound_client checked above")
+            .clone();
+        let dialer = LocalTcpDialer {
+            context: Arc::new(context.clone()),
+            opts: connect_opts.clone(),
+        };
+        let target: Address = svr_cfg.udp_external_addr().into();
+        let datagram = client
+            .associate_udp(&context.context(), &dialer, connect_opts, target)
+            .await?;
+        let proxy_socket =
+            ProxySocket::from_socket(UdpSocketType::Client, context.context(), svr_cfg, datagram);
+        let mon = MonProxySocket::from_socket(proxy_socket, context.flow_stat());
+        Ok(ProxiedSocket::Chained(mon))
+    } else {
+        let socket = ProxySocket::connect_with_opts(context.context(), svr_cfg, connect_opts).await?;
+        let mon = MonProxySocket::from_socket(socket, context.flow_stat());
+        Ok(ProxiedSocket::Direct(mon))
+    }
+}
+
+/// `TcpDialer` adapter that uses the local service context's connect options.
+struct LocalTcpDialer {
+    context: Arc<ServiceContext>,
+    opts: ConnectOpts,
+}
+
+impl TcpDialer for LocalTcpDialer {
+    async fn dial(&self, addr: &Address) -> io::Result<ShadowTcpStream> {
+        ShadowTcpStream::connect_remote_with_opts(self.context.context_ref(), addr, &self.opts).await
+    }
+}
+
+/// Proxied UDP socket, either direct (single hop to ss-server) or routed
+/// through a SOCKS5-only outbound proxy chain.
+#[allow(clippy::large_enum_variant)]
+enum ProxiedSocket {
+    Direct(MonProxySocket<ShadowUdpSocket>),
+    Chained(MonProxySocket<OutboundProxyDatagram>),
+}
+
+impl ProxiedSocket {
+    async fn send_with_ctrl(
+        &self,
+        addr: &Address,
+        control: &UdpSocketControlData,
+        data: &[u8],
+    ) -> io::Result<()> {
+        match self {
+            Self::Direct(s) => s.send_with_ctrl(addr, control, data).await,
+            Self::Chained(s) => s.send_with_ctrl(addr, control, data).await,
+        }
+    }
+
+    async fn recv_with_ctrl(
+        &self,
+        buf: &mut [u8],
+    ) -> io::Result<(usize, Address, Option<UdpSocketControlData>)> {
+        match self {
+            Self::Direct(s) => s.recv_with_ctrl(buf).await,
+            Self::Chained(s) => s.recv_with_ctrl(buf).await,
+        }
+    }
+}
 
 /// Writer for sending packets back to client
 #[trait_variant::make(Send)]
@@ -213,7 +300,7 @@ where
     peer_addr: SocketAddr,
     bypassed_ipv4_socket: Option<ShadowUdpSocket>,
     bypassed_ipv6_socket: Option<ShadowUdpSocket>,
-    proxied_socket: Option<MonProxySocket<ShadowUdpSocket>>,
+    proxied_socket: Option<ProxiedSocket>,
     keepalive_tx: mpsc::Sender<SocketAddr>,
     keepalive_flag: bool,
     balancer: PingBalancer,
@@ -410,7 +497,7 @@ where
 
         #[inline]
         async fn receive_from_proxied_opt(
-            socket: &Option<MonProxySocket<ShadowUdpSocket>>,
+            socket: &Option<ProxiedSocket>,
             buf: &mut Vec<u8>,
         ) -> io::Result<(usize, Address, Option<UdpSocketControlData>)> {
             match *socket {
@@ -565,15 +652,17 @@ where
             Some(ref mut socket) => socket,
             None => {
                 // Create a new connection to proxy server
-
                 let server = self.balancer.best_udp_server();
                 let svr_cfg = server.server_config();
 
-                let socket =
-                    ProxySocket::connect_with_opts(self.context.context(), svr_cfg, server.connect_opts_ref()).await?;
-                let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
+                let proxied = create_proxied_socket(
+                    self.context.as_ref(),
+                    svr_cfg,
+                    server.connect_opts_ref(),
+                )
+                .await?;
 
-                self.proxied_socket.insert(socket)
+                self.proxied_socket.insert(proxied)
             }
         };
 
