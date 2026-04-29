@@ -5,8 +5,8 @@ pub use self::{
     mon_socket::MonProxySocket,
     mon_stream::MonProxyStream,
     outbound::{
-        HttpProxyAuth, OutboundProxyClient, OutboundProxyHop, OutboundProxyKind, OutboundProxyStream, Socks5Auth,
-        Socks5Negotiator, TcpDialer,
+        HttpProxyAuth, OutboundProxyClient, OutboundProxyDatagram, OutboundProxyHop, OutboundProxyKind,
+        OutboundProxyStream, Socks5Auth, Socks5Negotiator, TcpDialer,
     },
 };
 

@@ -79,6 +79,25 @@ impl OutboundProxyStream {
         Ok(self.local_addr)
     }
 
+    /// Try to recover the underlying [`TcpStream`].
+    ///
+    /// Succeeds only if the stream is still in the unwrapped TCP state
+    /// (i.e. no TLS or HTTP CONNECT layer has been applied). The UDP
+    /// outbound path uses this to obtain a keep-alive connection that is
+    /// `Sync`-friendly (`OutboundProxyStream` itself is intentionally not
+    /// `Sync` because the HTTP CONNECT variant wraps a
+    /// `hyper::upgrade::Upgraded` which is not).
+    #[allow(clippy::result_large_err)]
+    pub fn try_into_tcp(self) -> Result<TcpStream, Self> {
+        match self.inner {
+            OutboundProxyStreamInner::Bypassed(s) => Ok(s),
+            other => Err(Self {
+                local_addr: self.local_addr,
+                inner: other,
+            }),
+        }
+    }
+
     /// Wrap as a TLS-protected stream (used by the chain builder when the
     /// next hop is HTTPS). `local_addr` is the address recorded for the
     /// very first TCP hop and is preserved unchanged.
