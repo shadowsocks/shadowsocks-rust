@@ -55,7 +55,7 @@ use std::{
 
 use aes::{
     Aes128, Aes256, Block,
-    cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
+    cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit},
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -315,11 +315,17 @@ impl DecryptedReader {
                     match self.method {
                         CipherKind::AEAD2022_BLAKE3_AES_128_GCM => {
                             let cipher = Aes128::new_from_slice(&identity_sub_key[0..16]).expect("AES-128");
-                            cipher.decrypt_block_b2b(Block::from_slice(eih), &mut user_hash);
+                            cipher.decrypt_block_b2b(
+                                <&Block as TryFrom<&[u8]>>::try_from(eih).expect("EIH key length mismatch"),
+                                &mut user_hash,
+                            );
                         }
                         CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
                             let cipher = Aes256::new_from_slice(&identity_sub_key[0..32]).expect("AES-256");
-                            cipher.decrypt_block_b2b(Block::from_slice(eih), &mut user_hash);
+                            cipher.decrypt_block_b2b(
+                                <&Block as TryFrom<&[u8]>>::try_from(eih).expect("EIH key length mismatch"),
+                                &mut user_hash,
+                            );
                         }
                         _ => unreachable!("{} doesn't support EIH", self.method),
                     }
@@ -560,7 +566,8 @@ impl EncryptedWriter {
                     let enc_key = &sub_key[0..16];
                     let cipher = Aes128::new_from_slice(enc_key).expect("AES-128");
 
-                    let ipsk_plain_text = Block::from_slice(ipsk_plain_text);
+                    let ipsk_plain_text =
+                        <&Block as TryFrom<&[u8]>>::try_from(ipsk_plain_text).expect("ipsk length mismatch");
                     let mut block = Block::from([0u8; 16]);
                     cipher.encrypt_block_b2b(ipsk_plain_text, &mut block);
 
@@ -575,7 +582,8 @@ impl EncryptedWriter {
                     let enc_key = &sub_key[0..32];
                     let cipher = Aes256::new_from_slice(enc_key).expect("AES-256");
 
-                    let ipsk_plain_text = Block::from_slice(ipsk_plain_text);
+                    let ipsk_plain_text =
+                        <&Block as TryFrom<&[u8]>>::try_from(ipsk_plain_text).expect("ipsk length mismatch");
                     let mut block = Block::from([0u8; 16]);
                     cipher.encrypt_block_b2b(ipsk_plain_text, &mut block);
 
