@@ -435,6 +435,40 @@ Redirects connections with `iptables` configurations to the port that `sslocal` 
 - (optional) `--tcp-redir` sets TCP mode to `REDIRECT` (Linux)
 - (optional) `--udp-redir` sets UDP mode to `TPROXY` (Linux)
 
+#### Linux iptables example
+
+`iptables` transparent redirection must point to a `redir` listener. Do not redirect traffic to a `socks` or `http`
+listener, because `REDIRECT`/`TPROXY` sends the original TCP/UDP flow without a SOCKS handshake or HTTP `CONNECT`
+request. Use `--protocol socks` or `--protocol http` only for applications that can speak those proxy protocols
+directly.
+
+For a minimal TCP-only setup on the local machine:
+
+```bash
+# Start sslocal in redir mode. The fwmark lets iptables skip sslocal's own
+# outbound connection to the Shadowsocks server and avoid a proxy loop.
+sudo sslocal -b "127.0.0.1:60080" --protocol redir \
+    -s "server.example.com:8388" -m "aes-256-gcm" -k "hello-kitty" \
+    --tcp-redir "redirect" --outbound-fwmark 255
+
+# Redirect locally generated TCP connections to sslocal.
+sudo iptables -t nat -N shadowsocks-redir
+for addr in 0/8 10/8 100.64/10 127/8 169.254/16 172.16/12 192.168/16 224/4 240/4; do
+    sudo iptables -t nat -A shadowsocks-redir -d "$addr" -j RETURN
+done
+sudo iptables -t nat -A shadowsocks-redir -m mark --mark 0xff/0xff -j RETURN
+sudo iptables -t nat -A shadowsocks-redir -p tcp -j REDIRECT --to-ports 60080
+sudo iptables -t nat -A OUTPUT -p tcp -j shadowsocks-redir
+```
+
+For TCP+UDP, LAN gateway, IPv6, or ipset-based routing, adapt the examples in
+[`configs/iptables_mixed.sh`](configs/iptables_mixed.sh) or [`configs/iptables_tproxy.sh`](configs/iptables_tproxy.sh)
+and run `sslocal` with `--tcp-redir "tproxy" --udp-redir "tproxy"`.
+
+If the Shadowsocks server itself must be reached through an HTTP or SOCKS proxy, combine redir mode with the
+`outbound_proxy` configuration option. This routes `sslocal`'s outbound TCP connection through that proxy; UDP traffic
+is not proxied by `outbound_proxy`.
+
 ### Tun interface client
 
 **NOTE**: It currently only supports
