@@ -128,7 +128,7 @@ pin-project = "1.1"
 thiserror = "2.0"
 arc-swap = "1.7"
 
-spin = { version = "0.10" }
+spin = { version = "0.12" }
 lru_time_cache = "0.11"
 bytes = "1.7"
 byte_string = "1.0"
