@@ -16,11 +16,11 @@ use cfg_if::cfg_if;
 use hickory_resolver::config::ResolverConfig;
 #[cfg(feature = "hickory-dns")]
 use hickory_resolver::config::ResolverOpts;
-#[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
+#[cfg(all(feature = "hickory-dns", unix))]
 use log::error;
 use log::{Level, log_enabled, trace};
 use tokio::net::lookup_host;
-#[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
+#[cfg(all(feature = "hickory-dns", unix))]
 use tokio::task::JoinHandle;
 
 #[cfg(feature = "hickory-dns")]
@@ -60,7 +60,7 @@ pub enum DnsResolver {
     #[cfg(feature = "hickory-dns")]
     HickoryDnsSystem {
         inner: Arc<HickoryDnsSystemResolver>,
-        #[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
+        #[cfg(all(feature = "hickory-dns", unix))]
         abortable: JoinHandle<()>,
     },
     /// Trust-DNS resolver
@@ -92,7 +92,7 @@ impl Debug for DnsResolver {
 #[cfg(feature = "hickory-dns")]
 impl Drop for DnsResolver {
     fn drop(&mut self) {
-        #[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
+        #[cfg(all(feature = "hickory-dns", unix))]
         if let Self::HickoryDnsSystem { ref abortable, .. } = *self {
             abortable.abort();
         }
@@ -151,7 +151,7 @@ cfg_if! {
     }
 }
 
-#[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
+#[cfg(all(feature = "hickory-dns", unix))]
 async fn hickory_dns_notify_update_dns(resolver: Arc<HickoryDnsSystemResolver>) -> notify::Result<()> {
     use std::{path::Path, time::Duration};
 
@@ -161,10 +161,19 @@ async fn hickory_dns_notify_update_dns(resolver: Arc<HickoryDnsSystemResolver>) 
 
     use super::hickory_dns_resolver::create_resolver;
 
-    const DNS_RESOLV_FILE_PATH: &str = "/etc/resolv.conf";
+    let resolv_file_path = if cfg!(target_os = "android") {
+        if let Ok(prefix) = std::env::var("PREFIX") {
+            format!("{}/etc/resolv.conf", prefix)
+        } else {
+            "/etc/resolv.conf".to_string()
+        }
+    } else {
+        "/etc/resolv.conf".to_string()
+    };
+    let resolv_file_path_clone = resolv_file_path.clone();
 
-    if !Path::new(DNS_RESOLV_FILE_PATH).exists() {
-        trace!("resolv file {DNS_RESOLV_FILE_PATH} doesn't exist");
+    if !Path::new(&resolv_file_path).exists() {
+        trace!("resolv file {} doesn't exist", resolv_file_path);
         return Ok(());
     }
 
@@ -173,25 +182,25 @@ async fn hickory_dns_notify_update_dns(resolver: Arc<HickoryDnsSystemResolver>) 
     let mut watcher: RecommendedWatcher =
         notify::recommended_watcher(move |ev_result: NotifyResult<Event>| match ev_result {
             Ok(ev) => {
-                trace!("received {DNS_RESOLV_FILE_PATH} event {ev:?}");
+                trace!("received {} event {:?}", resolv_file_path_clone, ev);
 
                 if let EventKind::Modify(..) = ev.kind {
                     tx.send(ev).expect("watcher.send");
                 }
             }
             Err(err) => {
-                error!("watching {DNS_RESOLV_FILE_PATH} error: {err}");
+                error!("watching {} error: {}", resolv_file_path_clone, err);
             }
         })?;
 
     // NOTE: It is an undefined behavior if this file get renamed or removed.
-    watcher.watch(Path::new(DNS_RESOLV_FILE_PATH), RecursiveMode::NonRecursive)?;
+    watcher.watch(Path::new(&resolv_file_path), RecursiveMode::NonRecursive)?;
 
     // Delayed task
     let mut update_task: Option<JoinHandle<()>> = None;
 
     while rx.changed().await.is_ok() {
-        trace!("received notify {DNS_RESOLV_FILE_PATH} changed");
+        trace!("received notify {} changed", resolv_file_path);
 
         // Kill the pending task
         if let Some(t) = update_task.take() {
@@ -200,19 +209,20 @@ async fn hickory_dns_notify_update_dns(resolver: Arc<HickoryDnsSystemResolver>) 
 
         let task = {
             let resolver = resolver.clone();
+            let resolv_file_path_task = resolv_file_path.clone();
             tokio::spawn(async move {
-                // /etc/resolv.conf may be modified multiple time in 1 second
+                // resolv.conf may be modified multiple time in 1 second
                 // Update once for all those Modify events
                 time::sleep(Duration::from_secs(1)).await;
 
                 match create_resolver(None, resolver.opts.clone(), resolver.connect_opts.clone()).await {
                     Ok(r) => {
-                        debug!("auto-reload {DNS_RESOLV_FILE_PATH}");
+                        debug!("auto-reload {}", resolv_file_path_task);
 
                         resolver.resolver.store(Arc::new(r));
                     }
                     Err(err) => {
-                        error!("failed to reload {DNS_RESOLV_FILE_PATH}, error: {err}");
+                        error!("failed to reload {}, error: {}", resolv_file_path_task, err);
                     }
                 }
             })
@@ -221,7 +231,7 @@ async fn hickory_dns_notify_update_dns(resolver: Arc<HickoryDnsSystemResolver>) 
         update_task = Some(task);
     }
 
-    error!("auto-reload {DNS_RESOLV_FILE_PATH} task exited unexpectedly");
+    error!("auto-reload {} task exited unexpectedly", resolv_file_path);
 
     Ok(())
 }
@@ -251,7 +261,7 @@ impl DnsResolver {
         });
 
         cfg_if! {
-            if #[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))] {
+            if #[cfg(all(feature = "hickory-dns", unix))] {
                 let abortable = {
                     let inner = inner.clone();
                     tokio::spawn(async {

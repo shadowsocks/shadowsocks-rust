@@ -173,6 +173,39 @@ pub async fn create_resolver(
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration
         // Android doesn't have /etc/resolv.conf.
         None => {
+            #[cfg(target_os = "android")]
+            if let Ok(prefix) = std::env::var("PREFIX") {
+                let resolv_path = format!("{}/etc/resolv.conf", prefix);
+                if let Ok(content) = std::fs::read_to_string(&resolv_path) {
+                    let mut ips = Vec::new();
+                    for line in content.lines() {
+                        let line = line.trim();
+                        if line.starts_with("nameserver ") {
+                            if let Ok(ip) = line[11..].trim().parse::<std::net::IpAddr>() {
+                                ips.push(ip);
+                            }
+                        }
+                    }
+                    if !ips.is_empty() {
+                        use hickory_resolver::config::NameServerConfigGroup;
+                        let group = NameServerConfigGroup::from_ips_clear(&ips, 53, true);
+                        let conf = ResolverConfig::from_parts(None, vec![], group);
+                        let mut builder = DnsResolver::builder_with_config(
+                            conf,
+                            ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(connect_opts.clone())),
+                        );
+                        if let Some(opts) = opts {
+                            *builder.options_mut() = opts;
+                        }
+                        let resolver_opts = builder.options_mut();
+                        resolver_opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+                        resolver_opts.edns0 = true;
+                        trace!("initializing DNS resolver with termux resolv.conf opts {:?}", resolver_opts);
+                        return Ok(builder.build());
+                    }
+                }
+            }
+
             match DnsResolver::builder(ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(
                 connect_opts,
             ))) {

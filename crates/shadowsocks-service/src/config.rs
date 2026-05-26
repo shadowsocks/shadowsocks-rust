@@ -1013,7 +1013,7 @@ impl ManagerConfig {
             #[cfg(unix)]
             server_working_directory: match std::env::current_dir() {
                 Ok(d) => d,
-                Err(..) => "/tmp/shadowsocks-manager".into(),
+                Err(..) => std::env::temp_dir().join("shadowsocks-manager"),
             },
         }
     }

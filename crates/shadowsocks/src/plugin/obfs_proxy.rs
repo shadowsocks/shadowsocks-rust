@@ -32,7 +32,7 @@ pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr
     cmd.stdin(Stdio::null())
         .kill_on_drop(true)
         .arg("--data-dir")
-        .arg(format!("/tmp/{}_{}_{}", plugin.plugin, remote, local)); // FIXME: Not compatible in Windows
+        .arg(std::env::temp_dir().join(format!("{}_{}_{}", plugin.plugin, remote, local)));
 
     if let Some(ref opt) = plugin.plugin_opts {
         cmd.args(opt.split(' '));
