@@ -5,6 +5,7 @@ use std::{
     str,
 };
 
+use byte_string::ByteStr;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     time::{self, Duration},
@@ -86,7 +87,8 @@ async fn socks4_relay_connect() {
     let svr = Socks4TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD);
     svr.run().await;
 
-    const HTTP_REQUEST: &[u8] = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
+    const HTTP_REQUEST: &[u8] =
+        b"GET /success.txt HTTP/1.1\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\nConnection: close\r\n\r\n";
 
     let mut c = Socks4TcpClient::connect(("detectportal.firefox.com", 80), LOCAL_ADDR, Vec::new())
         .await
@@ -100,6 +102,10 @@ async fn socks4_relay_connect() {
     let mut buf = Vec::new();
     r.read_until(b'\n', &mut buf).await.unwrap();
 
-    let http_status = b"HTTP/1.0 200 OK\r\n";
-    assert!(buf.starts_with(http_status));
+    let http_status = b"HTTP/1.1 200 OK\r\n";
+    assert!(
+        buf.starts_with(http_status),
+        "HTTP status line mismatched, got: {:?}",
+        ByteStr::new(&buf)
+    );
 }

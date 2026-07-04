@@ -72,7 +72,8 @@ async fn tcp_tunnel() {
     // Connect it directly, because it is now established a TCP tunnel with detectportal.firefox.com
     let mut stream = TcpStream::connect(("127.0.0.1", local_port)).await.unwrap();
 
-    let req = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
+    let req =
+        b"GET /success.txt HTTP/1.1\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\nConnection: close\r\n\r\n";
     stream.write_all(req).await.unwrap();
     stream.flush().await.unwrap();
 
@@ -81,8 +82,12 @@ async fn tcp_tunnel() {
     let mut buf = Vec::new();
     r.read_until(b'\n', &mut buf).await.unwrap();
 
-    let http_status = b"HTTP/1.0 200 OK\r\n";
-    assert!(buf.starts_with(http_status));
+    let http_status = b"HTTP/1.1 200 OK\r\n";
+    assert!(
+        buf.starts_with(http_status),
+        "HTTP status line mismatched, got: {:?}",
+        ByteStr::new(&buf)
+    );
 }
 
 #[tokio::test]
