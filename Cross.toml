@@ -22,8 +22,7 @@ passthrough = ["RUSTFLAGS"]
 [target.x86_64-unknown-netbsd]
 pre-build = "./build/netbsd-getentropy-shim.sh"
 [target.x86_64-unknown-netbsd.env]
-volumes = []
-RUSTFLAGS = "-C link-arg=-L/usr/local/x86_64-unknown-netbsd/shimlib -C link-arg=-lgetentropy_shim"
+passthrough = ["RUSTFLAGS=-C link-arg=-L/usr/local/x86_64-unknown-netbsd/shimlib -C link-arg=-lgetentropy_shim"]
 
 # MIPS targets are dropped to Tier 3
 # https://github.com/rust-lang/compiler-team/issues/648
