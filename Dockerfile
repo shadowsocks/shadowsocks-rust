@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1.96.1-alpine3.23 AS builder
+FROM --platform=$BUILDPLATFORM rust:1.97.0-alpine3.23 AS builder
 
 ARG TARGETARCH
 ARG BUILDARCH
