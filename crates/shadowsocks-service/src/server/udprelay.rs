@@ -650,6 +650,17 @@ impl UdpAssociationContext {
     }
 
     async fn dispatch_received_outbound_packet(&mut self, target_addr: &Address, data: &[u8]) -> io::Result<()> {
+        if self
+            .context
+            .outbound_client()
+            .is_some_and(|client| client.contains_shadowsocks_hop())
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "UDP traffic is rejected because the outbound proxy chain contains an ss hop",
+            ));
+        }
+
         match *target_addr {
             Address::SocketAddress(sa) => self.send_received_outbound_packet(sa, data).await,
             Address::DomainNameAddress(ref dname, port) => {

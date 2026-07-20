@@ -250,7 +250,7 @@ impl AutoProxyClientStream {
                     opts: connect_opts,
                 };
                 client
-                    .connect_tcp(&dialer, &ss_addr)
+                    .connect_tcp(context.context(), &dialer, &ss_addr)
                     .await
                     .map(OutboundTransport::Chained)
             }

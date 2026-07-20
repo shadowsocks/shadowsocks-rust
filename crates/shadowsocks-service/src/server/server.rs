@@ -111,8 +111,8 @@ impl ServerBuilder {
     }
 
     /// Set outbound SOCKS5 proxy chain
-    pub fn set_outbound_proxies(&mut self, proxies: Vec<OutboundProxy>) {
-        self.context.set_outbound_proxies(proxies);
+    pub fn set_outbound_proxies(&mut self, proxies: Vec<OutboundProxy>) -> io::Result<()> {
+        self.context.set_outbound_proxies(proxies)
     }
 
     /// Start the server

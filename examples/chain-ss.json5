@@ -1,0 +1,18 @@
+{
+    // The normal sslocal upstream is the landing server. Its address is sent
+    // through the encrypted edge hop below instead of dialled directly.
+    "server": "landing.example.com",
+    "server_port": 8388,
+    "method": "aes-256-gcm",
+    "password": "replace-with-landing-password",
+
+    "local_address": "127.0.0.1",
+    "local_port": 1080,
+    "mode": "tcp_only",
+
+    // SIP002 URL for the edge hop. Only the first ss:// hop may have a SIP003
+    // plugin. ss:// outbound hops are TCP-only, so keep this example in TCP mode.
+    "outbound_proxy": [
+        "ss://YWVzLTEyOC1nY206ZWRnZS1wYXNzd29yZA@edge.example.com:443/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dcdn.example.com"
+    ]
+}

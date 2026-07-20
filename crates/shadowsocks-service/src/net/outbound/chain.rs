@@ -3,7 +3,10 @@
 use std::io;
 
 use log::trace;
-use shadowsocks::relay::socks5::Address;
+use shadowsocks::{
+    context::SharedContext,
+    relay::{socks5::Address, tcprelay::ProxyClientStream},
+};
 
 use super::{
     OutboundProxyClient, OutboundProxyHop, OutboundProxyKind, TcpDialer, socks5::Socks5Negotiator,
@@ -23,18 +26,20 @@ impl OutboundProxyClient {
     /// bypass routing, ...).
     pub async fn connect_tcp<D>(
         &self,
+        context: SharedContext,
         dialer: &D,
         target: &Address,
     ) -> io::Result<OutboundProxyStream>
     where
         D: TcpDialer + Sync,
     {
-        connect_chain(self.hops(), dialer, target).await
+        connect_chain(self.hops(), &context, dialer, target).await
     }
 }
 
 pub(crate) async fn connect_chain<D>(
     hops: &[OutboundProxyHop],
+    context: &SharedContext,
     dialer: &D,
     target: &Address,
 ) -> io::Result<OutboundProxyStream>
@@ -48,6 +53,8 @@ where
         ));
     };
 
+    first_hop.wait_plugin_started().await?;
+
     trace!("dialling first outbound proxy hop {}", first_hop.addr);
     let first_tcp = dialer.dial(&first_hop.addr).await?;
     let mut stream = OutboundProxyStream::from_tcp(first_tcp)?;
@@ -59,12 +66,9 @@ where
             stream = tls_wrap(stream, hop.tls_sni()).await?;
         }
 
-        let next_target = hops
-            .get(idx + 1)
-            .map(|h| &h.addr)
-            .unwrap_or(target);
+        let next_target = hops.get(idx + 1).map(|h| &h.addr).unwrap_or(target);
 
-        stream = negotiate_hop(stream, hop, next_target).await?;
+        stream = negotiate_hop(context, stream, hop, next_target).await?;
     }
 
     Ok(stream)
@@ -81,6 +85,7 @@ where
 pub(crate) async fn connect_chain_for_udp_associate<D>(
     hops: &[OutboundProxyHop],
     hop_index: usize,
+    context: &SharedContext,
     dialer: &D,
 ) -> io::Result<OutboundProxyStream>
 where
@@ -100,10 +105,11 @@ where
     // builder will SOCKS5-TcpConnect through prefix and leave the byte
     // stream pointed at `hops[hop_index]` ready for the caller to issue
     // its own SOCKS5 handshake / UdpAssociate command on top.
-    connect_chain(prefix, dialer, &target_hop.addr).await
+    connect_chain(prefix, context, dialer, &target_hop.addr).await
 }
 
 async fn negotiate_hop(
+    context: &SharedContext,
     mut stream: OutboundProxyStream,
     hop: &OutboundProxyHop,
     next_target: &Address,
@@ -126,6 +132,11 @@ async fn negotiate_hop(
             io::ErrorKind::Unsupported,
             "HTTP/HTTPS outbound proxy requires the `local-http` feature",
         )),
+        OutboundProxyKind::Ss { svr_cfg, .. } => {
+            let local_addr = stream.local_addr()?;
+            let stream = ProxyClientStream::from_stream(context.clone(), stream, svr_cfg, next_target.clone());
+            Ok(OutboundProxyStream::from_ss(local_addr, stream))
+        }
     }
 }
 

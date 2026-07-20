@@ -372,7 +372,7 @@ Start local client with configuration file
 sslocal -c /path/to/shadowsocks.json
 ```
 
-`sslocal` also supports routing its outbound TCP connection to the Shadowsocks server through a proxy or proxy chain with the `outbound_proxy` config key. Supported hop types are `socks5://`, `http://`, and `https://`, with optional `user:pass@` credentials. This option is currently available through the configuration file for `sslocal`; `ssserver` supports both the config file and repeated `--outbound-proxy` command line flags.
+`sslocal` also supports routing its outbound TCP connection to the Shadowsocks server through a proxy or proxy chain with the `outbound_proxy` config key. Supported hop types are `socks5://`, `http://`, `https://`, and SIP002 `ss://` URLs. Plain proxy hops accept optional `user:pass@` credentials. The first `ss://` hop may include a SIP003 plugin; plugins on later hops are rejected. A chain containing an `ss://` hop is TCP-only, and UDP traffic is rejected instead of bypassing the chain. This option is currently available through the configuration file for `sslocal`; `ssserver` supports both the config file and repeated `--outbound-proxy` command line flags.
 
 ```jsonc
 {
@@ -389,6 +389,9 @@ sslocal -c /path/to/shadowsocks.json
     ]
 }
 ```
+
+`ss://` outbound hops support TCP only. See [`examples/chain-ss.json5`](examples/chain-ss.json5) for a complete
+TCP-only edge-to-landing configuration.
 
 ### Socks5 Local client
 
@@ -549,7 +552,9 @@ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" \
 ```
 
 Repeat `--outbound-proxy` in hop order. A single occurrence keeps the previous single-hop behavior.
-Supported hop types are `socks5://`, `http://`, and `https://`. The same `outbound_proxy` setting can also be used in configuration files for both `sslocal` and `ssserver`, but UDP traffic is not proxied.
+Supported hop types are `socks5://`, `http://`, `https://`, and `ss://`. The first `ss://` hop may include a SIP003
+plugin; later-hop plugins are not supported. The same `outbound_proxy` setting can also be used in configuration files
+for both `sslocal` and `ssserver`, but `ss://` hops are TCP-only and UDP traffic is rejected instead of being sent directly.
 
 ### Server Manager
 
@@ -843,7 +848,7 @@ Example configuration:
             // Outbound UDP socket allows IP fragmentation (default false)
             "outbound_udp_allow_fragmentation": false,
             // Route outbound TCP connections through a proxy or proxy chain
-            // (TCP only; UDP is not proxied)
+            // (TCP only; a chain containing ss:// causes UDP traffic to be rejected)
             // Works for both sslocal and ssserver
             // sslocal: configure in JSON; ssserver: JSON or repeated --outbound-proxy
             // Single hop:
@@ -921,7 +926,7 @@ Example configuration:
     // Outbound UDP socket allows IP fragmentation (default false)
     "outbound_udp_allow_fragmentation": false,
     // Route outbound TCP connections through a proxy or proxy chain
-    // (TCP only; UDP is not proxied)
+    // (TCP only; a chain containing ss:// causes UDP traffic to be rejected)
     // Works for both sslocal and ssserver
     // sslocal: configure in JSON; ssserver: JSON or repeated --outbound-proxy
     // Single hop:

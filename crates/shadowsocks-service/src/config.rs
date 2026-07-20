@@ -102,6 +102,7 @@ pub enum OutboundProxyProtocol {
     Socks5,
     Http,
     Https,
+    Ss,
 }
 
 impl OutboundProxyProtocol {
@@ -110,8 +111,9 @@ impl OutboundProxyProtocol {
             "socks5" => Ok(Self::Socks5),
             "http" => Ok(Self::Http),
             "https" => Ok(Self::Https),
+            "ss" => Ok(Self::Ss),
             _ => Err(format!(
-                "unsupported proxy scheme, only socks5://, http:// and https:// are supported: {scheme}://"
+                "unsupported proxy scheme, only socks5://, http://, https:// and ss:// are supported: {scheme}://"
             )),
         }
     }
@@ -121,6 +123,7 @@ impl OutboundProxyProtocol {
             Self::Socks5 => "socks5",
             Self::Http => "http",
             Self::Https => "https",
+            Self::Ss => "ss",
         }
     }
 }
@@ -129,32 +132,62 @@ impl OutboundProxyProtocol {
 ///
 /// `ssserver` will route its outbound TCP connections through this proxy.
 /// Config file format accepts either a single string like `"socks5://host:port"`
-/// or a chain like `["socks5://host:port", "http://host:port", "https://host:port"]`.
-#[derive(Clone, Eq, PartialEq)]
-pub struct OutboundProxy {
+/// or a chain like `["ss://...", "socks5://host:port", "https://host:port"]`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OutboundProxy {
+    Plain(PlainProxy),
+    Ss(Box<ShadowsocksHop>),
+}
+
+/// Configuration for a SOCKS5, HTTP, or HTTPS outbound proxy hop.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlainProxy {
     pub protocol: OutboundProxyProtocol,
     pub host: String,
     pub port: u16,
     pub auth: Option<OutboundProxyAuth>,
 }
 
-impl Debug for OutboundProxy {
+/// Configuration for a Shadowsocks outbound proxy hop.
+#[derive(Clone)]
+pub struct ShadowsocksHop {
+    pub svr_cfg: ServerConfig,
+    pub tag: Option<String>,
+}
+
+impl Debug for ShadowsocksHop {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("OutboundProxy")
-            .field("protocol", &self.protocol)
-            .field("host", &self.host)
-            .field("port", &self.port)
-            .field("auth", &self.auth)
+        f.debug_struct("ShadowsocksHop")
+            .field("addr", self.svr_cfg.addr())
+            .field("method", &self.svr_cfg.method())
+            .field("password", &"<redacted>")
+            .field("plugin", &self.svr_cfg.plugin().map(|p| p.plugin.as_str()))
+            .field("tag", &self.tag)
             .finish()
     }
 }
 
+impl PartialEq for ShadowsocksHop {
+    fn eq(&self, other: &Self) -> bool {
+        self.svr_cfg.to_url() == other.svr_cfg.to_url() && self.tag == other.tag
+    }
+}
+
+impl Eq for ShadowsocksHop {}
+
 impl OutboundProxy {
     /// Parse from a URL string like `socks5://127.0.0.1:1080`,
-    /// `http://user:pass@127.0.0.1:3128` or `https://[::1]:443`
+    /// `http://user:pass@127.0.0.1:3128`, `https://[::1]:443`, or a SIP002 `ss://` URL.
     pub fn from_url(url: &str) -> Result<Self, String> {
         let parsed = Url::parse(url).map_err(|e| format!("invalid proxy url {url}: {e}"))?;
         let protocol = OutboundProxyProtocol::from_scheme(parsed.scheme())?;
+
+        if protocol == OutboundProxyProtocol::Ss {
+            let svr_cfg =
+                ServerConfig::from_url(url).map_err(|e| format!("invalid shadowsocks outbound proxy URL: {e}"))?;
+            let tag = svr_cfg.remarks().map(ToOwned::to_owned);
+            return Ok(Self::Ss(Box::new(ShadowsocksHop { svr_cfg, tag })));
+        }
 
         let host = parsed
             .host_str()
@@ -189,39 +222,60 @@ impl OutboundProxy {
             Some(OutboundProxyAuth { username, password })
         };
 
-        Ok(OutboundProxy {
+        Ok(Self::Plain(PlainProxy {
             protocol,
             host,
             port,
             auth,
-        })
+        }))
     }
 
     pub fn address(&self) -> Address {
-        match self.host.parse::<IpAddr>() {
-            Ok(ip) => Address::SocketAddress(SocketAddr::new(ip, self.port)),
-            Err(..) => Address::DomainNameAddress(self.host.clone(), self.port),
+        match self {
+            Self::Plain(proxy) => match proxy.host.parse::<IpAddr>() {
+                Ok(ip) => Address::SocketAddress(SocketAddr::new(ip, proxy.port)),
+                Err(..) => Address::DomainNameAddress(proxy.host.clone(), proxy.port),
+            },
+            Self::Ss(hop) => hop.svr_cfg.addr().into(),
+        }
+    }
+
+    /// Whether this hop can participate in the existing SOCKS5 UDP relay chain.
+    pub(crate) fn supports_udp(&self) -> bool {
+        matches!(self, Self::Plain(proxy) if proxy.protocol == OutboundProxyProtocol::Socks5)
+    }
+
+    /// Server address for an `ss://` hop, used for cycle diagnostics.
+    pub(crate) fn shadowsocks_server_addr(&self) -> Option<&ServerAddr> {
+        match self {
+            Self::Ss(hop) => Some(hop.svr_cfg.addr()),
+            Self::Plain(..) => None,
         }
     }
 
     /// Serialize back to URL form, with brackets for IPv6 hosts
     pub fn to_url(&self) -> String {
-        let host = if self.host.contains(':') {
-            format!("[{}]", self.host)
-        } else {
-            self.host.clone()
-        };
+        match self {
+            Self::Ss(hop) => hop.svr_cfg.to_url(),
+            Self::Plain(proxy) => {
+                let host = if proxy.host.contains(':') {
+                    format!("[{}]", proxy.host)
+                } else {
+                    proxy.host.clone()
+                };
 
-        match self.auth {
-            Some(ref auth) => format!(
-                "{}://{}:{}@{}:{}",
-                self.protocol.as_scheme(),
-                auth.username,
-                auth.password,
-                host,
-                self.port
-            ),
-            None => format!("{}://{}:{}", self.protocol.as_scheme(), host, self.port),
+                match proxy.auth {
+                    Some(ref auth) => format!(
+                        "{}://{}:{}@{}:{}",
+                        proxy.protocol.as_scheme(),
+                        auth.username,
+                        auth.password,
+                        host,
+                        proxy.port
+                    ),
+                    None => format!("{}://{}:{}", proxy.protocol.as_scheme(), host, proxy.port),
+                }
+            }
         }
     }
 }
@@ -3447,23 +3501,72 @@ pub fn read_variable_field_value(value: &str) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
     use super::OutboundProxy;
+    #[cfg(feature = "local")]
+    use super::{Config, ConfigType};
 
     #[test]
     fn outbound_proxy_url_without_auth() {
         let proxy = OutboundProxy::from_url("socks5://127.0.0.1:1080").expect("proxy");
-        assert_eq!(proxy.host, "127.0.0.1");
-        assert_eq!(proxy.port, 1080);
-        assert!(proxy.auth.is_none());
+        let OutboundProxy::Plain(plain) = &proxy else {
+            panic!("expected plain proxy");
+        };
+        assert_eq!(plain.host, "127.0.0.1");
+        assert_eq!(plain.port, 1080);
+        assert!(plain.auth.is_none());
         assert_eq!(proxy.to_url(), "socks5://127.0.0.1:1080");
     }
 
     #[test]
     fn outbound_proxy_url_with_auth() {
         let proxy = OutboundProxy::from_url("socks5://user:pass@[::1]:1080").expect("proxy");
-        assert_eq!(proxy.host, "::1");
-        assert_eq!(proxy.port, 1080);
-        let auth = proxy.auth.expect("auth");
+        let OutboundProxy::Plain(plain) = proxy else {
+            panic!("expected plain proxy");
+        };
+        assert_eq!(plain.host, "::1");
+        assert_eq!(plain.port, 1080);
+        let auth = plain.auth.expect("auth");
         assert_eq!(auth.username, "user");
         assert_eq!(auth.password, "pass");
+    }
+
+    #[cfg(feature = "aead-cipher")]
+    #[test]
+    fn shadowsocks_outbound_proxy_url_round_trip() {
+        let url = "ss://YWVzLTEyOC1nY206cGFzc3dvcmQ@127.0.0.1:8388#edge";
+        let proxy = OutboundProxy::from_url(url).expect("ss proxy");
+        let OutboundProxy::Ss(hop) = &proxy else {
+            panic!("expected shadowsocks proxy");
+        };
+        assert_eq!(hop.svr_cfg.addr().to_string(), "127.0.0.1:8388");
+        assert_eq!(hop.svr_cfg.password(), "password");
+        assert_eq!(hop.tag.as_deref(), Some("edge"));
+
+        let reparsed = OutboundProxy::from_url(&proxy.to_url()).expect("round-trip ss proxy");
+        assert_eq!(reparsed, proxy);
+    }
+
+    #[cfg(feature = "aead-cipher")]
+    #[test]
+    fn shadowsocks_outbound_proxy_url_with_plugin() {
+        let url = concat!(
+            "ss://YWVzLTEyOC1nY206cGFzc3dvcmQ@127.0.0.1:8388/",
+            "?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dexample.com"
+        );
+        let proxy = OutboundProxy::from_url(url).expect("ss proxy with plugin");
+        let OutboundProxy::Ss(hop) = proxy else {
+            panic!("expected shadowsocks proxy");
+        };
+        let plugin = hop.svr_cfg.plugin().expect("plugin");
+        assert_eq!(plugin.plugin, "obfs-local");
+        assert_eq!(plugin.plugin_opts.as_deref(), Some("obfs=http;obfs-host=example.com"));
+    }
+
+    #[cfg(all(feature = "local", feature = "aead-cipher"))]
+    #[test]
+    fn shadowsocks_outbound_proxy_example_is_valid() {
+        let config = Config::load_from_str(include_str!("../../../examples/chain-ss.json5"), ConfigType::Local)
+            .expect("chain-ss example");
+        assert_eq!(config.outbound_proxy.len(), 1);
+        assert!(matches!(config.outbound_proxy[0], OutboundProxy::Ss(..)));
     }
 }

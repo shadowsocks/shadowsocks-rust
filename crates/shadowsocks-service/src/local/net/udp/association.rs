@@ -39,24 +39,29 @@ use crate::{
     },
 };
 
-/// Build the proxied socket appropriate for `svr_cfg`, transparently
-/// going through the configured outbound chain when one is present and
-/// fully SOCKS5 (otherwise the chain is bypassed for UDP).
+/// Build the proxied socket appropriate for `svr_cfg`, going through a
+/// fully-SOCKS5 outbound chain, rejecting chains with a Shadowsocks hop,
+/// and preserving the legacy direct fallback for other unsupported hops.
 async fn create_proxied_socket(
     context: &ServiceContext,
     svr_cfg: &ServerConfig,
     connect_opts: &ConnectOpts,
 ) -> io::Result<ProxiedSocket> {
-    let use_chain = context
-        .outbound_client()
-        .map(|c| c.supports_udp())
-        .unwrap_or(false);
+    if let Some(client) = context.outbound_client() {
+        if client.contains_shadowsocks_hop() {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "UDP traffic is rejected because the outbound proxy chain contains an ss hop",
+            ));
+        }
 
-    if use_chain {
-        let client = context
-            .outbound_client()
-            .expect("outbound_client checked above")
-            .clone();
+        if !client.supports_udp() {
+            let socket = ProxySocket::connect_with_opts(context.context(), svr_cfg, connect_opts).await?;
+            let mon = MonProxySocket::from_socket(socket, context.flow_stat());
+            return Ok(ProxiedSocket::Direct(mon));
+        }
+
+        let client = client.clone();
         let dialer = LocalTcpDialer {
             context: Arc::new(context.clone()),
             opts: connect_opts.clone(),

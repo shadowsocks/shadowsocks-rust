@@ -181,17 +181,29 @@ impl Server {
         context.set_security_config(&config.security);
 
         if !config.outbound_proxy.is_empty() {
-            let has_udp = config.local.iter().any(|local| local.config.mode.enable_udp());
-            if has_udp {
-                let preview = crate::net::OutboundProxyClient::from_config(&config.outbound_proxy);
-                if !preview.supports_udp() {
+            for proxy in &config.outbound_proxy {
+                if let Some(proxy_addr) = proxy.shadowsocks_server_addr()
+                    && config.server.iter().any(|server| server.config.addr() == proxy_addr)
+                {
                     log::warn!(
-                        "outbound proxy chain contains non-SOCKS5 hop(s); UDP traffic will bypass the chain. \
-                         Configure a SOCKS5-only chain to enable UDP relay."
+                        "ss outbound proxy hop {} is also configured as a main server; verify that the chain is not recursive",
+                        proxy_addr
                     );
                 }
             }
-            context.set_outbound_proxies(config.outbound_proxy);
+
+            let has_udp = config.local.iter().any(|local| local.config.mode.enable_udp());
+            if has_udp
+                && crate::net::OutboundProxyClient::config_contains_shadowsocks_hop(&config.outbound_proxy)
+            {
+                log::warn!("UDP traffic will be rejected because the outbound proxy chain contains an ss hop");
+            } else if has_udp && !crate::net::OutboundProxyClient::config_supports_udp(&config.outbound_proxy) {
+                log::warn!(
+                    "outbound proxy chain contains non-SOCKS5 hop(s); UDP traffic will bypass the chain. \
+                     Configure a SOCKS5-only chain to enable UDP relay."
+                );
+            }
+            context.set_outbound_proxies(config.outbound_proxy)?;
         }
 
         assert!(!config.local.is_empty(), "no valid local server configuration");

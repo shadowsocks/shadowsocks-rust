@@ -111,6 +111,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     for inst in config.server {
         let svr_cfg = inst.config;
         let svr_enable_udp = svr_cfg.mode().enable_udp();
+        let svr_addr = svr_cfg.addr().clone();
         let mut server_builder = ServerBuilder::new(svr_cfg);
 
         if let Some(ref r) = resolver {
@@ -150,20 +151,25 @@ pub async fn run(config: Config) -> io::Result<()> {
                 config.outbound_proxy.clone()
             };
 
-            // Warn (once per server instance) when UDP is enabled but the
-            // chain cannot relay UDP — UDP traffic will then bypass the
-            // chain and connect to the upstream directly.
-            if svr_enable_udp {
-                let preview = crate::net::OutboundProxyClient::from_config(&proxies);
-                if !preview.supports_udp() {
+            for proxy in &proxies {
+                if proxy.shadowsocks_server_addr() == Some(&svr_addr) {
                     log::warn!(
-                        "outbound proxy chain contains non-SOCKS5 hop(s); UDP traffic will bypass the chain. \
-                         Configure a SOCKS5-only chain to enable UDP relay."
+                        "ss outbound proxy hop {} is also the main server; verify that the chain is not recursive",
+                        svr_addr
                     );
                 }
             }
 
-            server_builder.set_outbound_proxies(proxies);
+            if svr_enable_udp && crate::net::OutboundProxyClient::config_contains_shadowsocks_hop(&proxies) {
+                log::warn!("UDP traffic will be rejected because the outbound proxy chain contains an ss hop");
+            } else if svr_enable_udp && !crate::net::OutboundProxyClient::config_supports_udp(&proxies) {
+                log::warn!(
+                    "outbound proxy chain contains non-SOCKS5 hop(s); UDP traffic will bypass the chain. \
+                     Configure a SOCKS5-only chain to enable UDP relay."
+                );
+            }
+
+            server_builder.set_outbound_proxies(proxies)?;
         }
 
         server_builder.set_connect_opts(connect_opts);

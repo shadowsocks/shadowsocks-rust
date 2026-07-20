@@ -1,6 +1,6 @@
 //! Shadowsocks Local Server Context
 
-use std::sync::Arc;
+use std::{io, sync::Arc};
 #[cfg(feature = "local-dns")]
 use std::{net::IpAddr, time::Duration};
 
@@ -118,12 +118,13 @@ impl ServiceContext {
     }
 
     /// Set outbound proxy chain (connection to SS server routes through these proxies)
-    pub fn set_outbound_proxies(&mut self, proxies: Vec<OutboundProxy>) {
+    pub fn set_outbound_proxies(&mut self, proxies: Vec<OutboundProxy>) -> io::Result<()> {
         self.outbound_client = if proxies.is_empty() {
             None
         } else {
-            Some(Arc::new(OutboundProxyClient::from_config(&proxies)))
+            Some(Arc::new(OutboundProxyClient::try_from_config(&proxies)?))
         };
+        Ok(())
     }
 
     /// Get the outbound proxy client (if a chain is configured).
