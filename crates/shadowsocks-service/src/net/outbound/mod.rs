@@ -230,10 +230,25 @@ impl OutboundProxyClient {
     /// Build a client from a (possibly empty) list of `OutboundProxy`
     /// configuration entries.
     pub fn try_from_config(proxies: &[OutboundProxy]) -> io::Result<Self> {
+        Self::try_from_config_with_hop_offset(proxies, 0)
+    }
+
+    /// Build the trailing hops of an `sslocal` chain whose configured main
+    /// Shadowsocks server is hop zero.
+    ///
+    /// SIP003 plugins are only usable on the physical first hop. Starting
+    /// indices at one makes plugin-bearing entries in `outbound_proxy` fail
+    /// during configuration instead of trying to start an unreachable local
+    /// plugin for a later hop.
+    pub fn try_from_config_after_main_server(proxies: &[OutboundProxy]) -> io::Result<Self> {
+        Self::try_from_config_with_hop_offset(proxies, 1)
+    }
+
+    fn try_from_config_with_hop_offset(proxies: &[OutboundProxy], hop_offset: usize) -> io::Result<Self> {
         let hops = proxies
             .iter()
             .enumerate()
-            .map(|(idx, proxy)| hop_from_config(idx, proxy))
+            .map(|(idx, proxy)| hop_from_config(idx + hop_offset, proxy))
             .collect::<io::Result<Vec<_>>>()?;
         Ok(Self { hops: hops.into() })
     }

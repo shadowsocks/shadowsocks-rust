@@ -1501,7 +1501,7 @@ pub struct ServerInstanceConfig {
     pub outbound_bind_addr: Option<IpAddr>,
     pub outbound_bind_interface: Option<String>,
     pub outbound_udp_allow_fragmentation: Option<bool>,
-    /// Outbound SOCKS5 proxy chain for this server instance (empty = no proxy)
+    /// Configured outbound proxy hops for this server instance (empty = no proxy)
     pub outbound_proxy: Vec<OutboundProxy>,
 }
 
@@ -1610,7 +1610,11 @@ pub struct Config {
     /// Path to protect callback unix address, only for Android
     #[cfg(target_os = "android")]
     pub outbound_vpn_protect_path: Option<PathBuf>,
-    /// Outbound SOCKS5 proxy chain for ssserver (global, can be overridden per server; empty = no proxy)
+    /// Global outbound proxy hops.
+    ///
+    /// For `sslocal`, these follow the configured main Shadowsocks server.
+    /// For `ssserver`, these precede the requested target and can be
+    /// overridden per server instance.
     pub outbound_proxy: Vec<OutboundProxy>,
 
     /// Set `SO_SNDBUF` for inbound sockets
@@ -3566,7 +3570,17 @@ mod tests {
     fn shadowsocks_outbound_proxy_example_is_valid() {
         let config = Config::load_from_str(include_str!("../../../examples/chain-ss.json5"), ConfigType::Local)
             .expect("chain-ss example");
+        assert_eq!(config.server.len(), 1);
+        assert_eq!(config.server[0].config.addr().to_string(), "edge.example.com:443");
+        assert_eq!(
+            config.server[0].config.plugin().map(|plugin| plugin.plugin.as_str()),
+            Some("obfs-local")
+        );
         assert_eq!(config.outbound_proxy.len(), 1);
-        assert!(matches!(config.outbound_proxy[0], OutboundProxy::Ss(..)));
+        let OutboundProxy::Ss(landing) = &config.outbound_proxy[0] else {
+            panic!("expected shadowsocks landing hop");
+        };
+        assert_eq!(landing.svr_cfg.addr().to_string(), "landing.example.com:8388");
+        assert!(landing.svr_cfg.plugin().is_none());
     }
 }

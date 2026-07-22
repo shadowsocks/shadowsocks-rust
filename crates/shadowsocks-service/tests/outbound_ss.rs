@@ -18,6 +18,7 @@ use shadowsocks_service::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    sync::mpsc,
 };
 
 struct DirectDialer {
@@ -61,6 +62,71 @@ fn spawn_ss_relay(listener: ProxyListener) {
             });
         }
     });
+}
+
+fn spawn_ss_relay_reporting_targets(listener: ProxyListener, targets: mpsc::UnboundedSender<Address>) {
+    tokio::spawn(async move {
+        while let Ok((mut inbound, _)) = listener.accept().await {
+            let targets = targets.clone();
+            tokio::spawn(async move {
+                let Ok(target) = inbound.handshake().await else {
+                    return;
+                };
+                let _ = targets.send(target.clone());
+                let mut outbound = match target {
+                    Address::SocketAddress(addr) => TcpStream::connect(addr).await.unwrap(),
+                    Address::DomainNameAddress(host, port) => TcpStream::connect((host, port)).await.unwrap(),
+                };
+                tokio::io::copy_bidirectional(&mut inbound, &mut outbound)
+                    .await
+                    .unwrap();
+            });
+        }
+    });
+}
+
+#[tokio::test]
+async fn sslocal_main_server_is_first_hop_and_outbound_proxy_is_landing() {
+    let echo_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let echo_addr = echo_listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let (mut stream, _) = echo_listener.accept().await.unwrap();
+        let mut buf = [0u8; 1024];
+        loop {
+            let n = stream.read(&mut buf).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            stream.write_all(&buf[..n]).await.unwrap();
+        }
+    });
+
+    let (main_listener, main_config) = make_ss_listener("main-first-hop-password").await;
+    let (landing_listener, landing_config) = make_ss_listener("landing-password").await;
+    let landing_addr = landing_listener.local_addr().unwrap();
+    let (main_targets_tx, mut main_targets_rx) = mpsc::unbounded_channel();
+    let (landing_targets_tx, mut landing_targets_rx) = mpsc::unbounded_channel();
+    spawn_ss_relay_reporting_targets(main_listener, main_targets_tx);
+    spawn_ss_relay_reporting_targets(landing_listener, landing_targets_tx);
+
+    let landing_proxy = OutboundProxy::from_url(&landing_config.to_url()).unwrap();
+    let client = OutboundProxyClient::try_from_config_after_main_server(&[landing_proxy]).unwrap();
+    let context = Context::new_shared(ServerType::Local);
+    let dialer = DirectDialer {
+        context: context.clone(),
+    };
+    let mut stream = client
+        .connect_tcp_with_initial_shadowsocks(context, &dialer, &main_config, &Address::from(echo_addr))
+        .await
+        .unwrap();
+
+    const MESSAGE: &[u8] = b"main first, outbound landing";
+    stream.write_all(MESSAGE).await.unwrap();
+    assert_eq!(main_targets_rx.recv().await, Some(Address::from(landing_addr)));
+    assert_eq!(landing_targets_rx.recv().await, Some(Address::from(echo_addr)));
+    let mut echoed = vec![0u8; MESSAGE.len()];
+    stream.read_exact(&mut echoed).await.unwrap();
+    assert_eq!(echoed, MESSAGE);
 }
 
 #[tokio::test]
@@ -270,6 +336,30 @@ fn plugin_on_non_first_shadowsocks_hop_is_rejected() {
         })),
     ];
     let err = OutboundProxyClient::try_from_config(&proxies).unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::Unsupported);
+    assert!(err.to_string().contains("non-first ss outbound proxy hop"));
+}
+
+#[test]
+fn sslocal_outbound_proxy_plugin_is_rejected_as_non_first_hop() {
+    let mut landing = ServerConfig::new(
+        "127.0.0.1:10004".parse::<SocketAddr>().unwrap(),
+        "landing",
+        CipherKind::AES_128_GCM,
+    )
+    .unwrap();
+    landing.set_plugin(PluginConfig {
+        plugin: "mock-plugin".to_owned(),
+        plugin_opts: None,
+        plugin_args: Vec::new(),
+        plugin_mode: Mode::TcpOnly,
+    });
+
+    let err = OutboundProxyClient::try_from_config_after_main_server(&[OutboundProxy::Ss(Box::new(ShadowsocksHop {
+        svr_cfg: landing,
+        tag: None,
+    }))])
+    .unwrap_err();
     assert_eq!(err.kind(), io::ErrorKind::Unsupported);
     assert!(err.to_string().contains("non-first ss outbound proxy hop"));
 }

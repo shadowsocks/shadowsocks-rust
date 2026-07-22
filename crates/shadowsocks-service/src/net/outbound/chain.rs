@@ -4,6 +4,7 @@ use std::io;
 
 use log::trace;
 use shadowsocks::{
+    config::ServerConfig,
     context::SharedContext,
     relay::{socks5::Address, tcprelay::ProxyClientStream},
 };
@@ -35,6 +36,22 @@ impl OutboundProxyClient {
     {
         connect_chain(self.hops(), &context, dialer, target).await
     }
+
+    /// Establish an `sslocal` TCP tunnel whose configured main Shadowsocks
+    /// server is the physical first hop and whose `outbound_proxy` entries
+    /// are the subsequent hops.
+    pub async fn connect_tcp_with_initial_shadowsocks<D>(
+        &self,
+        context: SharedContext,
+        dialer: &D,
+        initial: &ServerConfig,
+        target: &Address,
+    ) -> io::Result<OutboundProxyStream>
+    where
+        D: TcpDialer + Sync,
+    {
+        connect_chain_with_initial_shadowsocks(self.hops(), &context, dialer, initial, target).await
+    }
 }
 
 pub(crate) async fn connect_chain<D>(
@@ -57,8 +74,39 @@ where
 
     trace!("dialling first outbound proxy hop {}", first_hop.addr);
     let first_tcp = dialer.dial(&first_hop.addr).await?;
-    let mut stream = OutboundProxyStream::from_tcp(first_tcp)?;
+    let stream = OutboundProxyStream::from_tcp(first_tcp)?;
 
+    negotiate_hops(hops, context, stream, target).await
+}
+
+async fn connect_chain_with_initial_shadowsocks<D>(
+    hops: &[OutboundProxyHop],
+    context: &SharedContext,
+    dialer: &D,
+    initial: &ServerConfig,
+    target: &Address,
+) -> io::Result<OutboundProxyStream>
+where
+    D: TcpDialer + Sync,
+{
+    let initial_addr: Address = initial.tcp_external_addr().into();
+    trace!("dialling initial shadowsocks hop {}", initial_addr);
+    let initial_tcp = dialer.dial(&initial_addr).await?;
+    let local_addr = initial_tcp.local_addr()?;
+    let initial_stream = OutboundProxyStream::from_tcp_with_local_addr(initial_tcp, local_addr);
+    let next_target = hops.first().map(|hop| &hop.addr).unwrap_or(target);
+    let initial_stream = ProxyClientStream::from_stream(context.clone(), initial_stream, initial, next_target.clone());
+    let stream = OutboundProxyStream::from_ss(local_addr, initial_stream);
+
+    negotiate_hops(hops, context, stream, target).await
+}
+
+async fn negotiate_hops(
+    hops: &[OutboundProxyHop],
+    context: &SharedContext,
+    mut stream: OutboundProxyStream,
+    target: &Address,
+) -> io::Result<OutboundProxyStream> {
     for (idx, hop) in hops.iter().enumerate() {
         // For HTTPS hops, wrap the wire layer with TLS *before* speaking
         // the application-level CONNECT verb.
