@@ -61,7 +61,7 @@ libc = "~0.2.141"
 bytes = "1.7"
 cfg-if = "1"
 byte_string = "1.0"
-base64 = "0.22"
+base64 = "0.23"
 url = "2.5"
 spin = { version = "0.12", features = ["std"] }
 pin-project = "1.1"
