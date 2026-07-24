@@ -33,8 +33,7 @@ use shadowsocks::{
 use tokio::io::ReadBuf;
 
 use super::{
-    OutboundProxyClient, OutboundProxyKind, TcpDialer, chain::connect_chain_for_udp_associate,
-    socks5::Socks5Negotiator,
+    OutboundProxyClient, OutboundProxyKind, TcpDialer, chain::connect_chain_for_udp_associate, socks5::Socks5Negotiator,
 };
 
 /// One SOCKS5 UDP relay hop. The `assoc_tcp` keep-alive connection must
@@ -107,6 +106,12 @@ impl OutboundProxyDatagram {
             ));
         }
         for hop in hops {
+            if matches!(hop.kind, OutboundProxyKind::Ss { .. }) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "outbound UDP relay is unavailable because the chain contains an ss hop",
+                ));
+            }
             if !matches!(hop.kind, OutboundProxyKind::Socks5 { .. }) {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
@@ -133,7 +138,7 @@ impl OutboundProxyDatagram {
         for (idx, hop) in hops.iter().enumerate() {
             // Build a TCP control connection that *terminates* at `hop`
             // (i.e. previous hops are traversed via SOCKS5 TcpConnect).
-            let mut tcp = connect_chain_for_udp_associate(hops, idx, dialer).await?;
+            let mut tcp = connect_chain_for_udp_associate(hops, idx, context, dialer).await?;
 
             let auth = match &hop.kind {
                 OutboundProxyKind::Socks5 { auth } => auth,
@@ -149,9 +154,7 @@ impl OutboundProxyDatagram {
             // applied). Recover the underlying TcpStream so the relay
             // struct stays `Sync`.
             let tcp = tcp.try_into_tcp().map_err(|_| {
-                io::Error::other(
-                    "internal error: outbound UDP relay produced a non-TCP keep-alive stream",
-                )
+                io::Error::other("internal error: outbound UDP relay produced a non-TCP keep-alive stream")
             })?;
 
             let relay_addr = resp.address;
@@ -161,9 +164,7 @@ impl OutboundProxyDatagram {
                     // Resolve domain-name relay addresses via the
                     // shadowsocks shared resolver — matches what a direct
                     // ProxySocket::connect_with_opts does.
-                    let (sa, _) = lookup_then!(context, name, port, |sa| {
-                        Ok::<SocketAddr, io::Error>(sa)
-                    })?;
+                    let (sa, _) = lookup_then!(context, name, port, |sa| { Ok::<SocketAddr, io::Error>(sa) })?;
                     Some(sa)
                 }
             };
