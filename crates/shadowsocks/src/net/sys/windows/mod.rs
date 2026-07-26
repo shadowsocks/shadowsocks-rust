@@ -431,7 +431,11 @@ pub fn set_disable_ip_fragmentation<S: AsRawSocket>(af: AddrFamily, socket: &S) 
 /// Create a `UdpSocket` binded to `addr`
 ///
 /// It also disables `WSAECONNRESET` for UDP socket
-pub async fn create_inbound_udp_socket(addr: &SocketAddr, ipv6_only: bool) -> io::Result<UdpSocket> {
+pub async fn create_inbound_udp_socket(
+    addr: &SocketAddr,
+    ipv6_only: bool,
+    allow_fragmentation: bool,
+) -> io::Result<UdpSocket> {
     let set_dual_stack = is_dual_stack_addr(addr);
 
     let socket = if !set_dual_stack {
@@ -449,7 +453,7 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr, ipv6_only: bool) -> io
         SocketAddr::V4(..) => AddrFamily::Ipv4,
         SocketAddr::V6(..) => AddrFamily::Ipv6,
     };
-    if let Err(err) = set_disable_ip_fragmentation(addr_family, &socket) {
+    if !allow_fragmentation && let Err(err) = set_disable_ip_fragmentation(addr_family, &socket) {
         warn!("failed to disable IP fragmentation, error: {}", err);
     }
     disable_connection_reset(&socket)?;

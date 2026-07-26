@@ -189,7 +189,7 @@ impl UdpSocket {
 
     /// Binds to a specific address (inbound)
     pub async fn listen_with_opts(addr: &SocketAddr, opts: AcceptOpts) -> io::Result<Self> {
-        let socket = create_inbound_udp_socket(addr, opts.ipv6_only).await?;
+        let socket = create_inbound_udp_socket(addr, opts.ipv6_only, opts.udp.allow_fragmentation).await?;
         Ok(Self {
             socket,
             mtu: opts.udp.mtu,
