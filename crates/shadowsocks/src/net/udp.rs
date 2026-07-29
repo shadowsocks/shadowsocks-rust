@@ -5,6 +5,8 @@
     target_os = "android",
     target_os = "macos",
     target_os = "ios",
+    target_os = "watchos",
+    target_os = "tvos",
     target_os = "freebsd"
 ))]
 use std::io::{ErrorKind, IoSlice, IoSliceMut};
@@ -20,6 +22,8 @@ use std::{
     target_os = "android",
     target_os = "macos",
     target_os = "ios",
+    target_os = "watchos",
+    target_os = "tvos",
     target_os = "freebsd"
 ))]
 use futures::future;
@@ -30,6 +34,8 @@ use futures::ready;
     target_os = "android",
     target_os = "macos",
     target_os = "ios",
+    target_os = "watchos",
+    target_os = "tvos",
     target_os = "freebsd"
 ))]
 use tokio::io::Interest;
@@ -48,6 +54,8 @@ use super::{
     target_os = "android",
     target_os = "macos",
     target_os = "ios",
+    target_os = "watchos",
+    target_os = "tvos",
     target_os = "freebsd"
 ))]
 pub struct BatchSendMessage<'a> {
@@ -65,6 +73,8 @@ pub struct BatchSendMessage<'a> {
     target_os = "android",
     target_os = "macos",
     target_os = "ios",
+    target_os = "watchos",
+    target_os = "tvos",
     target_os = "freebsd"
 ))]
 pub struct BatchRecvMessage<'a> {
@@ -298,6 +308,8 @@ impl UdpSocket {
         target_os = "android",
         target_os = "macos",
         target_os = "ios",
+        target_os = "watchos",
+        target_os = "tvos",
         target_os = "freebsd"
     ))]
     pub fn poll_batch_send(
@@ -327,6 +339,8 @@ impl UdpSocket {
         target_os = "android",
         target_os = "macos",
         target_os = "ios",
+        target_os = "watchos",
+        target_os = "tvos",
         target_os = "freebsd"
     ))]
     pub async fn batch_send(&self, msgs: &mut [BatchSendMessage<'_>]) -> io::Result<usize> {
@@ -339,6 +353,8 @@ impl UdpSocket {
         target_os = "android",
         target_os = "ios",
         target_os = "macos",
+        target_os = "watchos",
+        target_os = "tvos",
         target_os = "freebsd"
     ))]
     pub fn poll_batch_recv(
@@ -368,6 +384,8 @@ impl UdpSocket {
         target_os = "android",
         target_os = "macos",
         target_os = "ios",
+        target_os = "watchos",
+        target_os = "tvos",
         target_os = "freebsd"
     ))]
     pub async fn batch_recv(&self, msgs: &mut [BatchRecvMessage<'_>]) -> io::Result<usize> {
