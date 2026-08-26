@@ -1,10 +1,45 @@
 shadowsocks-rust (1.25.0) unstable; urgency=medium
 
+  ## Breaking Changes
+
+  - MSRV bumps to v1.91, required by `smoltcp` v0.13
+  - `refactor(service)!: rework outbound proxy chain into a unified client`. The outbound proxy architecture has been completely reworked into a single self-contained module `net::outbound`, exposing `OutboundProxyClient`, `OutboundProxyStream`, `Socks5Auth`, `HttpProxyAuth` and a `TcpDialer` trait.
+    - `crate::net::outbound_proxy` — removed; use `crate::net::OutboundProxyClient`
+    - `crate::net::http_connect::HttpConnectClient` — moved to `crate::net::HttpConnectClient` (only available with the `local-http` feature)
+    - `crate::net::Socks5TcpClient` (the chain-mixing wrapper) — split: the pure SOCKS5 client is now `crate::local::socks::client::socks5::Socks5TcpClient`; the in-band negotiator is `crate::net::Socks5Negotiator`
+    - `crate::local::net::tcp::outbound_proxy` — removed
+    - `ServiceContext::outbound_proxies()` — replaced by `outbound_client()` returning `Option<&Arc<OutboundProxyClient>>`
+  - `create_inbound_udp_socket` public function signature changed, added `allow_fragmentation` parameter
+  - `inbound_udp_allow_fragmentation` new configuration option split from `outbound_udp_allow_fragmentation`, which now only controls outbound sockets. The inbound (listener) UDP sockets default to disabling IP fragmentation (`false`).
+
+  ## Features
+
+  - #2106 Allow chaining `ssserver` to another SOCKS5/HTTP/HTTPS proxy
+  - #2109 Expose `user_key()` on `CryptoStream` and `ProxyServerStream`, lets callers identify which multi-user identity was authenticated after an AEAD-2022 handshake
+  - EIH (Extended Identity Header) support
+  - #1994 `local-http`: Support HTTP Basic auth
+  - `service`: Outbound UDP relay through SOCKS5-only chains. UDP traffic can now be relayed through proxy chains when all hops are SOCKS5. Chains containing HTTP/HTTPS hops will emit a startup warning and UDP traffic will bypass the chain.
+  - Optimized `socket2::Socket` with `socket2::SockRef`
+
+  ## Bug Fixes
+
+  - Allow fragmentation for inbound UDP replies
+  - RUSTSEC-2026-0258, RUSTSEC-2026-0204, RUSTSEC-2026-0185, RUSTSEC-2026-0119, RUSTSEC-2026-0104, RUSTSEC-2026-0099
+  - `net`: Make UDP batch configs match the BSD module routing for tvOS/watchOS
+  - #2100 Native build error on arm64
+  - `shadowsocks-service`: Fixed build without `local-http` feature
+  - #2062 `http`: Add `is_ready` method and enhance connection checks
+  - #2097 Unify alpine base version in Docker images
+  - #2093 `PingBalancer`: Remove unnecessary double checks
+  - `netbsd`: Cross-compilation fixes with `getentropy` shim and passthrough `RUSTFLAGS` syntax
+
   ## Miscellaneous
 
-  - MSRV bumps to v1.91 (breaking change for downstream toolchains; required by `smoltcp` 0.13)
+  - `shadowsocks-crypto` upgraded to v0.8.0
+  - `smoltcp` upgraded to v0.14
+  - Upgraded various dependencies
 
-  -- ty <zonyitoo@gmail.com>  Sun, 22 Mar 2026 12:00:00 +0800
+ -- ty <zonyitoo@gmail.com>  Thu, 27 Aug 2026 12:00:00 +0800
 
 shadowsocks-rust (1.24.0) unstable; urgency=medium
 
