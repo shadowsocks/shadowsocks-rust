@@ -106,7 +106,7 @@ impl OutboundProxyDatagram {
             ));
         }
         for hop in hops {
-            if matches!(hop.kind, OutboundProxyKind::Ss { .. }) {
+            if matches!(hop.kind, OutboundProxyKind::Shadowsocks { .. }) {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
                     "outbound UDP relay is unavailable because the chain contains an ss hop",

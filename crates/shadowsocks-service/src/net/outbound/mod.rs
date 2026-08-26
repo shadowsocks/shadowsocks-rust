@@ -101,7 +101,7 @@ impl OutboundProxyHop {
 
     async fn wait_plugin_started(&self) -> io::Result<()> {
         match &self.kind {
-            OutboundProxyKind::Ss {
+            OutboundProxyKind::Shadowsocks {
                 plugin: Some(plugin), ..
             } => plugin.wait_started().await,
             _ => Ok(()),
@@ -193,7 +193,7 @@ pub enum OutboundProxyKind {
         sni: String,
     },
     /// Shadowsocks encrypted hop. The plugin is only supported on the first hop.
-    Ss {
+    Shadowsocks {
         svr_cfg: Arc<ServerConfig>,
         plugin: Option<Arc<PluginHandle>>,
     },
@@ -205,8 +205,8 @@ impl fmt::Debug for OutboundProxyKind {
             Self::Socks5 { auth } => f.debug_struct("Socks5").field("auth", auth).finish(),
             Self::Http { auth } => f.debug_struct("Http").field("auth", auth).finish(),
             Self::Https { auth, sni } => f.debug_struct("Https").field("auth", auth).field("sni", sni).finish(),
-            Self::Ss { svr_cfg, plugin } => f
-                .debug_struct("Ss")
+            Self::Shadowsocks { svr_cfg, plugin } => f
+                .debug_struct("Shadowsocks")
                 .field("addr", &svr_cfg.addr())
                 .field("method", &svr_cfg.method())
                 .field("password", &"<redacted>")
@@ -260,7 +260,7 @@ impl OutboundProxyClient {
 
     /// Whether a configuration contains a Shadowsocks outbound hop.
     pub fn config_contains_shadowsocks_hop(proxies: &[OutboundProxy]) -> bool {
-        proxies.iter().any(|proxy| matches!(proxy, OutboundProxy::Ss(_)))
+        proxies.iter().any(|proxy| matches!(proxy, OutboundProxy::Shadowsocks(_)))
     }
 
     /// Underlying hops.
@@ -288,7 +288,7 @@ impl OutboundProxyClient {
     pub fn contains_shadowsocks_hop(&self) -> bool {
         self.hops
             .iter()
-            .any(|hop| matches!(hop.kind, OutboundProxyKind::Ss { .. }))
+            .any(|hop| matches!(hop.kind, OutboundProxyKind::Shadowsocks { .. }))
     }
 
     /// Establish a multi-hop UDP relay through the chain.
@@ -314,7 +314,7 @@ impl OutboundProxyClient {
 fn hop_from_config(idx: usize, proxy: &OutboundProxy) -> io::Result<OutboundProxyHop> {
     match proxy {
         OutboundProxy::Plain(proxy) => plain_hop(proxy),
-        OutboundProxy::Ss(hop) => {
+        OutboundProxy::Shadowsocks(hop) => {
             let mut svr_cfg = hop.svr_cfg.clone();
             let plugin = match svr_cfg.plugin().cloned() {
                 Some(plugin_cfg) => {
@@ -334,7 +334,7 @@ fn hop_from_config(idx: usize, proxy: &OutboundProxy) -> io::Result<OutboundProx
 
             Ok(OutboundProxyHop {
                 addr: svr_cfg.tcp_external_addr().into(),
-                kind: OutboundProxyKind::Ss {
+                kind: OutboundProxyKind::Shadowsocks {
                     svr_cfg: Arc::new(svr_cfg),
                     plugin,
                 },
@@ -363,7 +363,7 @@ fn plain_hop(proxy: &PlainProxy) -> io::Result<OutboundProxyHop> {
             auth: http_auth_from_config(proxy),
             sni: proxy.host.clone(),
         },
-        OutboundProxyProtocol::Ss => {
+        OutboundProxyProtocol::Shadowsocks => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "plain outbound proxy cannot use the ss scheme",

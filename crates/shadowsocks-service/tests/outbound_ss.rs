@@ -203,7 +203,7 @@ async fn tcp_echo_through_first_shadowsocks_hop_plugin() {
         plugin_mode: Mode::TcpOnly,
     });
 
-    let client = OutboundProxyClient::try_from_config(&[OutboundProxy::Ss(Box::new(ShadowsocksHop {
+    let client = OutboundProxyClient::try_from_config(&[OutboundProxy::Shadowsocks(Box::new(ShadowsocksHop {
         svr_cfg: config,
         tag: Some("mock-plugin".to_owned()),
     }))])
@@ -254,7 +254,7 @@ async fn first_hop_plugin_start_failure_is_throttled_and_retried() {
         plugin_mode: Mode::TcpOnly,
     });
 
-    let client = OutboundProxyClient::try_from_config(&[OutboundProxy::Ss(Box::new(ShadowsocksHop {
+    let client = OutboundProxyClient::try_from_config(&[OutboundProxy::Shadowsocks(Box::new(ShadowsocksHop {
         svr_cfg: config,
         tag: Some("mock-plugin-failure".to_owned()),
     }))])
@@ -326,11 +326,11 @@ fn plugin_on_non_first_shadowsocks_hop_is_rejected() {
     });
 
     let proxies = vec![
-        OutboundProxy::Ss(Box::new(ShadowsocksHop {
+        OutboundProxy::Shadowsocks(Box::new(ShadowsocksHop {
             svr_cfg: first,
             tag: None,
         })),
-        OutboundProxy::Ss(Box::new(ShadowsocksHop {
+        OutboundProxy::Shadowsocks(Box::new(ShadowsocksHop {
             svr_cfg: second,
             tag: None,
         })),
@@ -355,7 +355,7 @@ fn sslocal_outbound_proxy_plugin_is_rejected_as_non_first_hop() {
         plugin_mode: Mode::TcpOnly,
     });
 
-    let err = OutboundProxyClient::try_from_config_after_main_server(&[OutboundProxy::Ss(Box::new(ShadowsocksHop {
+    let err = OutboundProxyClient::try_from_config_after_main_server(&[OutboundProxy::Shadowsocks(Box::new(ShadowsocksHop {
         svr_cfg: landing,
         tag: None,
     }))])
@@ -372,7 +372,7 @@ async fn udp_rejects_chain_containing_shadowsocks_hop() {
         CipherKind::AES_128_GCM,
     )
     .unwrap();
-    let client = OutboundProxyClient::try_from_config(&[OutboundProxy::Ss(Box::new(ShadowsocksHop {
+    let client = OutboundProxyClient::try_from_config(&[OutboundProxy::Shadowsocks(Box::new(ShadowsocksHop {
         svr_cfg: config,
         tag: None,
     }))])

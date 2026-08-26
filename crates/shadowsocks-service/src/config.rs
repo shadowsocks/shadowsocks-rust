@@ -102,7 +102,7 @@ pub enum OutboundProxyProtocol {
     Socks5,
     Http,
     Https,
-    Ss,
+    Shadowsocks,
 }
 
 impl OutboundProxyProtocol {
@@ -111,7 +111,7 @@ impl OutboundProxyProtocol {
             "socks5" => Ok(Self::Socks5),
             "http" => Ok(Self::Http),
             "https" => Ok(Self::Https),
-            "ss" => Ok(Self::Ss),
+            "ss" => Ok(Self::Shadowsocks),
             _ => Err(format!(
                 "unsupported proxy scheme, only socks5://, http://, https:// and ss:// are supported: {scheme}://"
             )),
@@ -123,7 +123,7 @@ impl OutboundProxyProtocol {
             Self::Socks5 => "socks5",
             Self::Http => "http",
             Self::Https => "https",
-            Self::Ss => "ss",
+            Self::Shadowsocks => "ss",
         }
     }
 }
@@ -136,7 +136,7 @@ impl OutboundProxyProtocol {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OutboundProxy {
     Plain(PlainProxy),
-    Ss(Box<ShadowsocksHop>),
+    Shadowsocks(Box<ShadowsocksHop>),
 }
 
 /// Configuration for a SOCKS5, HTTP, or HTTPS outbound proxy hop.
@@ -182,11 +182,11 @@ impl OutboundProxy {
         let parsed = Url::parse(url).map_err(|e| format!("invalid proxy url {url}: {e}"))?;
         let protocol = OutboundProxyProtocol::from_scheme(parsed.scheme())?;
 
-        if protocol == OutboundProxyProtocol::Ss {
+        if protocol == OutboundProxyProtocol::Shadowsocks {
             let svr_cfg =
                 ServerConfig::from_url(url).map_err(|e| format!("invalid shadowsocks outbound proxy URL: {e}"))?;
             let tag = svr_cfg.remarks().map(ToOwned::to_owned);
-            return Ok(Self::Ss(Box::new(ShadowsocksHop { svr_cfg, tag })));
+            return Ok(Self::Shadowsocks(Box::new(ShadowsocksHop { svr_cfg, tag })));
         }
 
         let host = parsed
@@ -236,7 +236,7 @@ impl OutboundProxy {
                 Ok(ip) => Address::SocketAddress(SocketAddr::new(ip, proxy.port)),
                 Err(..) => Address::DomainNameAddress(proxy.host.clone(), proxy.port),
             },
-            Self::Ss(hop) => hop.svr_cfg.addr().into(),
+            Self::Shadowsocks(hop) => hop.svr_cfg.addr().into(),
         }
     }
 
@@ -248,7 +248,7 @@ impl OutboundProxy {
     /// Server address for an `ss://` hop, used for cycle diagnostics.
     pub(crate) fn shadowsocks_server_addr(&self) -> Option<&ServerAddr> {
         match self {
-            Self::Ss(hop) => Some(hop.svr_cfg.addr()),
+            Self::Shadowsocks(hop) => Some(hop.svr_cfg.addr()),
             Self::Plain(..) => None,
         }
     }
@@ -256,7 +256,7 @@ impl OutboundProxy {
     /// Serialize back to URL form, with brackets for IPv6 hosts
     pub fn to_url(&self) -> String {
         match self {
-            Self::Ss(hop) => hop.svr_cfg.to_url(),
+            Self::Shadowsocks(hop) => hop.svr_cfg.to_url(),
             Self::Plain(proxy) => {
                 let host = if proxy.host.contains(':') {
                     format!("[{}]", proxy.host)
@@ -3559,7 +3559,7 @@ mod tests {
     fn shadowsocks_outbound_proxy_url_round_trip() {
         let url = "ss://YWVzLTEyOC1nY206cGFzc3dvcmQ@127.0.0.1:8388#edge";
         let proxy = OutboundProxy::from_url(url).expect("ss proxy");
-        let OutboundProxy::Ss(hop) = &proxy else {
+        let OutboundProxy::Shadowsocks(hop) = &proxy else {
             panic!("expected shadowsocks proxy");
         };
         assert_eq!(hop.svr_cfg.addr().to_string(), "127.0.0.1:8388");
@@ -3578,7 +3578,7 @@ mod tests {
             "?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dexample.com"
         );
         let proxy = OutboundProxy::from_url(url).expect("ss proxy with plugin");
-        let OutboundProxy::Ss(hop) = proxy else {
+        let OutboundProxy::Shadowsocks(hop) = proxy else {
             panic!("expected shadowsocks proxy");
         };
         let plugin = hop.svr_cfg.plugin().expect("plugin");
@@ -3598,7 +3598,7 @@ mod tests {
             Some("obfs-local")
         );
         assert_eq!(config.outbound_proxy.len(), 1);
-        let OutboundProxy::Ss(landing) = &config.outbound_proxy[0] else {
+        let OutboundProxy::Shadowsocks(landing) = &config.outbound_proxy[0] else {
             panic!("expected shadowsocks landing hop");
         };
         assert_eq!(landing.svr_cfg.addr().to_string(), "landing.example.com:8388");

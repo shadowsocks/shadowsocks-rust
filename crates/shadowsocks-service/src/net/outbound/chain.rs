@@ -96,7 +96,7 @@ where
     let initial_stream = OutboundProxyStream::from_tcp_with_local_addr(initial_tcp, local_addr);
     let next_target = hops.first().map(|hop| &hop.addr).unwrap_or(target);
     let initial_stream = ProxyClientStream::from_stream(context.clone(), initial_stream, initial, next_target.clone());
-    let stream = OutboundProxyStream::from_ss(local_addr, initial_stream);
+    let stream = OutboundProxyStream::from_shadowsocks(local_addr, initial_stream);
 
     negotiate_hops(hops, context, stream, target).await
 }
@@ -180,10 +180,10 @@ async fn negotiate_hop(
             io::ErrorKind::Unsupported,
             "HTTP/HTTPS outbound proxy requires the `local-http` feature",
         )),
-        OutboundProxyKind::Ss { svr_cfg, .. } => {
+        OutboundProxyKind::Shadowsocks { svr_cfg, .. } => {
             let local_addr = stream.local_addr()?;
             let stream = ProxyClientStream::from_stream(context.clone(), stream, svr_cfg, next_target.clone());
-            Ok(OutboundProxyStream::from_ss(local_addr, stream))
+            Ok(OutboundProxyStream::from_shadowsocks(local_addr, stream))
         }
     }
 }
