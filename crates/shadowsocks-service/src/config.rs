@@ -392,6 +392,9 @@ struct SSConfig {
     outbound_udp_allow_fragmentation: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    inbound_udp_allow_fragmentation: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     outbound_proxy: Option<SSOutboundProxyConfig>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -592,6 +595,9 @@ struct SSServerExtConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     outbound_udp_allow_fragmentation: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    inbound_udp_allow_fragmentation: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     outbound_proxy: Option<SSOutboundProxyConfig>,
@@ -1447,6 +1453,7 @@ pub struct ServerInstanceConfig {
     pub outbound_bind_addr: Option<IpAddr>,
     pub outbound_bind_interface: Option<String>,
     pub outbound_udp_allow_fragmentation: Option<bool>,
+    pub inbound_udp_allow_fragmentation: Option<bool>,
     /// Outbound SOCKS5 proxy chain for this server instance (empty = no proxy)
     pub outbound_proxy: Vec<OutboundProxy>,
 }
@@ -1464,6 +1471,7 @@ impl ServerInstanceConfig {
             outbound_bind_addr: None,
             outbound_bind_interface: None,
             outbound_udp_allow_fragmentation: None,
+            inbound_udp_allow_fragmentation: None,
             outbound_proxy: Vec::new(),
         }
     }
@@ -1553,6 +1561,8 @@ pub struct Config {
     pub outbound_bind_addr: Option<IpAddr>,
     /// Outbound UDP sockets allow IP fragmentation
     pub outbound_udp_allow_fragmentation: bool,
+    /// Inbound UDP sockets allow IP fragmentation
+    pub inbound_udp_allow_fragmentation: bool,
     /// Path to protect callback unix address, only for Android
     #[cfg(target_os = "android")]
     pub outbound_vpn_protect_path: Option<PathBuf>,
@@ -1701,6 +1711,7 @@ impl Config {
             outbound_bind_interface: None,
             outbound_bind_addr: None,
             outbound_udp_allow_fragmentation: false,
+            inbound_udp_allow_fragmentation: false,
             #[cfg(target_os = "android")]
             outbound_vpn_protect_path: None,
             outbound_proxy: Vec::new(),
@@ -2420,6 +2431,10 @@ impl Config {
                     server_instance.outbound_udp_allow_fragmentation = Some(outbound_udp_allow_fragmentation);
                 }
 
+                if let Some(inbound_udp_allow_fragmentation) = svr.inbound_udp_allow_fragmentation {
+                    server_instance.inbound_udp_allow_fragmentation = Some(inbound_udp_allow_fragmentation);
+                }
+
                 if let Some(proxy_config) = svr.outbound_proxy {
                     server_instance.outbound_proxy = proxy_config
                         .into_proxies()
@@ -2593,6 +2608,10 @@ impl Config {
 
         if let Some(b) = config.outbound_udp_allow_fragmentation {
             nconfig.outbound_udp_allow_fragmentation = b;
+        }
+
+        if let Some(b) = config.inbound_udp_allow_fragmentation {
+            nconfig.inbound_udp_allow_fragmentation = b;
         }
 
         if let Some(proxy_config) = config.outbound_proxy {
@@ -3275,6 +3294,7 @@ impl fmt::Display for Config {
                         outbound_bind_addr: inst.outbound_bind_addr,
                         outbound_bind_interface: inst.outbound_bind_interface.clone(),
                         outbound_udp_allow_fragmentation: inst.outbound_udp_allow_fragmentation,
+                        inbound_udp_allow_fragmentation: inst.inbound_udp_allow_fragmentation,
                         outbound_proxy: SSOutboundProxyConfig::from_proxies(&inst.outbound_proxy),
                     });
                 }
@@ -3381,6 +3401,7 @@ impl fmt::Display for Config {
         jconf.outbound_bind_addr = self.outbound_bind_addr.map(|i| i.to_string());
         jconf.outbound_bind_interface.clone_from(&self.outbound_bind_interface);
         jconf.outbound_udp_allow_fragmentation = Some(self.outbound_udp_allow_fragmentation);
+        jconf.inbound_udp_allow_fragmentation = Some(self.inbound_udp_allow_fragmentation);
         if jconf.outbound_proxy.is_none() {
             jconf.outbound_proxy = SSOutboundProxyConfig::from_proxies(&self.outbound_proxy);
         }

@@ -100,7 +100,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.fastopen = config.fast_open;
     accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
     accept_opts.tcp.mptcp = config.mptcp;
-    accept_opts.udp.allow_fragmentation = config.outbound_udp_allow_fragmentation;
+    accept_opts.udp.allow_fragmentation = config.inbound_udp_allow_fragmentation;
     accept_opts.udp.mtu = config.udp_mtu;
 
     let resolver = build_dns_resolver(config.dns, config.ipv6_first, config.dns_cache_size, &connect_opts)
@@ -141,6 +141,9 @@ pub async fn run(config: Config) -> io::Result<()> {
 
         if let Some(udp_allow_fragmentation) = inst.outbound_udp_allow_fragmentation {
             connect_opts.udp.allow_fragmentation = udp_allow_fragmentation;
+        }
+
+        if let Some(udp_allow_fragmentation) = inst.inbound_udp_allow_fragmentation {
             accept_opts.udp.allow_fragmentation = udp_allow_fragmentation;
         }
 

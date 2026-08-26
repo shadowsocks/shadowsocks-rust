@@ -842,6 +842,8 @@ Example configuration:
             "outbound_bind_addr": "11.22.33.44",
             // Outbound UDP socket allows IP fragmentation (default false)
             "outbound_udp_allow_fragmentation": false,
+            // Inbound UDP socket allows IP fragmentation (default false)
+            "inbound_udp_allow_fragmentation": false,
             // Route outbound TCP connections through a proxy or proxy chain
             // (TCP only; UDP is not proxied)
             // Works for both sslocal and ssserver

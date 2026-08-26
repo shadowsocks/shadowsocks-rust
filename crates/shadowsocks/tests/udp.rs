@@ -8,9 +8,12 @@ use shadowsocks::{
     config::{ServerConfig, ServerType},
     context::{Context, SharedContext},
     crypto::CipherKind,
-    net::{AcceptOpts, UdpSocket as ShadowUdpSocket},
+    net::UdpSocket as ShadowUdpSocket,
     relay::{socks5::Address, udprelay::ProxySocket},
 };
+
+#[cfg(target_os = "linux")]
+use shadowsocks::net::AcceptOpts;
 
 #[cfg(target_os = "linux")]
 fn ipv4_mtu_discovery(socket: &ShadowUdpSocket) -> i32 {
