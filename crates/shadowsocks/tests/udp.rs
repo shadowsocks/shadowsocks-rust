@@ -12,6 +12,44 @@ use shadowsocks::{
     relay::{socks5::Address, udprelay::ProxySocket},
 };
 
+#[cfg(target_os = "linux")]
+use shadowsocks::net::AcceptOpts;
+
+#[cfg(target_os = "linux")]
+fn ipv4_mtu_discovery(socket: &ShadowUdpSocket) -> i32 {
+    use std::{mem, os::fd::AsRawFd};
+
+    let mut value = 0;
+    let mut value_len = mem::size_of_val(&value) as libc::socklen_t;
+    let result = unsafe {
+        libc::getsockopt(
+            socket.as_raw_fd(),
+            libc::IPPROTO_IP,
+            libc::IP_MTU_DISCOVER,
+            &mut value as *mut _ as *mut libc::c_void,
+            &mut value_len,
+        )
+    };
+    assert_eq!(result, 0);
+    value
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn inbound_udp_fragmentation_option() {
+    let addr = "127.0.0.1:0".parse().unwrap();
+
+    let socket = ShadowUdpSocket::listen_with_opts(&addr, AcceptOpts::default())
+        .await
+        .unwrap();
+    assert_eq!(ipv4_mtu_discovery(&socket), libc::IP_PMTUDISC_DO);
+
+    let mut opts = AcceptOpts::default();
+    opts.udp.allow_fragmentation = true;
+    let socket = ShadowUdpSocket::listen_with_opts(&addr, opts).await.unwrap();
+    assert_ne!(ipv4_mtu_discovery(&socket), libc::IP_PMTUDISC_DO);
+}
+
 async fn handle_udp_server_client(
     peer_addr: SocketAddr,
     remote_addr: Address,

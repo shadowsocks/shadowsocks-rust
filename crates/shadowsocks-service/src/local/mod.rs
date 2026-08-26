@@ -157,6 +157,7 @@ impl Server {
         accept_opts.tcp.keepalive = config.keep_alive.or(Some(LOCAL_DEFAULT_KEEPALIVE_TIMEOUT));
         accept_opts.tcp.mptcp = config.mptcp;
         accept_opts.udp.mtu = config.udp_mtu;
+        accept_opts.udp.allow_fragmentation = config.inbound_udp_allow_fragmentation;
         context.set_accept_opts(accept_opts);
 
         if let Some(resolver) = build_dns_resolver(

@@ -94,10 +94,11 @@ impl OutboundProxyStream {
     pub fn try_into_tcp(self) -> Result<TcpStream, Self> {
         match self.inner {
             OutboundProxyStreamInner::Bypassed(s) => Ok(s),
-            other => Err(Self {
-                local_addr: self.local_addr,
-                inner: other,
-            }),
+            #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
+            OutboundProxyStreamInner::Https(_) => Err(self),
+            #[cfg(feature = "local-http")]
+            OutboundProxyStreamInner::Http(_) => Err(self),
+            OutboundProxyStreamInner::Ss(_) => Err(self),
         }
     }
 

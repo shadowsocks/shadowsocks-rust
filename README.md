@@ -854,6 +854,8 @@ Example configuration:
             "outbound_bind_addr": "11.22.33.44",
             // Outbound UDP socket allows IP fragmentation (default false)
             "outbound_udp_allow_fragmentation": false,
+            // Inbound UDP socket allows IP fragmentation (default false)
+            "inbound_udp_allow_fragmentation": false,
             // Add TCP proxy hops in array order.
             // sslocal: hops follow this main server; any chain rejects UDP.
             // ssserver: hops precede the requested target; ss:// rejects UDP.
