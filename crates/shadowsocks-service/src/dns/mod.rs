@@ -33,7 +33,7 @@ pub async fn build_dns_resolver(
                     let mut opts_opt = None;
                     if let Some(dns_cache_size) = dns_cache_size {
                         let mut opts = ResolverOpts::default();
-                        opts.cache_size = dns_cache_size;
+                        opts.cache_size = dns_cache_size as u64;
                         opts_opt = Some(opts);
                     }
 
@@ -59,7 +59,7 @@ pub async fn build_dns_resolver(
             let mut opts_opt = None;
             if let Some(dns_cache_size) = dns_cache_size {
                 let mut opts = ResolverOpts::default();
-                opts.cache_size = dns_cache_size;
+                opts.cache_size = dns_cache_size as u64;
                 opts_opt = Some(opts);
             }
 

@@ -1,19 +1,23 @@
 //! Shadowsocks Service Network Utilities
 
 pub use self::{
-    flow::FlowStat, mon_socket::MonProxySocket, mon_stream::MonProxyStream, socks5_client::Socks5TcpClient,
+    flow::FlowStat,
+    mon_socket::MonProxySocket,
+    mon_stream::MonProxyStream,
+    outbound::{
+        HttpProxyAuth, OutboundProxyClient, OutboundProxyDatagram, OutboundProxyHop, OutboundProxyKind,
+        OutboundProxyStream, Socks5Auth, Socks5Negotiator, TcpDialer,
+    },
 };
 
 pub mod flow;
-pub mod http_connect;
 pub mod http_stream;
 #[cfg(target_os = "macos")]
 pub mod launch_activate_socket;
 pub mod mon_socket;
 pub mod mon_stream;
-pub mod outbound_proxy;
+pub mod outbound;
 pub mod packet_window;
-pub mod socks5_client;
 pub mod utils;
 
 /// Packet size for all UDP associations' send queue

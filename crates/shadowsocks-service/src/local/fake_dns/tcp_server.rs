@@ -10,8 +10,8 @@ use std::{
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use hickory_resolver::proto::{
-    op::{Message, response_code::ResponseCode},
-    serialize::binary::{BinEncodable, BinEncoder, EncodeMode},
+    op::{Message, ResponseCode},
+    serialize::binary::{BinEncodable, BinEncoder},
 };
 use log::{error, trace};
 use shadowsocks::{ServerAddr, lookup_then, net::TcpListener as ShadowTcpListener};
@@ -130,7 +130,7 @@ impl FakeDnsTcpServer {
                 Ok(m) => m,
                 Err(err) => {
                     error!("dns tcp {} parse message failed, error: {}", peer_addr, err);
-                    return Err(err.into());
+                    return Err(io::Error::new(io::ErrorKind::Other, err));
                 }
             };
 
@@ -139,14 +139,17 @@ impl FakeDnsTcpServer {
                 Err(err) => {
                     error!("failed to handle DNS request, error: {}", err);
 
-                    Message::error_msg(req_message.id(), req_message.op_code(), ResponseCode::ServFail)
+                    Message::error_msg(req_message.id, req_message.op_code, ResponseCode::ServFail)
                 }
             };
 
             let mut rsp_buffer = Vec::with_capacity(2 + 512);
             rsp_buffer.resize(2, 0);
-            let mut rsp_encoder = BinEncoder::with_offset(&mut rsp_buffer, 2, EncodeMode::Normal);
-            rsp_message.emit(&mut rsp_encoder)?;
+            let mut rsp_encoder = BinEncoder::with_offset(&mut rsp_buffer, 2);
+            if let Err(err) = rsp_message.emit(&mut rsp_encoder) {
+                error!("failed to encode DNS response, error: {}", err);
+                return Err(io::Error::new(io::ErrorKind::Other, err));
+            }
 
             let rsp_length = (rsp_buffer.len() - 2) as u16;
             BigEndian::write_u16(&mut rsp_buffer[0..2], rsp_length);

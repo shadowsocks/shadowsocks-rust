@@ -26,10 +26,16 @@ trust-dns = ["hickory-dns"]
 # WARN: Stream Cipher Protocol is proved to be insecure
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
-stream-cipher = ["shadowsocks-crypto/v1-stream", "shadowsocks-crypto/ring"]
+stream-cipher = [
+    "shadowsocks-crypto/v1-stream",
+    "shadowsocks-crypto/aws-lc",
+]
 
 # Enable AEAD ciphers
-aead-cipher = ["shadowsocks-crypto/v1-aead", "shadowsocks-crypto/ring"]
+aead-cipher = [
+    "shadowsocks-crypto/v1-aead",
+    "shadowsocks-crypto/aws-lc",
+]
 
 # Enable extra AEAD ciphers
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
@@ -37,7 +43,7 @@ aead-cipher-extra = ["aead-cipher", "shadowsocks-crypto/v1-aead-extra"]
 
 aead-cipher-2022 = [
     "shadowsocks-crypto/v2",
-    "shadowsocks-crypto/ring",
+    "shadowsocks-crypto/aws-lc",
     "rand",
     "aes",
     "lru_time_cache",
@@ -55,9 +61,9 @@ libc = "~0.2.141"
 bytes = "1.7"
 cfg-if = "1"
 byte_string = "1.0"
-base64 = "0.22"
+base64 = "0.23"
 url = "2.5"
-spin = { version = "0.10", features = ["std"] }
+spin = { version = "0.12", features = ["std"] }
 pin-project = "1.1"
 bloomfilter = { version = "3.0.0", optional = true }
 thiserror = "2.0"
@@ -72,7 +78,7 @@ percent-encoding = "2.1"
 futures = "0.3"
 trait-variant = "0.1"
 dynosaur = "0.3.0"
-sealed = "0.6"
+sealed = "0.7"
 
 socket2 = { version = "0.6", features = ["all"] }
 tokio = { version = "1.9.0", features = [
@@ -86,13 +92,13 @@ tokio = { version = "1.9.0", features = [
     "time",
 ] }
 
-hickory-resolver = { version = "0.25", optional = true }
+hickory-resolver = { version = "0.26", optional = true }
 arc-swap = { version = "1.7", optional = true }
 notify = { version = "8.0", optional = true }
 
-aes = { version = "0.8", optional = true }
+aes = { version = "0.9", optional = true }
 blake3 = "1.5"
-shadowsocks-crypto = { version = "0.6.0", default-features = false }
+shadowsocks-crypto = { version = "0.8.0", default-features = false }
 
 [target.'cfg(any(windows, target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "macos", target_os = "ios", target_os = "watchos", target_os = "tvos"))'.dependencies]
 tokio-tfo = "0.4.3"

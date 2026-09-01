@@ -15,7 +15,7 @@ use shadowsocks::{
     ProxyListener, ServerConfig,
     crypto::CipherKind,
     net::{AcceptOpts, TcpStream as OutboundTcpStream},
-    relay::tcprelay::{ProxyServerStream, utils::copy_encrypted_bidirectional},
+    relay::{socks5::Address, tcprelay::{ProxyServerStream, utils::copy_encrypted_bidirectional}},
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
@@ -23,14 +23,26 @@ use tokio::{
     time,
 };
 
-use crate::net::{outbound_proxy::connect_chain_with_opts, MonProxyStream, Socks5TcpClient, utils::ignore_until_end};
+use crate::net::{MonProxyStream, OutboundProxyStream, TcpDialer, utils::ignore_until_end};
 
 use super::context::ServiceContext;
 
-/// Unified outbound stream: either direct or via SOCKS5 proxy
+/// `TcpDialer` adapter that uses the server's connect-options.
+struct ServerTcpDialer<'a> {
+    context: &'a ServiceContext,
+}
+
+impl<'a> TcpDialer for ServerTcpDialer<'a> {
+    async fn dial(&self, addr: &Address) -> io::Result<OutboundTcpStream> {
+        OutboundTcpStream::connect_remote_with_opts(self.context.context_ref(), addr, self.context.connect_opts_ref())
+            .await
+    }
+}
+
+/// Unified outbound stream: either direct or through the outbound proxy chain.
 enum RemoteStream {
     Direct(OutboundTcpStream),
-    Proxied(Socks5TcpClient),
+    Proxied(OutboundProxyStream),
 }
 
 impl AsyncRead for RemoteStream {
@@ -245,23 +257,23 @@ impl TcpServerClient {
         }
 
         let mut remote_stream = match timeout_fut(self.timeout, async {
-            match self.context.outbound_proxies() {
-                [] => OutboundTcpStream::connect_remote_with_opts(
+            match self.context.outbound_client() {
+                None => OutboundTcpStream::connect_remote_with_opts(
                     self.context.context_ref(),
                     &target_addr,
                     self.context.connect_opts_ref(),
                 )
                 .await
                 .map(RemoteStream::Direct),
-                proxies => connect_chain_with_opts(
-                    self.context.context_ref(),
-                    target_addr.clone(),
-                    proxies,
-                    self.context.connect_opts_ref(),
-                )
-                .await
-                .map(RemoteStream::Proxied)
-                .map_err(io::Error::other),
+                Some(client) => {
+                    let dialer = ServerTcpDialer {
+                        context: self.context.as_ref(),
+                    };
+                    client
+                        .connect_tcp(&dialer, &target_addr)
+                        .await
+                        .map(RemoteStream::Proxied)
+                }
             }
         })
         .await

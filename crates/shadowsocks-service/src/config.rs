@@ -59,7 +59,7 @@ use std::{
 
 use cfg_if::cfg_if;
 #[cfg(feature = "hickory-dns")]
-use hickory_resolver::config::{NameServerConfig, ResolverConfig};
+use hickory_resolver::config::{ConnectionConfig, NameServerConfig, ResolverConfig};
 #[cfg(feature = "local-tun")]
 use ipnet::IpNet;
 #[cfg(feature = "local-fake-dns")]
@@ -392,6 +392,9 @@ struct SSConfig {
     outbound_udp_allow_fragmentation: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    inbound_udp_allow_fragmentation: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     outbound_proxy: Option<SSOutboundProxyConfig>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -592,6 +595,9 @@ struct SSServerExtConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     outbound_udp_allow_fragmentation: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    inbound_udp_allow_fragmentation: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     outbound_proxy: Option<SSOutboundProxyConfig>,
@@ -1447,6 +1453,7 @@ pub struct ServerInstanceConfig {
     pub outbound_bind_addr: Option<IpAddr>,
     pub outbound_bind_interface: Option<String>,
     pub outbound_udp_allow_fragmentation: Option<bool>,
+    pub inbound_udp_allow_fragmentation: Option<bool>,
     /// Outbound SOCKS5 proxy chain for this server instance (empty = no proxy)
     pub outbound_proxy: Vec<OutboundProxy>,
 }
@@ -1464,6 +1471,7 @@ impl ServerInstanceConfig {
             outbound_bind_addr: None,
             outbound_bind_interface: None,
             outbound_udp_allow_fragmentation: None,
+            inbound_udp_allow_fragmentation: None,
             outbound_proxy: Vec::new(),
         }
     }
@@ -1553,6 +1561,8 @@ pub struct Config {
     pub outbound_bind_addr: Option<IpAddr>,
     /// Outbound UDP sockets allow IP fragmentation
     pub outbound_udp_allow_fragmentation: bool,
+    /// Inbound UDP sockets allow IP fragmentation
+    pub inbound_udp_allow_fragmentation: bool,
     /// Path to protect callback unix address, only for Android
     #[cfg(target_os = "android")]
     pub outbound_vpn_protect_path: Option<PathBuf>,
@@ -1701,6 +1711,7 @@ impl Config {
             outbound_bind_interface: None,
             outbound_bind_addr: None,
             outbound_udp_allow_fragmentation: false,
+            inbound_udp_allow_fragmentation: false,
             #[cfg(target_os = "android")]
             outbound_vpn_protect_path: None,
             outbound_proxy: Vec::new(),
@@ -2420,6 +2431,10 @@ impl Config {
                     server_instance.outbound_udp_allow_fragmentation = Some(outbound_udp_allow_fragmentation);
                 }
 
+                if let Some(inbound_udp_allow_fragmentation) = svr.inbound_udp_allow_fragmentation {
+                    server_instance.inbound_udp_allow_fragmentation = Some(inbound_udp_allow_fragmentation);
+                }
+
                 if let Some(proxy_config) = svr.outbound_proxy {
                     server_instance.outbound_proxy = proxy_config
                         .into_proxies()
@@ -2595,6 +2610,10 @@ impl Config {
             nconfig.outbound_udp_allow_fragmentation = b;
         }
 
+        if let Some(b) = config.inbound_udp_allow_fragmentation {
+            nconfig.inbound_udp_allow_fragmentation = b;
+        }
+
         if let Some(proxy_config) = config.outbound_proxy {
             nconfig.outbound_proxy = proxy_config
                 .into_proxies()
@@ -2655,31 +2674,34 @@ impl Config {
     /// 1. `[(unix|tcp|udp)://]host[:port][,host[:port]]...`
     /// 2. Pre-defined. Like `google`, `cloudflare`
     pub fn set_dns_formatted(&mut self, dns: &str) -> Result<(), Error> {
+        #[cfg(feature = "hickory-dns")]
+        use hickory_resolver::config::{CLOUDFLARE, GOOGLE, QUAD9};
+
         self.dns = match dns {
             "system" => DnsConfig::System,
 
             #[cfg(feature = "hickory-dns")]
-            "google" => DnsConfig::HickoryDns(ResolverConfig::google()),
+            "google" => DnsConfig::HickoryDns(ResolverConfig::udp_and_tcp(&GOOGLE)),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-tls"))]
-            "google_tls" => DnsConfig::HickoryDns(ResolverConfig::google_tls()),
+            "google_tls" => DnsConfig::HickoryDns(ResolverConfig::tls(&GOOGLE)),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-https"))]
-            "google_https" => DnsConfig::HickoryDns(ResolverConfig::google_https()),
+            "google_https" => DnsConfig::HickoryDns(ResolverConfig::https(&GOOGLE)),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-h3"))]
-            "google_h3" => DnsConfig::HickoryDns(ResolverConfig::google_h3()),
+            "google_h3" => DnsConfig::HickoryDns(ResolverConfig::h3(&GOOGLE)),
 
             #[cfg(feature = "hickory-dns")]
-            "cloudflare" => DnsConfig::HickoryDns(ResolverConfig::cloudflare()),
+            "cloudflare" => DnsConfig::HickoryDns(ResolverConfig::udp_and_tcp(&CLOUDFLARE)),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-tls"))]
-            "cloudflare_tls" => DnsConfig::HickoryDns(ResolverConfig::cloudflare_tls()),
+            "cloudflare_tls" => DnsConfig::HickoryDns(ResolverConfig::tls(&CLOUDFLARE)),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-https"))]
-            "cloudflare_https" => DnsConfig::HickoryDns(ResolverConfig::cloudflare_https()),
+            "cloudflare_https" => DnsConfig::HickoryDns(ResolverConfig::https(&CLOUDFLARE)),
 
             #[cfg(feature = "hickory-dns")]
-            "quad9" => DnsConfig::HickoryDns(ResolverConfig::quad9()),
+            "quad9" => DnsConfig::HickoryDns(ResolverConfig::udp_and_tcp(&QUAD9)),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-tls"))]
-            "quad9_tls" => DnsConfig::HickoryDns(ResolverConfig::quad9_tls()),
+            "quad9_tls" => DnsConfig::HickoryDns(ResolverConfig::tls(&QUAD9)),
             #[cfg(all(feature = "hickory-dns", feature = "dns-over-https"))]
-            "quad9_https" => DnsConfig::HickoryDns(ResolverConfig::quad9_https()),
+            "quad9_https" => DnsConfig::HickoryDns(ResolverConfig::https(&QUAD9)),
 
             nameservers => self.parse_dns_nameservers(nameservers)?,
         };
@@ -2689,8 +2711,6 @@ impl Config {
 
     #[cfg(any(feature = "hickory-dns", feature = "local-dns"))]
     fn parse_dns_nameservers(&mut self, nameservers: &str) -> Result<DnsConfig, Error> {
-        use hickory_resolver::proto::xfer::Protocol;
-
         #[cfg(all(unix, feature = "local-dns"))]
         if let Some(nameservers) = nameservers.strip_prefix("unix://") {
             // A special DNS server only for shadowsocks-android
@@ -2739,7 +2759,7 @@ impl Config {
         //
         // For example:
         //     `192.168.1.100,192.168.1.101,3.4.5.6`
-        let mut c = ResolverConfig::new();
+        let mut nameservers_config = Vec::new();
         for part in nameservers.split(',') {
             let socket_addr = if let Ok(socket_addr) = part.parse::<SocketAddr>() {
                 socket_addr
@@ -2754,20 +2774,30 @@ impl Config {
                 return Err(e);
             };
 
-            if protocol.enable_udp() {
-                let ns_config = NameServerConfig::new(socket_addr, Protocol::Udp);
-                c.add_name_server(ns_config);
-            }
-            if protocol.enable_tcp() {
-                let ns_config = NameServerConfig::new(socket_addr, Protocol::Tcp);
-                c.add_name_server(ns_config);
+            if protocol.enable_tcp() && protocol.enable_udp() {
+                let mut tcp_config = ConnectionConfig::tcp();
+                tcp_config.port = socket_addr.port();
+                let mut udp_config = ConnectionConfig::udp();
+                udp_config.port = socket_addr.port();
+                let ns_config = NameServerConfig::new(socket_addr.ip(), true, vec![tcp_config, udp_config]);
+                nameservers_config.push(ns_config);
+            } else if protocol.enable_udp() {
+                let mut udp_config = ConnectionConfig::udp();
+                udp_config.port = socket_addr.port();
+                let ns_config = NameServerConfig::new(socket_addr.ip(), true, vec![udp_config]);
+                nameservers_config.push(ns_config);
+            } else if protocol.enable_tcp() {
+                let mut tcp_config = ConnectionConfig::tcp();
+                tcp_config.port = socket_addr.port();
+                let ns_config = NameServerConfig::new(socket_addr.ip(), true, vec![tcp_config]);
+                nameservers_config.push(ns_config);
             }
         }
 
-        Ok(if c.name_servers().is_empty() {
+        Ok(if nameservers_config.is_empty() {
             DnsConfig::System
         } else {
-            DnsConfig::HickoryDns(c)
+            DnsConfig::HickoryDns(ResolverConfig::from_parts(None, vec![], nameservers_config))
         })
     }
 
@@ -3163,7 +3193,7 @@ impl fmt::Display for Config {
                 jconf.password = if svr.method().is_none() {
                     None
                 } else {
-                    Some(svr.password().to_string())
+                    Some(svr.export_password())
                 };
                 jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
                 jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opts.clone());
@@ -3209,7 +3239,7 @@ impl fmt::Display for Config {
                         password: if svr.method().is_none() {
                             None
                         } else {
-                            Some(svr.password().to_string())
+                            Some(svr.export_password())
                         },
                         method: svr.method().to_string(),
                         users: svr.user_manager().map(|m| {
@@ -3264,6 +3294,7 @@ impl fmt::Display for Config {
                         outbound_bind_addr: inst.outbound_bind_addr,
                         outbound_bind_interface: inst.outbound_bind_interface.clone(),
                         outbound_udp_allow_fragmentation: inst.outbound_udp_allow_fragmentation,
+                        inbound_udp_allow_fragmentation: inst.inbound_udp_allow_fragmentation,
                         outbound_proxy: SSOutboundProxyConfig::from_proxies(&inst.outbound_proxy),
                     });
                 }
@@ -3370,6 +3401,7 @@ impl fmt::Display for Config {
         jconf.outbound_bind_addr = self.outbound_bind_addr.map(|i| i.to_string());
         jconf.outbound_bind_interface.clone_from(&self.outbound_bind_interface);
         jconf.outbound_udp_allow_fragmentation = Some(self.outbound_udp_allow_fragmentation);
+        jconf.inbound_udp_allow_fragmentation = Some(self.inbound_udp_allow_fragmentation);
         if jconf.outbound_proxy.is_none() {
             jconf.outbound_proxy = SSOutboundProxyConfig::from_proxies(&self.outbound_proxy);
         }

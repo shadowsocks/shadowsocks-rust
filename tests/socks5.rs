@@ -5,6 +5,7 @@ use std::{
     str,
 };
 
+use byte_string::ByteStr;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     time::{self, Duration},
@@ -132,7 +133,8 @@ async fn socks5_relay_aead() {
     .await
     .unwrap();
 
-    let req = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
+    let req =
+        b"GET /success.txt HTTP/1.1\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\nConnection: close\r\n\r\n";
     c.write_all(req).await.unwrap();
     c.flush().await.unwrap();
 
@@ -141,6 +143,10 @@ async fn socks5_relay_aead() {
     let mut buf = Vec::new();
     r.read_until(b'\n', &mut buf).await.unwrap();
 
-    let http_status = b"HTTP/1.0 200 OK\r\n";
-    assert!(buf.starts_with(http_status));
+    let http_status = b"HTTP/1.1 200 OK\r\n";
+    assert!(
+        buf.starts_with(http_status),
+        "HTTP status line mismatched, got: {:?}",
+        ByteStr::new(&buf)
+    );
 }

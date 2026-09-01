@@ -14,6 +14,16 @@
 [build.env]
 passthrough = ["RUSTFLAGS"]
 
+# NetBSD 9 (used by cross-rs's x86_64-unknown-netbsd image) lacks the
+# `getentropy` symbol that `aws-lc-sys` references. `getentropy`/`getrandom`
+# were added in NetBSD 10.0. We provide a small static shim backed by
+# `sysctl(CTL_KERN, KERN_ARND)` (the same mechanism NetBSD 9's own
+# arc4random uses) and make it available to the linker via `RUSTFLAGS`.
+[target.x86_64-unknown-netbsd]
+pre-build = "./build/netbsd-getentropy-shim.sh"
+[target.x86_64-unknown-netbsd.env]
+passthrough = ["RUSTFLAGS=-C link-arg=-L/usr/local/x86_64-unknown-netbsd/shimlib -C link-arg=-lgetentropy_shim"]
+
 # MIPS targets are dropped to Tier 3
 # https://github.com/rust-lang/compiler-team/issues/648
 # FIXME: build-std with sequence is supported only on git

@@ -47,7 +47,10 @@ fn print_qrcode(encoded: &str) {
 }
 
 fn encode(filename: &str, need_qrcode: bool) {
-    let config = Config::load_from_file(filename, ConfigType::Server).unwrap();
+    // Try loading as a server config first; fall back to local (client) config
+    let config = Config::load_from_file(filename, ConfigType::Server)
+        .or_else(|_| Config::load_from_file(filename, ConfigType::Local))
+        .unwrap();
 
     for svr in config.server {
         let encoded = svr.config.to_url();
@@ -106,7 +109,11 @@ fn main() -> ExitCode {
                 .action(ArgAction::Set)
                 .value_hint(ValueHint::FilePath)
                 .conflicts_with("DECODE_CONFIG_PATH")
-                .required_unless_present_any(["DECODE_CONFIG_PATH", "OUTLINE_CONFIG_URL"])
+                .required_unless_present_any(if cfg!(feature = "utility-url-outline") {
+                    vec!["DECODE_CONFIG_PATH", "OUTLINE_CONFIG_URL"]
+                } else {
+                    vec!["DECODE_CONFIG_PATH"]
+                })
                 .help("Encode the server configuration in the provided JSON file"),
         )
         .arg(
@@ -115,7 +122,11 @@ fn main() -> ExitCode {
                 .long("decode")
                 .action(ArgAction::Set)
                 .value_hint(ValueHint::FilePath)
-                .required_unless_present_any(["ENCODE_CONFIG_PATH", "OUTLINE_CONFIG_URL"])
+                .required_unless_present_any(if cfg!(feature = "utility-url-outline") {
+                    vec!["ENCODE_CONFIG_PATH", "OUTLINE_CONFIG_URL"]
+                } else {
+                    vec!["ENCODE_CONFIG_PATH"]
+                })
                 .help("Decode the server configuration from the provided ShadowSocks URL"),
         )
         .arg(

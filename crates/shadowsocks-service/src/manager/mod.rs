@@ -68,6 +68,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
     accept_opts.tcp.mptcp = config.mptcp;
     accept_opts.udp.mtu = config.udp_mtu;
+    accept_opts.udp.allow_fragmentation = config.inbound_udp_allow_fragmentation;
 
     if let Some(resolver) =
         build_dns_resolver(config.dns, config.ipv6_first, config.dns_cache_size, &connect_opts).await

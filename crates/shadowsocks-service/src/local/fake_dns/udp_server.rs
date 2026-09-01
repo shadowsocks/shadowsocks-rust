@@ -2,7 +2,7 @@
 
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
-use hickory_resolver::proto::op::{Message, response_code::ResponseCode};
+use hickory_resolver::proto::op::{Message, ResponseCode};
 use log::error;
 use shadowsocks::{ServerAddr, lookup_then, net::UdpSocket as ShadowUdpSocket};
 use tokio::time;
@@ -69,11 +69,17 @@ impl FakeDnsUdpServer {
                 Err(err) => {
                     error!("failed to handle DNS request, error: {}", err);
 
-                    Message::error_msg(req_message.id(), req_message.op_code(), ResponseCode::ServFail)
+                    Message::error_msg(req_message.id, req_message.op_code, ResponseCode::ServFail)
                 }
             };
 
-            let rsp_buffer = rsp_message.to_vec()?;
+            let rsp_buffer = match rsp_message.to_vec() {
+                Ok(b) => b,
+                Err(err) => {
+                    error!("failed to encode DNS response, error: {}", err);
+                    return Err(io::Error::new(io::ErrorKind::Other, err));
+                }
+            };
             let _ = self.listener.send_to(&rsp_buffer, peer_addr).await;
         }
     }

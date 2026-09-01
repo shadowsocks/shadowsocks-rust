@@ -643,9 +643,24 @@ impl ServerConfig {
         self.enc_key.as_ref()
     }
 
-    /// Get password
+    /// Get password (uPSK only; does not include identity keys)
     pub fn password(&self) -> &str {
         self.password.as_str()
+    }
+
+    /// Get the full password as it should appear in a config file or URL.
+    ///
+    /// For AEAD-2022 EIH configs this reconstructs `iPSK1:...:iPSKn:uPSK`.
+    /// For all other configs this is identical to [`password()`](Self::password).
+    pub fn export_password(&self) -> String {
+        if self.identity_keys.is_empty() {
+            return self.password.clone();
+        }
+        let mut parts: Vec<String> = self.identity_keys.iter()
+            .map(|k| USER_KEY_BASE64_ENGINE.encode(k))
+            .collect();
+        parts.push(self.password.clone());
+        parts.join(":")
     }
 
     /// Get identity keys (Client)
@@ -796,7 +811,8 @@ impl ServerConfig {
                     let user_info = format!("{}:{}", self.method(), self.password());
                     URL_PASSWORD_BASE64_ENGINE.encode(user_info)
                 } else {
-                    format!("{}:{}", self.method(), percent_encoding::utf8_percent_encode(self.password(), percent_encoding::NON_ALPHANUMERIC))
+                    let pwd = self.export_password();
+                    format!("{}:{}", self.method(), percent_encoding::utf8_percent_encode(&pwd, percent_encoding::NON_ALPHANUMERIC))
                 };
             } else {
                 let mut user_info = format!("{}:{}", self.method(), self.password());
@@ -1434,5 +1450,34 @@ mod test {
     fn test_server_config_from_url() {
         let server_config = ServerConfig::from_url("ss://foo:bar@127.0.0.1:9999");
         assert!(matches!(server_config, Err(UrlParseError::InvalidMethod)));
+    }
+
+    #[cfg(feature = "aead-cipher-2022")]
+    #[test]
+    fn test_aead2022_eih_url_roundtrip() {
+        // 32-byte keys encoded in standard base64
+        let server_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; // 32 zero bytes
+        let user_key = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="; // 32 one-bytes
+        let password = format!("{server_key}:{user_key}");
+
+        let svr = ServerConfig::new(
+            "127.0.0.1:8388".parse::<ServerAddr>().unwrap(),
+            password.clone(),
+            CipherKind::AEAD2022_BLAKE3_AES_256_GCM,
+        )
+        .unwrap();
+
+        // identity_keys must be populated with the server key
+        assert_eq!(svr.identity_keys().len(), 1);
+
+        // to_url must round-trip: decoding the generated URL must reproduce the original password
+        let url = svr.to_url();
+        let svr2 = ServerConfig::from_url(&url).unwrap();
+
+        assert_eq!(svr2.method(), CipherKind::AEAD2022_BLAKE3_AES_256_GCM);
+        assert_eq!(svr2.addr(), svr.addr());
+        assert_eq!(svr2.identity_keys().len(), 1);
+        assert_eq!(svr2.identity_keys(), svr.identity_keys());
+        assert_eq!(svr2.key(), svr.key());
     }
 }

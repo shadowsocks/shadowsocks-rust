@@ -11,5 +11,5 @@ pub mod config;
 mod http_client;
 mod http_service;
 pub mod server;
-mod tokio_rt;
+pub(crate) mod tokio_rt;
 mod utils;

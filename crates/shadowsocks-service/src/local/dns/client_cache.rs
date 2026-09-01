@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use hickory_resolver::proto::{ProtoError, op::Message};
+use hickory_resolver::proto::op::Message;
 use log::{debug, trace};
 use tokio::sync::Mutex;
 
@@ -18,7 +18,7 @@ use shadowsocks::{config::ServerConfig, net::ConnectOpts, relay::socks5::Address
 
 use crate::local::context::ServiceContext;
 
-use super::upstream::DnsClient;
+use super::upstream::{DnsClient, DnsClientResult};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, PartialOrd, Ord)]
 enum DnsClientKey {
@@ -51,7 +51,7 @@ impl DnsClientCache {
         msg: Message,
         connect_opts: &ConnectOpts,
         is_udp: bool,
-    ) -> Result<Message, ProtoError> {
+    ) -> DnsClientResult<Message> {
         let key = match is_udp {
             true => DnsClientKey::UdpLocal(ns),
             false => DnsClientKey::TcpLocal(ns),
@@ -66,7 +66,7 @@ impl DnsClientCache {
         ns: &Address,
         msg: Message,
         is_udp: bool,
-    ) -> Result<Message, ProtoError> {
+    ) -> DnsClientResult<Message> {
         let key = match is_udp {
             true => DnsClientKey::UdpRemote(ns.clone()),
             false => DnsClientKey::TcpRemote(ns.clone()),
@@ -75,7 +75,7 @@ impl DnsClientCache {
     }
 
     #[cfg(unix)]
-    pub async fn lookup_unix_stream<P: AsRef<Path>>(&self, ns: &P, msg: Message) -> Result<Message, ProtoError> {
+    pub async fn lookup_unix_stream<P: AsRef<Path>>(&self, ns: &P, msg: Message) -> DnsClientResult<Message> {
         let mut last_err = None;
 
         for _ in 0..self.retry_count {
@@ -113,7 +113,7 @@ impl DnsClientCache {
         connect_opts: Option<&ConnectOpts>,
         context: Option<&ServiceContext>,
         svr_cfg: Option<&ServerConfig>,
-    ) -> Result<Message, ProtoError> {
+    ) -> DnsClientResult<Message> {
         let mut last_err = None;
         for _ in 0..self.retry_count {
             let create_fn = async {

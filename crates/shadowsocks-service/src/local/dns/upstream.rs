@@ -12,7 +12,7 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use hickory_resolver::proto::{ProtoError, ProtoErrorKind, op::Message};
+use hickory_resolver::proto::{ProtoError, op::Message, serialize::binary::DecodeError};
 use log::{error, trace};
 use lru_time_cache::{Entry, LruCache};
 use shadowsocks::{
@@ -38,6 +38,34 @@ use crate::{
     local::net::udp::generate_client_session_id,
     net::{FlowStat, MonProxySocket, MonProxyStream, packet_window::PacketWindowFilter},
 };
+
+/// DnsClient API errors
+#[derive(thiserror::Error, Debug)]
+pub enum DnsClientError {
+    /// hickory-dns proto DecodeError
+    #[error("{0}")]
+    DnsDecodeError(#[from] DecodeError),
+
+    /// hickory-dns proto ProtoError
+    #[error("{0}")]
+    DnsProtoError(#[from] ProtoError),
+
+    /// std::io::Error
+    #[error("{0}")]
+    IoError(#[from] io::Error),
+
+    #[error("UDP packet id overflows")]
+    UdpPacketIdOverflows,
+
+    #[error("UDP packet id out of window")]
+    UdpPacketIdOutOfWindow,
+
+    #[error("Timeout")]
+    Timeout,
+}
+
+/// DnsClient API Result<T> type
+pub type DnsClientResult<T> = Result<T, DnsClientError>;
 
 /// Collection of various DNS connections
 #[allow(clippy::large_enum_variant)]
@@ -123,23 +151,20 @@ impl DnsClient {
 
     /// Make a DNS lookup
     #[allow(dead_code)]
-    pub async fn lookup(&mut self, mut msg: Message) -> Result<Message, ProtoError> {
+    pub async fn lookup(&mut self, mut msg: Message) -> DnsClientResult<Message> {
         self.inner_lookup(&mut msg).await
     }
 
     /// Make a DNS lookup with timeout
-    pub async fn lookup_timeout(&mut self, mut msg: Message, timeout: Duration) -> Result<Message, ProtoError> {
+    pub async fn lookup_timeout(&mut self, mut msg: Message, timeout: Duration) -> DnsClientResult<Message> {
         match time::timeout(timeout, self.inner_lookup(&mut msg)).await {
             Ok(Ok(msg)) => Ok(msg),
             Ok(Err(error)) => Err(error),
-            Err(..) => Err(ProtoErrorKind::Timeout.into()),
+            Err(..) => Err(DnsClientError::Timeout),
         }
     }
 
-    async fn inner_lookup(&mut self, msg: &mut Message) -> Result<Message, ProtoError> {
-        // Make a random ID
-        msg.set_id(rand::random());
-
+    async fn inner_lookup(&mut self, msg: &mut Message) -> DnsClientResult<Message> {
         trace!("DNS lookup {:?}", msg);
 
         match *self {
@@ -151,7 +176,7 @@ impl DnsClient {
                 let mut recv_buf = [0u8; 512];
                 let n = socket.recv(&mut recv_buf).await?;
 
-                Message::from_vec(&recv_buf[..n])
+                Message::from_vec(&recv_buf[..n]).map_err(Into::into)
             }
             #[cfg(unix)]
             Self::UnixStream { ref mut stream } => stream_query(stream, msg).await,
@@ -164,7 +189,7 @@ impl DnsClient {
             } => {
                 control.packet_id = match control.packet_id.checked_add(1) {
                     Some(i) => i,
-                    None => return Err(ProtoErrorKind::Message("packet id overflows").into()),
+                    None => return Err(DnsClientError::UdpPacketIdOverflows),
                 };
 
                 let bytes = msg.to_vec()?;
@@ -185,11 +210,11 @@ impl DnsClient {
                             ns, server_control.packet_id
                         );
 
-                        return Err(ProtoErrorKind::Message("packet id out of window").into());
+                        return Err(DnsClientError::UdpPacketIdOutOfWindow);
                     }
                 }
 
-                Message::from_vec(&recv_buf[..n])
+                Message::from_vec(&recv_buf[..n]).map_err(Into::into)
             }
         }
     }
@@ -268,7 +293,7 @@ impl DnsClient {
     }
 }
 
-pub async fn stream_query<S>(stream: &mut S, r: &Message) -> Result<Message, ProtoError>
+pub async fn stream_query<S>(stream: &mut S, r: &Message) -> DnsClientResult<Message>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -293,5 +318,5 @@ where
     }
     stream.read_exact(&mut rsp_bytes).await?;
 
-    Message::from_vec(&rsp_bytes)
+    Message::from_vec(&rsp_bytes).map_err(Into::into)
 }

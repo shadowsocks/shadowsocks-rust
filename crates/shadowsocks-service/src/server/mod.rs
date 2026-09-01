@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::future;
-use log::{info, trace};
+use log::trace;
 use shadowsocks::net::{AcceptOpts, ConnectOpts, UdpSocketOpts};
 
 use crate::{
@@ -100,6 +100,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.fastopen = config.fast_open;
     accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
     accept_opts.tcp.mptcp = config.mptcp;
+    accept_opts.udp.allow_fragmentation = config.inbound_udp_allow_fragmentation;
     accept_opts.udp.mtu = config.udp_mtu;
 
     let resolver = build_dns_resolver(config.dns, config.ipv6_first, config.dns_cache_size, &connect_opts)
@@ -118,7 +119,7 @@ pub async fn run(config: Config) -> io::Result<()> {
         }
 
         let mut connect_opts = connect_opts.clone();
-        let accept_opts = accept_opts.clone();
+        let mut accept_opts = accept_opts.clone();
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(fwmark) = inst.outbound_fwmark {
@@ -142,17 +143,32 @@ pub async fn run(config: Config) -> io::Result<()> {
             connect_opts.udp.allow_fragmentation = udp_allow_fragmentation;
         }
 
+        if let Some(udp_allow_fragmentation) = inst.inbound_udp_allow_fragmentation {
+            accept_opts.udp.allow_fragmentation = udp_allow_fragmentation;
+        }
+
         let has_outbound_proxies = !inst.outbound_proxy.is_empty() || !config.outbound_proxy.is_empty();
         if has_outbound_proxies {
-            server_builder.set_outbound_proxies(if !inst.outbound_proxy.is_empty() {
+            let proxies = if !inst.outbound_proxy.is_empty() {
                 inst.outbound_proxy.clone()
             } else {
                 config.outbound_proxy.clone()
-            });
-        }
+            };
 
-        if has_outbound_proxies && svr_enable_udp {
-            info!("outbound proxy chain only supports TCP; UDP traffic may not be proxied and may behave unexpectedly");
+            // Warn (once per server instance) when UDP is enabled but the
+            // chain cannot relay UDP — UDP traffic will then bypass the
+            // chain and connect to the upstream directly.
+            if svr_enable_udp {
+                let preview = crate::net::OutboundProxyClient::from_config(&proxies);
+                if !preview.supports_udp() {
+                    log::warn!(
+                        "outbound proxy chain contains non-SOCKS5 hop(s); UDP traffic will bypass the chain. \
+                         Configure a SOCKS5-only chain to enable UDP relay."
+                    );
+                }
+            }
+
+            server_builder.set_outbound_proxies(proxies);
         }
 
         server_builder.set_connect_opts(connect_opts);
