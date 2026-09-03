@@ -1,0 +1,128 @@
+Name:           @NAME@
+Version:        @VERSION@
+Release:        @RELEASE@%{?dist}
+Summary:        A Rust port of shadowsocks
+
+Group:          Applications/Internet
+License:        GPLv3+
+URL:            https://github.com/shadowsocks/%{name}
+Source0:        @SOURCE@
+
+AutoReq:        no
+Conflicts:      python-shadowsocks python3-shadowsocks
+#BuildRequires:  make gcc pcre-devel libtool mbedtls-devel libsodium-devel >= 1.0.7 libev-devel udns-devel rust cargo llvm7.0-libs
+Requires:       pcre libcap
+
+
+%if 0%{?suse_version}
+Requires:       libopenssl1_0_0
+BuildRequires:  libopenssl-devel
+%else
+Requires:       openssl
+BuildRequires:  openssl-devel
+%endif
+
+%if 0%{?fedora} >= 15 || 0%{?rhel} >=7 || 0%{?suse_version} >= 1210
+%global use_systemd 1
+%else
+%global use_systemd 0
+%endif
+
+%if 0%{?use_systemd}
+%{?systemd_requires}
+%if 0%{?suse_version}
+BuildRequires:   systemd-rpm-macros
+%else
+BuildRequires:   systemd
+%endif
+%endif
+
+
+%description
+shadowsocks-rust is a rust port of lightweight secured scoks5 proxy.
+
+
+%prep
+#%setup -q
+%setup -q -n @NAME_VERSION@
+
+%build
+SODIUM_BUILD_STATIC=yes make TARGET=release
+
+
+%install
+mkdir -p %{buildroot}%{_initddir}
+make install TARGET=release PREFIX=/usr/bin DESTDIR=%{buildroot}
+mkdir -p %{buildroot}/etc/shadowsocks-rust
+%if ! 0%{?use_systemd}
+#mkdir -p %{buildroot}%{_initddir}
+install -m 755 %{_builddir}/%{buildsubdir}/rpm/SOURCES/etc/init.d/shadowsocks-rust.init %{buildroot}%{_initddir}/shadowsocks-rust
+%else
+mkdir -p %{buildroot}%{_sysconfdir}/sysconfig
+mkdir -p %{buildroot}%{_unitdir}
+install -m 644 %{_builddir}/%{buildsubdir}/rpm/SOURCES/systemd/shadowsocks-rust.default %{buildroot}%{_sysconfdir}/sysconfig/shadowsocks-rust
+install -m 644 %{_builddir}/%{buildsubdir}/rpm/SOURCES/systemd/shadowsocks-rust.service %{buildroot}%{_unitdir}/shadowsocks-rust.service
+install -m 644 %{_builddir}/%{buildsubdir}/rpm/SOURCES/systemd/shadowsocks-rust-*.service %{buildroot}%{_unitdir}/
+%endif
+install -m 644 %{_builddir}/%{buildsubdir}/debian/config.json %{buildroot}%{_sysconfdir}/shadowsocks-rust/config.json
+%if 0%{?use_systemd} && 0%{?suse_version}
+%service_add_pre shadowsocks-rust.service
+%endif
+
+%post
+%if ! 0%{?use_systemd}
+/sbin/chkconfig --add shadowsocks-rust > /dev/null 2>&1 || :
+%else
+%if 0%{?suse_version}
+%service_add_post shadowsocks-rust.service
+%else
+%systemd_post shadowsocks-rust.service
+%endif
+%endif
+setcap cap_net_bind_service+ep %{_bindir}/sslocal \
+       cap_net_bind_service+ep %{_bindir}/ssserver \
+
+%preun
+%if ! 0%{?use_systemd}
+if [ $1 -eq 0 ]; then
+    /sbin/service shadowsocks-rust stop  > /dev/null 2>&1 || :
+    /sbin/chkconfig --del shadowsocks-rust > /dev/null 2>&1 || :
+fi
+%else
+%if 0%{?suse_version}
+%service_del_preun shadowsocks-rust.service
+%else
+%systemd_preun shadowsocks-rust.service
+%preif [ $1 -eq 0 ] ; then
+    # Package removal, not upgrade
+    systemctl stop shadowsocks-rust-server@'*'.service  > /dev/null 2>&1 || :
+    systemctl stop shadowsocks-rust-local@'*'.service  > /dev/null 2>&1 || :
+    systemctl --no-reload disable shadowsocks-rust-server@.service  > /dev/null 2>&1 || :
+    systemctl --no-reload disable shadowsocks-rust-local@.service  > /dev/null 2>&1 || :
+fi
+%endif
+%endif
+
+%postun
+%if 0%{?use_systemd}
+%if 0%{?suse_version}
+%service_del_postun shadowsocks-rust.service
+%else
+%systemd_postun_with_restart shadowsocks-rust.service
+%systemd_postun_with_restart shadowsocks-rust-server@'*'.service
+%systemd_postun_with_restart shadowsocks-rust-local@'*'.service
+%endif
+%endif
+
+%files
+%{_bindir}/*
+%config(noreplace) %{_sysconfdir}/shadowsocks-rust/config.json
+%if ! 0%{?use_systemd}
+%{_initddir}/shadowsocks-rust
+%else
+%{_unitdir}/shadowsocks-rust.service
+%{_unitdir}/shadowsocks-rust-*.service
+%config(noreplace) %{_sysconfdir}/sysconfig/shadowsocks-rust
+%endif
+
+%changelog
