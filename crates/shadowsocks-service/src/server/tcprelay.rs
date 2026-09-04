@@ -15,7 +15,10 @@ use shadowsocks::{
     ProxyListener, ServerConfig,
     crypto::CipherKind,
     net::{AcceptOpts, TcpStream as OutboundTcpStream},
-    relay::{socks5::Address, tcprelay::{ProxyServerStream, utils::copy_encrypted_bidirectional}},
+    relay::{
+        socks5::Address,
+        tcprelay::{ProxyServerStream, utils::copy_encrypted_bidirectional},
+    },
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
@@ -270,7 +273,7 @@ impl TcpServerClient {
                         context: self.context.as_ref(),
                     };
                     client
-                        .connect_tcp(&dialer, &target_addr)
+                        .connect_tcp(self.context.context(), &dialer, &target_addr)
                         .await
                         .map(RemoteStream::Proxied)
                 }

@@ -1,0 +1,20 @@
+{
+    // sslocal's normal server is the physical first hop.
+    "server": "edge.example.com",
+    "server_port": 443,
+    "method": "aes-128-gcm",
+    "password": "edge-password",
+    "plugin": "obfs-local",
+    "plugin_opts": "obfs=http;obfs-host=cdn.example.com",
+
+    "local_address": "127.0.0.1",
+    "local_port": 1080,
+    "mode": "tcp_only",
+
+    // outbound_proxy entries follow the main server in array order. This SS
+    // hop is therefore the landing server and carries the final destination.
+    // Later hops cannot use SIP003 plugins, and sslocal chains are TCP-only.
+    "outbound_proxy": [
+        "ss://YWVzLTI1Ni1nY206bGFuZGluZy1wYXNzd29yZA@landing.example.com:8388#landing"
+    ]
+}

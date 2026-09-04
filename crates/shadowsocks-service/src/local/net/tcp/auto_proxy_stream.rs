@@ -23,28 +23,27 @@ use crate::{
 
 use super::auto_proxy_io::AutoProxyIo;
 
-/// Outbound transport used by [`AutoProxyClientStream`]: either a direct
-/// TCP connection or a tunnel through the configured outbound proxy chain.
+/// Fully established proxied transport used by [`AutoProxyClientStream`].
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = OutboundTransportProj)]
 pub enum OutboundTransport {
-    /// Direct TCP, no outbound chain configured.
-    Direct(#[pin] TcpStream),
-    /// Tunnel produced by `OutboundProxyClient::connect_tcp`.
-    Chained(#[pin] OutboundProxyStream),
+    /// A normal one-hop Shadowsocks connection with no trailing chain.
+    Direct(#[pin] ProxyClientStream<MonProxyStream<TcpStream>>),
+    /// A complete main-server-first chain produced by `OutboundProxyClient`.
+    Chained(#[pin] MonProxyStream<OutboundProxyStream>),
 }
 
 impl OutboundTransport {
     fn local_addr(&self) -> io::Result<SocketAddr> {
         match self {
-            Self::Direct(s) => s.local_addr(),
-            Self::Chained(s) => s.local_addr(),
+            Self::Direct(s) => s.get_ref().get_ref().local_addr(),
+            Self::Chained(s) => s.get_ref().local_addr(),
         }
     }
 
     fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
         match self {
-            Self::Direct(s) => s.set_nodelay(nodelay),
+            Self::Direct(s) => s.get_ref().get_ref().set_nodelay(nodelay),
             // For tunnels we can only forward the request to the underlying
             // TCP socket if it is exposed; the unified enum has no such
             // accessor today, so the call is a no-op.
@@ -120,9 +119,9 @@ impl<'a> TcpDialer for DirectTcpDialer<'a> {
 #[allow(clippy::large_enum_variant)]
 #[pin_project(project = AutoProxyClientStreamProj)]
 pub enum AutoProxyClientStream {
-    /// Tunnel through the shadowsocks server (optionally over the outbound
-    /// proxy chain).
-    Proxied(#[pin] ProxyClientStream<MonProxyStream<OutboundTransport>>),
+    /// Tunnel through the main Shadowsocks server and any configured
+    /// trailing outbound proxy hops.
+    Proxied(#[pin] OutboundTransport),
     /// Direct TCP, bypassing the shadowsocks server.
     Bypassed(#[pin] TcpStream),
 }
@@ -238,21 +237,38 @@ impl AutoProxyClientStream {
     {
         let flow_stat = context.flow_stat();
         let target_addr: Address = addr.into();
-        let ss_addr: Address = server.server_config().tcp_external_addr().into();
 
         let dial_result = match context.outbound_client() {
-            None => TcpStream::connect_remote_with_opts(context.context_ref(), &ss_addr, connect_opts)
-                .await
-                .map(OutboundTransport::Direct),
+            None => {
+                let ss_addr: Address = server.server_config().tcp_external_addr().into();
+                match TcpStream::connect_remote_with_opts(context.context_ref(), &ss_addr, connect_opts).await {
+                    Ok(transport) => {
+                        let transport = MonProxyStream::from_stream(transport, flow_stat.clone());
+                        let stream = ProxyClientStream::from_stream(
+                            context.context(),
+                            transport,
+                            server.server_config(),
+                            target_addr.clone(),
+                        );
+                        Ok(OutboundTransport::Direct(stream))
+                    }
+                    Err(err) => Err(err),
+                }
+            }
             Some(client) => {
                 let dialer = DirectTcpDialer {
                     context: context.as_ref(),
                     opts: connect_opts,
                 };
                 client
-                    .connect_tcp(&dialer, &ss_addr)
+                    .connect_tcp_with_initial_shadowsocks(
+                        context.context(),
+                        &dialer,
+                        server.server_config(),
+                        &target_addr,
+                    )
                     .await
-                    .map(OutboundTransport::Chained)
+                    .map(|stream| OutboundTransport::Chained(MonProxyStream::from_stream(stream, flow_stat.clone())))
             }
         };
 
@@ -264,21 +280,19 @@ impl AutoProxyClientStream {
             }
         };
 
-        let mon = MonProxyStream::from_stream(transport, flow_stat);
-        let stream = ProxyClientStream::from_stream(context.context(), mon, server.server_config(), target_addr);
-        Ok(Self::Proxied(stream))
+        Ok(Self::Proxied(transport))
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         match *self {
-            Self::Proxied(ref s) => s.get_ref().get_ref().local_addr(),
+            Self::Proxied(ref s) => s.local_addr(),
             Self::Bypassed(ref s) => s.local_addr(),
         }
     }
 
     pub fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
         match *self {
-            Self::Proxied(ref s) => s.get_ref().get_ref().set_nodelay(nodelay),
+            Self::Proxied(ref s) => s.set_nodelay(nodelay),
             Self::Bypassed(ref s) => s.set_nodelay(nodelay),
         }
     }
