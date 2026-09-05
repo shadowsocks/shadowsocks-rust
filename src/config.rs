@@ -67,7 +67,15 @@ pub fn get_default_config_path(config_file: &str) -> Option<PathBuf> {
     // UNIX global configuration file
     #[cfg(unix)]
     {
-        let mut global_config_path = PathBuf::from("/etc/shadowsocks-rust");
+        let mut global_config_path = if cfg!(target_os = "android") {
+            if let Ok(prefix) = std::env::var("PREFIX") {
+                PathBuf::from(format!("{}/etc/shadowsocks-rust", prefix))
+            } else {
+                PathBuf::from("/etc/shadowsocks-rust")
+            }
+        } else {
+            PathBuf::from("/etc/shadowsocks-rust")
+        };
         for filename in &config_files {
             global_config_path.push(filename);
             if global_config_path.exists() {
