@@ -1,9 +1,17 @@
 ---
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: shadowsocks-rust
+  labels:
+    app.kubernetes.io/name: shadowsocks-rust
+---
 # Source: shadowsocks-rust/templates/serviceaccount.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: shadowsocks-rust
+  namespace: shadowsocks-rust
   labels:
     helm.sh/chart: shadowsocks-rust-0.1.0
     app.kubernetes.io/name: shadowsocks-rust
@@ -16,6 +24,7 @@ kind: ConfigMap
 apiVersion: v1
 metadata:
   name: shadowsocks-rust
+  namespace: shadowsocks-rust
   labels:
     helm.sh/chart: shadowsocks-rust-0.1.0
     app.kubernetes.io/name: shadowsocks-rust
@@ -34,7 +43,9 @@ data:
             "password": "mypassword",
             "server": "::",
             "server_port": 8388,
-            "service_port": 80
+            "service_port": 80,
+            "plugin": "v2ray-plugin",
+            "plugin_opts": "server;host=mydomain",
           }
         ]
     }
@@ -44,6 +55,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: shadowsocks-rust
+  namespace: shadowsocks-rust
   labels:
     helm.sh/chart: shadowsocks-rust-0.1.0
     app.kubernetes.io/name: shadowsocks-rust
@@ -66,6 +78,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: shadowsocks-rust
+  namespace: shadowsocks-rust
   labels:
     helm.sh/chart: shadowsocks-rust-0.1.0
     app.kubernetes.io/name: shadowsocks-rust
@@ -93,6 +106,28 @@ spec:
           name: shadowsocks-rust
       - name: plugins
         emptyDir: {}
+      initContainers:
+      - name: plugin-downloader
+        image: busybox
+        command: ['sh', '-c']
+        args:
+        - |
+          cd /download;
+          TAG=$(wget -qO- https://api.github.com/repos/shadowsocks/v2ray-plugin/releases/latest | grep tag_name | cut -d '"' -f4);
+          wget https://github.com/shadowsocks/v2ray-plugin/releases/download/$TAG/v2ray-plugin-linux-amd64-$TAG.tar.gz;
+          tar -xf *.gz;
+          rm *.gz;
+          mv v2ray* /download/v2ray-plugin;
+          chmod +x /download/v2ray-plugin;
+          TAG=$(wget -qO- https://api.github.com/repos/teddysun/xray-plugin/releases/latest | grep tag_name | cut -d '"' -f4);
+          wget https://github.com/teddysun/xray-plugin/releases/download/$TAG/xray-plugin-linux-amd64-$TAG.tar.gz;
+          tar -xf *.gz;
+          rm *.gz;
+          mv xray* /download/xray-plugin;
+          chmod +x /download/xray-plugin;
+        volumeMounts:
+        - name: plugins
+          mountPath: /download
       containers:
       - name: shadowsocks-rust
         securityContext:
@@ -104,7 +139,7 @@ spec:
           mountPath: /etc/shadowsocks-rust
           readOnly: true
         - name: plugins
-          mountPath: /usr/local/bin
+          mountPath: /usr/local/sbin
         ports:
         - name: ss-8388
           containerPort: 8388
@@ -126,24 +161,4 @@ spec:
           requests:
             cpu: 20m
             memory: 32Mi
----
-# Source: shadowsocks-rust/templates/tests/test-connection.yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: "shadowsocks-rust-test-connection"
-  labels:
-    helm.sh/chart: shadowsocks-rust-0.1.0
-    app.kubernetes.io/name: shadowsocks-rust
-    app.kubernetes.io/instance: shadowsocks-rust
-    app.kubernetes.io/version: "1.x.x"
-    app.kubernetes.io/managed-by: Helm
-  annotations:
-    "helm.sh/hook": test
-spec:
-  containers:
-    - name: wget
-      image: busybox
-      command: ['wget']
-      args: ['shadowsocks-rust:']
-  restartPolicy: Never
+...
