@@ -189,6 +189,7 @@ smoltcp = { version = "0.14", optional = true, default-features = false, feature
     "proto-ipv4",
     "proto-ipv4-fragmentation",
     "proto-ipv6",
+    "auto-icmp-echo-reply",
     "socket-icmp",
     "socket-udp",
     "socket-tcp",

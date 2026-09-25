@@ -383,7 +383,8 @@ impl Tun {
             }
             IpProtocol::Icmp | IpProtocol::Icmpv6 => {
                 // ICMP is handled by TCP's Interface.
-                // smoltcp's interface will always send replies to EchoRequest
+                // smoltcp's interface will send replies to EchoRequest,
+                // which requires the "auto-icmp-echo-reply" feature of smoltcp.
                 self.tcp.drive_interface_state(frame).await;
             }
             _ => {
