@@ -23,7 +23,6 @@ use shadowsocks::{
     plugin::{Plugin, PluginMode},
     relay::{
         socks5::Address,
-        tcprelay::proxy_stream::ProxyClientStream,
         udprelay::{MAXIMUM_UDP_PAYLOAD_SIZE, options::UdpSocketControlData, proxy_socket::ProxySocket},
     },
 };
@@ -36,6 +35,8 @@ use tokio::{
 };
 
 use crate::{config::ServerInstanceConfig, local::context::ServiceContext};
+
+use crate::local::net::tcp::auto_proxy_stream::AutoProxyClientStream;
 
 use super::{
     server_data::ServerIdent,
@@ -851,9 +852,9 @@ impl PingChecker {
 
         let addr = Address::DomainNameAddress("clients3.google.com".to_owned(), 80);
 
-        let mut stream = ProxyClientStream::connect_with_opts(
-            self.context.context(),
-            self.server.server_config(),
+        let mut stream = AutoProxyClientStream::connect_proxied_with_opts(
+            self.context.clone(),
+            &self.server,
             &addr,
             self.server.connect_opts_ref(),
         )
@@ -890,9 +891,9 @@ impl PingChecker {
 
         let addr = Address::DomainNameAddress("detectportal.firefox.com".to_owned(), 80);
 
-        let mut stream = ProxyClientStream::connect_with_opts(
-            self.context.context(),
-            self.server.server_config(),
+        let mut stream = AutoProxyClientStream::connect_proxied_with_opts(
+            self.context.clone(),
+            &self.server,
             &addr,
             self.server.connect_opts_ref(),
         )
@@ -921,6 +922,13 @@ impl PingChecker {
     }
 
     async fn check_request_udp(&self) -> io::Result<()> {
+        if self.context.outbound_client().is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "UDP health checks are unavailable with an sslocal outbound chain",
+            ));
+        }
+
         // TransactionID: 0x1234
         // Flags: 0x0100 RD
         // Questions: 0x0001

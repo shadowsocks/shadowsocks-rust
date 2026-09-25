@@ -14,7 +14,7 @@ use std::{
 };
 
 use pin_project::pin_project;
-use shadowsocks::net::TcpStream;
+use shadowsocks::{net::TcpStream, relay::tcprelay::ProxyClientStream};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 #[cfg(feature = "local-http")]
@@ -52,6 +52,9 @@ enum OutboundProxyStreamInner {
     /// Tunnel obtained from a successful HTTP CONNECT upgrade.
     #[cfg(feature = "local-http")]
     Http(#[pin] HttpConnectTunnel),
+
+    /// Shadowsocks encryption layered on an inner outbound stream.
+    Shadowsocks(#[pin] Box<ProxyClientStream<OutboundProxyStream>>),
 }
 
 impl OutboundProxyStream {
@@ -95,6 +98,7 @@ impl OutboundProxyStream {
             OutboundProxyStreamInner::Https(_) => Err(self),
             #[cfg(feature = "local-http")]
             OutboundProxyStreamInner::Http(_) => Err(self),
+            OutboundProxyStreamInner::Shadowsocks(_) => Err(self),
         }
     }
 
@@ -115,6 +119,14 @@ impl OutboundProxyStream {
         Self {
             local_addr,
             inner: OutboundProxyStreamInner::Http(tunnel),
+        }
+    }
+
+    /// Wrap an established transport with a Shadowsocks client stream.
+    pub(super) fn from_shadowsocks(local_addr: SocketAddr, stream: ProxyClientStream<OutboundProxyStream>) -> Self {
+        Self {
+            local_addr,
+            inner: OutboundProxyStreamInner::Shadowsocks(Box::new(stream)),
         }
     }
 
@@ -146,6 +158,7 @@ impl AsyncRead for OutboundProxyStream {
             OutboundProxyStreamInnerProj::Https(s) => s.poll_read(cx, buf),
             #[cfg(feature = "local-http")]
             OutboundProxyStreamInnerProj::Http(s) => s.poll_read(cx, buf),
+            OutboundProxyStreamInnerProj::Shadowsocks(s) => s.poll_read(cx, buf),
         }
     }
 }
@@ -158,6 +171,7 @@ impl AsyncWrite for OutboundProxyStream {
             OutboundProxyStreamInnerProj::Https(s) => s.poll_write(cx, buf),
             #[cfg(feature = "local-http")]
             OutboundProxyStreamInnerProj::Http(s) => s.poll_write(cx, buf),
+            OutboundProxyStreamInnerProj::Shadowsocks(s) => s.poll_write(cx, buf),
         }
     }
 
@@ -168,6 +182,7 @@ impl AsyncWrite for OutboundProxyStream {
             OutboundProxyStreamInnerProj::Https(s) => s.poll_flush(cx),
             #[cfg(feature = "local-http")]
             OutboundProxyStreamInnerProj::Http(s) => s.poll_flush(cx),
+            OutboundProxyStreamInnerProj::Shadowsocks(s) => s.poll_flush(cx),
         }
     }
 
@@ -178,6 +193,7 @@ impl AsyncWrite for OutboundProxyStream {
             OutboundProxyStreamInnerProj::Https(s) => s.poll_shutdown(cx),
             #[cfg(feature = "local-http")]
             OutboundProxyStreamInnerProj::Http(s) => s.poll_shutdown(cx),
+            OutboundProxyStreamInnerProj::Shadowsocks(s) => s.poll_shutdown(cx),
         }
     }
 
@@ -192,6 +208,7 @@ impl AsyncWrite for OutboundProxyStream {
             OutboundProxyStreamInnerProj::Https(s) => s.poll_write_vectored(cx, bufs),
             #[cfg(feature = "local-http")]
             OutboundProxyStreamInnerProj::Http(s) => s.poll_write_vectored(cx, bufs),
+            OutboundProxyStreamInnerProj::Shadowsocks(s) => s.poll_write_vectored(cx, bufs),
         }
     }
 
@@ -203,6 +220,7 @@ impl AsyncWrite for OutboundProxyStream {
             OutboundProxyStreamInner::Https(_) => false,
             #[cfg(feature = "local-http")]
             OutboundProxyStreamInner::Http(_) => false,
+            OutboundProxyStreamInner::Shadowsocks(s) => s.is_write_vectored(),
         }
     }
 }

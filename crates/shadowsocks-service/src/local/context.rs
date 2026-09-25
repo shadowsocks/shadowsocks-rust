@@ -1,6 +1,6 @@
 //! Shadowsocks Local Server Context
 
-use std::sync::Arc;
+use std::{io, sync::Arc};
 #[cfg(feature = "local-dns")]
 use std::{net::IpAddr, time::Duration};
 
@@ -40,7 +40,7 @@ pub struct ServiceContext {
     // Flow statistic report
     flow_stat: Arc<FlowStat>,
 
-    // Outbound proxy chain (sslocal -> ss-server connection routes through these proxies)
+    // Trailing proxy chain (sslocal main server -> these proxies -> target)
     outbound_client: Option<Arc<OutboundProxyClient>>,
 
     // For DNS relay's ACL domain name reverse lookup -- whether the IP shall be forwarded
@@ -117,13 +117,16 @@ impl ServiceContext {
         self.acl.as_deref()
     }
 
-    /// Set outbound proxy chain (connection to SS server routes through these proxies)
-    pub fn set_outbound_proxies(&mut self, proxies: Vec<OutboundProxy>) {
+    /// Set the proxy hops that follow sslocal's configured main SS server.
+    pub fn set_outbound_proxies(&mut self, proxies: Vec<OutboundProxy>) -> io::Result<()> {
         self.outbound_client = if proxies.is_empty() {
             None
         } else {
-            Some(Arc::new(OutboundProxyClient::from_config(&proxies)))
+            Some(Arc::new(OutboundProxyClient::try_from_config_after_main_server(
+                &proxies,
+            )?))
         };
+        Ok(())
     }
 
     /// Get the outbound proxy client (if a chain is configured).
