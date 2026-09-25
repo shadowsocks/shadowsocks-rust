@@ -521,7 +521,12 @@ impl DecryptedReader {
 enum EncryptWriteState {
     AssembleHeader,
     AssemblePacket,
-    Writing { pos: usize },
+    /// `plain_len` records the length of the plaintext buffer that was assembled into the
+    /// pending ciphertext frame. It must be reported back to the caller when the frame is
+    /// fully sent, because the caller is allowed to retry `poll_write_encrypted` with a
+    /// longer buffer after `Poll::Pending` (e.g. tokio's `copy` appending freshly read data).
+    /// Only the bytes counted by `plain_len` were actually consumed.
+    Writing { pos: usize, plain_len: usize },
 }
 
 /// Writer wrapper that will encrypt data automatically
@@ -695,7 +700,10 @@ impl EncryptedWriter {
                     unsafe { self.buffer.advance_mut(self.cipher.tag_len()) };
 
                     // Step 3. Write all
-                    self.state = EncryptWriteState::Writing { pos: 0 };
+                    self.state = EncryptWriteState::Writing {
+                        pos: 0,
+                        plain_len: buf.len(),
+                    };
                 }
 
                 EncryptWriteState::AssemblePacket => {
@@ -722,9 +730,12 @@ impl EncryptedWriter {
                     unsafe { self.buffer.advance_mut(self.cipher.tag_len()) };
 
                     // Step 3. Write all
-                    self.state = EncryptWriteState::Writing { pos: 0 };
+                    self.state = EncryptWriteState::Writing {
+                        pos: 0,
+                        plain_len: buf.len(),
+                    };
                 }
-                EncryptWriteState::Writing { ref mut pos } => {
+                EncryptWriteState::Writing { ref mut pos, plain_len } => {
                     while *pos < self.buffer.len() {
                         let n = ready!(Pin::new(&mut *stream).poll_write(cx, &self.buffer[*pos..]))?;
                         if n == 0 {
@@ -737,9 +748,141 @@ impl EncryptedWriter {
                     self.state = EncryptWriteState::AssemblePacket;
                     self.buffer.clear();
 
-                    return Ok(buf.len()).into();
+                    // Only the plaintext bytes that were assembled into this frame have been sent.
+                    // The caller may retry with a longer buffer after `Poll::Pending`, and those
+                    // extra bytes have NOT been encrypted into this frame yet.
+                    return Ok(plain_len).into();
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        io,
+        pin::Pin,
+        task::{Context as TaskContext, Poll as TaskPoll, Waker},
+    };
+
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+    use super::*;
+    use crate::config::ServerType;
+
+    /// An `AsyncWrite` sink that can be blocked to simulate backpressure,
+    /// replayable as an `AsyncRead` source for verifying the round-trip.
+    struct TestStream {
+        blocked: bool,
+        bytes: Vec<u8>,
+        read_pos: usize,
+    }
+
+    impl AsyncWrite for TestStream {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            _cx: &mut TaskContext<'_>,
+            data: &[u8],
+        ) -> TaskPoll<io::Result<usize>> {
+            if self.blocked {
+                return TaskPoll::Pending;
+            }
+            self.bytes.extend_from_slice(data);
+            TaskPoll::Ready(Ok(data.len()))
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut TaskContext<'_>) -> TaskPoll<io::Result<()>> {
+            TaskPoll::Ready(Ok(()))
+        }
+
+        fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut TaskContext<'_>) -> TaskPoll<io::Result<()>> {
+            TaskPoll::Ready(Ok(()))
+        }
+    }
+
+    impl AsyncRead for TestStream {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _cx: &mut TaskContext<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> TaskPoll<io::Result<()>> {
+            if self.read_pos < self.bytes.len() {
+                let remaining = &self.bytes[self.read_pos..];
+                let n = remaining.len().min(buf.remaining());
+                buf.put_slice(&remaining[..n]);
+                self.read_pos += n;
+            }
+            TaskPoll::Ready(Ok(()))
+        }
+    }
+
+    // Regression test for https://github.com/shadowsocks/shadowsocks-rust/issues/2175
+    //
+    // The writer must report the plaintext length that was actually encrypted into the
+    // pending frame, instead of the length of the buffer passed on the retried call.
+    // Otherwise, bytes appended by the caller while the writer was `Poll::Pending`
+    // (as tokio's `copy` does) would be silently dropped.
+    #[test]
+    fn test_retry_after_pending_with_longer_buffer() {
+        let context = Context::new_shared(ServerType::Server);
+
+        let key = [0x42u8; 16];
+        let nonce = [0x24u8; 16];
+        let method = CipherKind::AEAD2022_BLAKE3_AES_128_GCM;
+
+        let mut writer = EncryptedWriter::new(StreamType::Client, method, &key, &nonce);
+
+        let mut stream = TestStream {
+            blocked: true,
+            bytes: Vec::new(),
+            read_pos: 0,
+        };
+
+        let mut cx = TaskContext::from_waker(Waker::noop());
+
+        // 1st attempt: the underlying stream is blocked, so the writer must return Pending.
+        assert!(
+            writer
+                .poll_write_encrypted(&mut cx, &mut stream, b"a")
+                .is_pending()
+        );
+
+        // The underlying stream becomes writable.
+        stream.blocked = false;
+
+        // 2nd attempt: the caller retries with a longer buffer, like tokio's
+        // `copy`/`copy_bidirectional` appending freshly read data while waiting.
+        // Only "a" was encrypted into the pending frame, so only 1 byte may be reported.
+        match writer.poll_write_encrypted(&mut cx, &mut stream, b"ab") {
+            TaskPoll::Ready(Ok(n)) => assert_eq!(n, 1),
+            v => panic!("unexpected result: {v:?}"),
+        }
+
+        // The caller advances by the reported length and submits the remaining bytes.
+        match writer.poll_write_encrypted(&mut cx, &mut stream, b"b") {
+            TaskPoll::Ready(Ok(n)) => assert_eq!(n, 1),
+            v => panic!("unexpected result: {v:?}"),
+        }
+
+        // Round-trip: everything reported as written must decrypt back to the original bytes.
+        let mut reader = DecryptedReader::new(StreamType::Server, method, &key);
+        let mut output = Vec::new();
+        loop {
+            let mut buffer = [0u8; 16];
+            let mut read_buf = ReadBuf::new(&mut buffer);
+            match reader.poll_read_decrypted(&mut cx, &context, &mut stream, &mut read_buf) {
+                TaskPoll::Ready(Ok(())) => {
+                    if read_buf.filled().is_empty() {
+                        // EOF
+                        break;
+                    }
+                    output.extend_from_slice(read_buf.filled());
+                }
+                v => panic!("unexpected read result: {v:?}"),
+            }
+        }
+
+        assert_eq!(output, b"ab");
     }
 }
