@@ -11,9 +11,10 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
     str,
-    sync::LazyLock,
+    sync::{Arc, LazyLock},
 };
 
+use arc_swap::ArcSwap;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
 use log::{trace, warn};
@@ -664,5 +665,122 @@ impl AccessControl {
             Mode::BlackList => false,
             Mode::WhiteList => true,
         }
+    }
+}
+
+/// A shareable handle to an [`AccessControl`] with atomically replaceable rules
+///
+/// [`AccessControl`] itself is immutable after loading. [`AclHandle`] wraps it in an
+/// `ArcSwap`, so the active rules can be swapped at runtime without interrupting the
+/// service, for example after the ACL file changed on disk. Readers take a cheap
+/// snapshot (`Arc<AccessControl>`), which stays valid even after the rules were
+/// replaced.
+///
+/// This is what makes hot-reloading possible: contexts and in-flight connections keep
+/// their snapshot of the old rules, while every new check sees the new ones.
+#[derive(Debug)]
+pub struct AclHandle {
+    acl: ArcSwap<AccessControl>,
+}
+
+impl AclHandle {
+    /// Create a handle with the given rules
+    pub fn new(acl: AccessControl) -> Self {
+        Self {
+            acl: ArcSwap::from_pointee(acl),
+        }
+    }
+
+    /// Get a snapshot of the currently active rules
+    pub fn acl(&self) -> Arc<AccessControl> {
+        self.acl.load_full()
+    }
+
+    /// Get the file path that the currently active rules were loaded from
+    pub fn file_path(&self) -> PathBuf {
+        self.acl.load().file_path().to_path_buf()
+    }
+
+    /// Reload the rules from the ACL file
+    ///
+    /// The file is parsed completely before the new rules are swapped in. If parsing
+    /// fails, the previous rules stay active and the error is returned.
+    pub fn reload(&self) -> io::Result<()> {
+        let file_path = self.file_path();
+        let acl = AccessControl::load_from_file(&file_path)?;
+        self.acl.store(Arc::new(acl));
+        Ok(())
+    }
+}
+
+impl From<Arc<AccessControl>> for AclHandle {
+    fn from(acl: Arc<AccessControl>) -> Self {
+        Self { acl: ArcSwap::new(acl) }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::net::IpAddr;
+
+    use super::*;
+
+    fn test_acl_file_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("shadowsocks-acl-test-{}-{name}", std::process::id()))
+    }
+
+    #[test]
+    fn acl_handle_reload_swaps_rules() {
+        let file_path = test_acl_file_path("swap");
+
+        std::fs::write(&file_path, "[bypass_all]\n[white_list]\n127.0.0.1\n").unwrap();
+        let handle = AclHandle::new(AccessControl::load_from_file(&file_path).unwrap());
+
+        let loopback: IpAddr = "127.0.0.1".parse().unwrap();
+        let anycast: IpAddr = "8.8.8.8".parse().unwrap();
+
+        assert!(handle.acl().check_ip_in_proxy_list(&loopback));
+        assert!(!handle.acl().check_ip_in_proxy_list(&anycast));
+
+        std::fs::write(&file_path, "[bypass_all]\n[white_list]\n8.8.8.8\n").unwrap();
+        handle.reload().unwrap();
+
+        assert!(!handle.acl().check_ip_in_proxy_list(&loopback));
+        assert!(handle.acl().check_ip_in_proxy_list(&anycast));
+
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    #[test]
+    fn acl_handle_reload_failure_keeps_old_rules() {
+        let file_path = test_acl_file_path("failure");
+
+        std::fs::write(&file_path, "[bypass_all]\n[white_list]\n127.0.0.1\n").unwrap();
+        let handle = AclHandle::new(AccessControl::load_from_file(&file_path).unwrap());
+
+        let loopback: IpAddr = "127.0.0.1".parse().unwrap();
+
+        // `[` is not a valid regular expression, so parsing the file must fail
+        std::fs::write(&file_path, "[\n").unwrap();
+        handle.reload().unwrap_err();
+
+        assert!(handle.acl().check_ip_in_proxy_list(&loopback));
+
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    #[test]
+    fn acl_handle_reload_missing_file_keeps_old_rules() {
+        let file_path = test_acl_file_path("missing");
+
+        std::fs::write(&file_path, "[bypass_all]\n[white_list]\n127.0.0.1\n").unwrap();
+        let handle = AclHandle::new(AccessControl::load_from_file(&file_path).unwrap());
+
+        let loopback: IpAddr = "127.0.0.1".parse().unwrap();
+
+        std::fs::remove_file(&file_path).unwrap();
+        handle.reload().unwrap_err();
+
+        assert!(handle.acl().check_ip_in_proxy_list(&loopback));
     }
 }
