@@ -1,6 +1,5 @@
 //! Local server launchers
 
-#[cfg(unix)]
 use std::sync::Arc;
 use std::{
     future::Future,
@@ -28,7 +27,7 @@ use shadowsocks_service::{
         Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType, ServerInstanceConfig,
         read_variable_field_value,
     },
-    local::{Server, loadbalancing::PingBalancer},
+    local::{Server, context::ServiceContext, loadbalancing::PingBalancer},
     shadowsocks::{
         config::{Mode, ServerAddr, ServerConfig, ServerSource},
         crypto::{CipherKind, available_ciphers},
@@ -1013,14 +1012,20 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
             None => future::pending().boxed(),
         };
 
+        // Hot-reload the ACL file on SIGUSR2 (Unix only, pending forever elsewhere)
+        let acl_reload_context = instance.acl_reload_context();
+        let acl_reload_task = launch_acl_reload_task(acl_reload_context).boxed();
+
         let abort_signal = monitor::create_signal_monitor();
         let server = instance.run();
 
         let reload_task = reload_task.fuse();
+        let acl_reload_task = acl_reload_task.fuse();
         let abort_signal = abort_signal.fuse();
         let server = server.fuse();
 
         tokio::pin!(reload_task);
+        tokio::pin!(acl_reload_task);
         tokio::pin!(abort_signal);
         tokio::pin!(server);
 
@@ -1045,6 +1050,10 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
                 _ = reload_task => {
                     // continue.
                     trace!("server-loader task task exited");
+                }
+                _ = acl_reload_task => {
+                    // continue.
+                    trace!("acl-reload task exited");
                 }
             }
         }
@@ -1139,6 +1148,29 @@ impl ServerReloader {
         let _ = self.config_path;
         let _ = self.balancer;
     }
+}
+
+/// Task listening for `SIGUSR2` and hot-reloading the ACL file for each signal
+///
+/// Reload failures keep the previous rules active, see `ServiceContext::reload_acl`.
+#[cfg(unix)]
+async fn launch_acl_reload_task(acl_reload_context: Arc<ServiceContext>) {
+    use log::debug;
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let mut sigusr2 = signal(SignalKind::user_defined2()).expect("signal");
+
+    debug!("acl-reload task is now listening USR2");
+
+    while sigusr2.recv().await.is_some() {
+        let _ = acl_reload_context.reload_acl().await;
+    }
+}
+
+#[cfg(not(unix))]
+async fn launch_acl_reload_task(acl_reload_context: Arc<ServiceContext>) {
+    let _ = acl_reload_context;
+    future::pending().await
 }
 
 #[cfg(test)]
