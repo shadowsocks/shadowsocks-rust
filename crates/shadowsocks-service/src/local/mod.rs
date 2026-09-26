@@ -85,6 +85,8 @@ pub struct Server {
     flow_stat: Arc<FlowStat>,
     #[cfg(feature = "local-online-config")]
     online_config: Option<OnlineConfigService>,
+    /// Global `ServiceContext`, kept for hot-reloading the global ACL
+    acl_reload_context: Arc<ServiceContext>,
 }
 
 impl Server {
@@ -233,6 +235,9 @@ impl Server {
             balancer_builder.build().await?
         };
 
+        // Keep a shared copy of the global context, used for hot-reloading the global ACL
+        let acl_reload_context = Arc::new(context.clone());
+
         let mut local_server = Self {
             balancer: balancer.clone(),
             socks_servers: Vec::new(),
@@ -267,6 +272,7 @@ impl Server {
                     Some(builder.build().await?)
                 }
             },
+            acl_reload_context,
         };
 
         for local_instance in config.local {
@@ -601,6 +607,16 @@ impl Server {
     /// Get the internal server balancer
     pub fn server_balancer(&self) -> &PingBalancer {
         &self.balancer
+    }
+
+    /// Get a shareable context for hot-reloading the global ACL file
+    ///
+    /// The returned context shares the global ACL and the DNS reverse-lookup cache with
+    /// every listener. Call [`ServiceContext::reload_acl`] on it to re-read the ACL file
+    /// and swap in the new rules at runtime, e.g. triggered by a signal. Contexts with
+    /// their own private ACL (`local.acl` in the configuration file) are not affected.
+    pub fn acl_reload_context(&self) -> Arc<ServiceContext> {
+        self.acl_reload_context.clone()
     }
 
     /// Get SOCKS server instances
