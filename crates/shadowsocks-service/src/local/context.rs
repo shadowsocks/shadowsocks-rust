@@ -1,5 +1,6 @@
 //! Shadowsocks Local Server Context
 
+use std::io;
 use std::sync::Arc;
 #[cfg(feature = "local-dns")]
 use std::{net::IpAddr, time::Duration};
@@ -19,7 +20,7 @@ use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 
 use crate::{
-    acl::AccessControl,
+    acl::{AccessControl, AclHandle},
     config::{OutboundProxy, SecurityConfig},
     net::{FlowStat, OutboundProxyClient},
 };
@@ -34,8 +35,9 @@ pub struct ServiceContext {
     connect_opts: ConnectOpts,
     accept_opts: AcceptOpts,
 
-    // Access Control
-    acl: Option<Arc<AccessControl>>,
+    // Access Control. Wrapped in `AclHandle` so the active rules can be hot-reloaded
+    // without interrupting the service. Cloned contexts share the same handle.
+    acl: Option<Arc<AclHandle>>,
 
     // Flow statistic report
     flow_stat: Arc<FlowStat>,
@@ -108,13 +110,53 @@ impl ServiceContext {
     }
 
     /// Set Access Control List
+    ///
+    /// This creates a new [`AclHandle`]. Contexts cloned before this call keep sharing
+    /// the previous handle, which is how a private ACL overrides the global one.
     pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
-        self.acl = Some(acl);
+        self.acl = Some(Arc::new(AclHandle::from(acl)));
     }
 
-    /// Get Access Control List reference
-    pub fn acl(&self) -> Option<&AccessControl> {
-        self.acl.as_deref()
+    /// Get a snapshot of the Access Control List
+    ///
+    /// Returns `None` if no ACL is configured. The returned `Arc` stays valid even if
+    /// the rules are hot-reloaded afterwards.
+    pub fn acl(&self) -> Option<Arc<AccessControl>> {
+        self.acl.as_ref().map(|handle| handle.acl())
+    }
+
+    /// Hot-reload the ACL file
+    ///
+    /// Re-reads the file that the active rules were loaded from and swaps in the new
+    /// rules atomically. Established connections are not affected; only new
+    /// connections will be checked against the new rules.
+    ///
+    /// If the file cannot be read or parsed, the previous rules stay active and the
+    /// error is returned. Does nothing if no ACL is configured.
+    pub async fn reload_acl(&self) -> io::Result<()> {
+        use log::{error, info, warn};
+
+        let Some(handle) = self.acl.as_ref() else {
+            warn!("ACL reload requested, but no ACL is configured");
+            return Ok(());
+        };
+
+        let file_path = handle.file_path();
+        if let Err(err) = handle.reload() {
+            error!(
+                "ACL reload failed for {:?}, keeping the previous rules, error: {}",
+                file_path, err
+            );
+            return Err(err);
+        }
+
+        // Decisions derived from the old rules must not outlive them
+        #[cfg(feature = "local-dns")]
+        self.reverse_lookup_cache.lock().await.clear();
+
+        info!("ACL reloaded from {:?}", file_path);
+
+        Ok(())
     }
 
     /// Set outbound proxy chain (connection to SS server routes through these proxies)
@@ -154,9 +196,9 @@ impl ServiceContext {
 
     /// Check if target should be bypassed
     pub async fn check_target_bypassed(&self, addr: &Address) -> bool {
-        match self.acl {
+        match self.acl() {
             None => false,
-            Some(ref acl) => {
+            Some(acl) => {
                 #[cfg(feature = "local-dns")]
                 {
                     if let Address::SocketAddress(saddr) = addr {
@@ -178,10 +220,10 @@ impl ServiceContext {
     #[cfg(feature = "local-dns")]
     pub async fn add_to_reverse_lookup_cache(&self, addr: IpAddr, forward: bool) {
         let is_exception = forward
-            != match self.acl {
+            != match self.acl() {
                 // Proxy everything by default
                 None => true,
-                Some(ref a) => a.check_ip_in_proxy_list(&addr),
+                Some(acl) => acl.check_ip_in_proxy_list(&addr),
             };
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock().await;
         match reverse_lookup_cache.get_mut(&addr) {
