@@ -10,7 +10,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=exec
 EnvironmentFile=/etc/default/shadowsocks-rust
 DynamicUser=yes
 LimitNOFILE=32768
