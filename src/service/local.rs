@@ -1166,10 +1166,11 @@ async fn launch_acl_reload_task(context: Arc<ServiceContext>) {
     }
 }
 
+/// Signal-based ACL reload is only supported on Unix platforms. The task completes
+/// immediately; the main loop tolerates it, same as the `SIGUSR1` reload task.
 #[cfg(not(unix))]
 async fn launch_acl_reload_task(context: Arc<ServiceContext>) {
     let _ = context;
-    future::pending().await
 }
 
 #[cfg(test)]
