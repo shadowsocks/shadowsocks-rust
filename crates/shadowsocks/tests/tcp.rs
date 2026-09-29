@@ -199,6 +199,45 @@ async fn tcp_tunnel_aead_2022_aes() {
     .unwrap();
 }
 
+// https://github.com/shadowsocks/shadowsocks-rust/issues/2184
+//
+// Clients that trigger the handshake with an empty write (server-first protocols) must not
+// generate a header with no payload and padding 0, which servers MUST reject according to
+// the AEAD-2022 spec (SIP022).
+#[cfg(feature = "aead-cipher-2022")]
+#[tokio::test]
+async fn tcp_aead_2022_handshake_with_empty_payload() {
+    let _ = env_logger::try_init();
+
+    const PASSWORD: &str = "3L69X4PF2eSL/JSLkoWnXg==";
+    let method = CipherKind::AEAD2022_BLAKE3_AES_128_GCM;
+
+    let target_addr = Address::from(("www.example.com".to_owned(), 80));
+
+    let svr_cfg = Arc::new(
+        ServerConfig::new("127.0.0.1:34001".parse::<SocketAddr>().unwrap(), PASSWORD, method).unwrap(),
+    );
+
+    let ctx_server = Context::new_shared(ServerType::Server);
+    let ctx_local = Context::new_shared(ServerType::Local);
+
+    for _ in 0..1000 {
+        let (client_side, server_side) = tokio::io::duplex(64 * 1024);
+
+        let mut server = ProxyServerStream::from_stream(ctx_server.clone(), server_side, method, svr_cfg.key());
+        let mut client =
+            ProxyClientStream::from_stream(ctx_local.clone(), client_side, &svr_cfg, target_addr.clone());
+
+        // NOTE: write_all(&[]) would be a no-op, so call write() directly
+        // to trigger the handshake with an empty first payload.
+        let n = client.write(&[]).await.unwrap();
+        assert_eq!(n, 0);
+
+        let addr = server.handshake().await.unwrap();
+        assert_eq!(addr, target_addr);
+    }
+}
+
 #[cfg(feature = "aead-cipher-2022")]
 #[tokio::test]
 async fn tcp_tunnel_aead_2022_chacha20() {
