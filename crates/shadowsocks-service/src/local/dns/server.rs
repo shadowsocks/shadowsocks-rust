@@ -617,7 +617,8 @@ fn should_forward_by_query(context: &ServiceContext, balancer: &PingBalancer, qu
         }
     }
 
-    if let Some(acl) = context.acl() {
+    let acl_snapshot = context.acl();
+    if let Some(acl) = acl_snapshot.as_deref() {
         if query.query_class() != DNSClass::IN {
             // unconditionally use default for all non-IN queries
             Some(acl.is_default_in_proxy_list())
@@ -810,7 +811,7 @@ impl DnsClient {
 
         let decider = async {
             let local_response = self.lookup_local(query, local_addr).await;
-            if should_forward_by_response(self.context.acl(), &local_response, query) {
+            if should_forward_by_response(self.context.acl().as_deref(), &local_response, query) {
                 None
             } else {
                 Some(local_response)

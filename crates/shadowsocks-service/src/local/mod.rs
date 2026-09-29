@@ -85,6 +85,9 @@ pub struct Server {
     flow_stat: Arc<FlowStat>,
     #[cfg(feature = "local-online-config")]
     online_config: Option<OnlineConfigService>,
+    /// Shared global `ServiceContext`, for runtime operations on the whole service
+    /// (e.g. hot-reloading the global ACL file)
+    context: Arc<ServiceContext>,
 }
 
 impl Server {
@@ -233,6 +236,10 @@ impl Server {
             balancer_builder.build().await?
         };
 
+        // Keep a shared copy of the global context, for runtime operations that need
+        // a handle to the whole service (e.g. hot-reloading the global ACL)
+        let global_context = Arc::new(context.clone());
+
         let mut local_server = Self {
             balancer: balancer.clone(),
             socks_servers: Vec::new(),
@@ -267,6 +274,7 @@ impl Server {
                     Some(builder.build().await?)
                 }
             },
+            context: global_context,
         };
 
         for local_instance in config.local {
@@ -601,6 +609,16 @@ impl Server {
     /// Get the internal server balancer
     pub fn server_balancer(&self) -> &PingBalancer {
         &self.balancer
+    }
+
+    /// Get a shareable handle to the global [`ServiceContext`]
+    ///
+    /// The returned context is shared with every listener. It can be used for runtime
+    /// operations on the whole service, e.g. hot-reloading the global ACL file with
+    /// [`ServiceContext::reload_acl`], typically triggered by a signal. Contexts with
+    /// their own private ACL (`local.acl` in the configuration file) are not affected.
+    pub fn context(&self) -> Arc<ServiceContext> {
+        self.context.clone()
     }
 
     /// Get SOCKS server instances

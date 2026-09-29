@@ -77,7 +77,7 @@ use shadowsocks::{
 };
 use url::Url;
 
-use crate::acl::AccessControl;
+use crate::acl::{AccessControl, absolutize};
 #[cfg(feature = "local-dns")]
 use crate::local::dns::NameServerAddr;
 
@@ -2828,8 +2828,10 @@ impl Config {
 
         let mut config = Self::load_from_str(&content[..], config_type)?;
 
-        // Record the path of the configuration for auto-reloading
-        config.config_path = Some(filename.to_owned());
+        // Record the path of the configuration for auto-reloading.
+        // Store an absolute path so that reloading keeps working even if the process
+        // changed its working directory afterwards (e.g. daemonized with `chdir("/")`)
+        config.config_path = Some(absolutize(filename));
 
         Ok(config)
     }
