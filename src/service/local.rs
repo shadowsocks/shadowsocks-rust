@@ -1013,8 +1013,7 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         };
 
         // Hot-reload the ACL file on SIGUSR2 (Unix only, pending forever elsewhere)
-        let acl_reload_context = instance.acl_reload_context();
-        let acl_reload_task = launch_acl_reload_task(acl_reload_context).boxed();
+        let acl_reload_task = launch_acl_reload_task(instance.context()).boxed();
 
         let abort_signal = monitor::create_signal_monitor();
         let server = instance.run();
@@ -1154,7 +1153,7 @@ impl ServerReloader {
 ///
 /// Reload failures keep the previous rules active, see `ServiceContext::reload_acl`.
 #[cfg(unix)]
-async fn launch_acl_reload_task(acl_reload_context: Arc<ServiceContext>) {
+async fn launch_acl_reload_task(context: Arc<ServiceContext>) {
     use log::debug;
     use tokio::signal::unix::{SignalKind, signal};
 
@@ -1163,13 +1162,13 @@ async fn launch_acl_reload_task(acl_reload_context: Arc<ServiceContext>) {
     debug!("acl-reload task is now listening USR2");
 
     while sigusr2.recv().await.is_some() {
-        let _ = acl_reload_context.reload_acl().await;
+        let _ = context.reload_acl().await;
     }
 }
 
 #[cfg(not(unix))]
-async fn launch_acl_reload_task(acl_reload_context: Arc<ServiceContext>) {
-    let _ = acl_reload_context;
+async fn launch_acl_reload_task(context: Arc<ServiceContext>) {
+    let _ = context;
     future::pending().await
 }
 

@@ -17,7 +17,7 @@ use std::{
 use arc_swap::ArcSwap;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
-use log::{trace, warn};
+use log::{error, info, trace, warn};
 use regex::bytes::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 
 use shadowsocks::{context::Context, relay::socks5::Address};
@@ -347,15 +347,29 @@ pub struct AccessControl {
     file_path: PathBuf,
 }
 
+/// Resolve `path` into an absolute path, based on the process's current working directory
+///
+/// Absolute paths are returned unchanged. Paths are deliberately NOT canonicalized:
+/// symlinks must be kept intact, so that deployments switching files by re-pointing
+/// a symlink (e.g. `current -> acl-v2`) keep working after a reload.
+pub(crate) fn absolutize(path: &Path) -> PathBuf {
+    match std::env::current_dir() {
+        // `join` returns `path` itself if it is already absolute
+        Ok(cwd) => cwd.join(path),
+        Err(..) => path.to_path_buf(),
+    }
+}
+
 impl AccessControl {
     /// Load ACL rules from a file
     pub fn load_from_file<P: AsRef<Path>>(p: P) -> io::Result<Self> {
         trace!("ACL loading from {:?}", p.as_ref());
 
-        let file_path_ref = p.as_ref();
-        let file_path = file_path_ref.to_path_buf();
+        // Store an absolute path so that reloading keeps working even if the process
+        // changed its working directory afterwards (e.g. daemonized with `chdir("/")`)
+        let file_path = absolutize(p.as_ref());
 
-        let fp = File::open(file_path_ref)?;
+        let fp = File::open(p.as_ref())?;
         let r = BufReader::new(fp);
 
         let mut mode = Mode::BlackList;
@@ -670,7 +684,7 @@ impl AccessControl {
 
 /// A shareable handle to an [`AccessControl`] with atomically replaceable rules
 ///
-/// [`AccessControl`] itself is immutable after loading. [`AclHandle`] wraps it in an
+/// [`AccessControl`] itself is immutable after loading. [`AccessControlHandle`] wraps it in an
 /// `ArcSwap`, so the active rules can be swapped at runtime without interrupting the
 /// service, for example after the ACL file changed on disk. Readers take a cheap
 /// snapshot (`Arc<AccessControl>`), which stays valid even after the rules were
@@ -679,11 +693,11 @@ impl AccessControl {
 /// This is what makes hot-reloading possible: contexts and in-flight connections keep
 /// their snapshot of the old rules, while every new check sees the new ones.
 #[derive(Debug)]
-pub struct AclHandle {
+pub struct AccessControlHandle {
     acl: ArcSwap<AccessControl>,
 }
 
-impl AclHandle {
+impl AccessControlHandle {
     /// Create a handle with the given rules
     pub fn new(acl: AccessControl) -> Self {
         Self {
@@ -707,13 +721,24 @@ impl AclHandle {
     /// fails, the previous rules stay active and the error is returned.
     pub fn reload(&self) -> io::Result<()> {
         let file_path = self.file_path();
-        let acl = AccessControl::load_from_file(&file_path)?;
-        self.acl.store(Arc::new(acl));
-        Ok(())
+        match AccessControl::load_from_file(&file_path) {
+            Ok(acl) => {
+                self.acl.store(Arc::new(acl));
+                info!("ACL reloaded from {:?}", file_path);
+                Ok(())
+            }
+            Err(err) => {
+                error!(
+                    "ACL reload failed for {:?}, keeping the previous rules, error: {}",
+                    file_path, err
+                );
+                Err(err)
+            }
+        }
     }
 }
 
-impl From<Arc<AccessControl>> for AclHandle {
+impl From<Arc<AccessControl>> for AccessControlHandle {
     fn from(acl: Arc<AccessControl>) -> Self {
         Self { acl: ArcSwap::new(acl) }
     }
@@ -730,11 +755,19 @@ mod test {
     }
 
     #[test]
-    fn acl_handle_reload_swaps_rules() {
+    fn absolutize_resolves_relative_paths_against_cwd() {
+        let cwd = std::env::current_dir().unwrap();
+
+        assert_eq!(absolutize(Path::new("acl.list")), cwd.join("acl.list"));
+        assert_eq!(absolutize(&cwd.join("acl.list")), cwd.join("acl.list"));
+    }
+
+    #[test]
+    fn access_control_handle_reload_swaps_rules() {
         let file_path = test_acl_file_path("swap");
 
         std::fs::write(&file_path, "[bypass_all]\n[white_list]\n127.0.0.1\n").unwrap();
-        let handle = AclHandle::new(AccessControl::load_from_file(&file_path).unwrap());
+        let handle = AccessControlHandle::new(AccessControl::load_from_file(&file_path).unwrap());
 
         let loopback: IpAddr = "127.0.0.1".parse().unwrap();
         let anycast: IpAddr = "8.8.8.8".parse().unwrap();
@@ -752,11 +785,11 @@ mod test {
     }
 
     #[test]
-    fn acl_handle_reload_failure_keeps_old_rules() {
+    fn access_control_handle_reload_failure_keeps_old_rules() {
         let file_path = test_acl_file_path("failure");
 
         std::fs::write(&file_path, "[bypass_all]\n[white_list]\n127.0.0.1\n").unwrap();
-        let handle = AclHandle::new(AccessControl::load_from_file(&file_path).unwrap());
+        let handle = AccessControlHandle::new(AccessControl::load_from_file(&file_path).unwrap());
 
         let loopback: IpAddr = "127.0.0.1".parse().unwrap();
 
@@ -770,11 +803,11 @@ mod test {
     }
 
     #[test]
-    fn acl_handle_reload_missing_file_keeps_old_rules() {
+    fn access_control_handle_reload_missing_file_keeps_old_rules() {
         let file_path = test_acl_file_path("missing");
 
         std::fs::write(&file_path, "[bypass_all]\n[white_list]\n127.0.0.1\n").unwrap();
-        let handle = AclHandle::new(AccessControl::load_from_file(&file_path).unwrap());
+        let handle = AccessControlHandle::new(AccessControl::load_from_file(&file_path).unwrap());
 
         let loopback: IpAddr = "127.0.0.1".parse().unwrap();
 

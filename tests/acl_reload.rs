@@ -74,7 +74,7 @@ async fn acl_hot_reload_changes_new_connection_routing() {
 
     let config = local_config_with_acl(&acl_path, local_addr);
     let server = Server::new(config).await.unwrap();
-    let acl_reload_context = server.acl_reload_context();
+    let context = server.context();
     tokio::spawn(server.run());
 
     // No shadowsocks server is running at all: proxied connections fail because they
@@ -91,7 +91,7 @@ async fn acl_hot_reload_changes_new_connection_routing() {
 
     // Loopback moves into white_list: the target is now proxied, and the proxy is unreachable
     std::fs::write(&acl_path, ACL_PROXY_LOOPBACK).unwrap();
-    acl_reload_context.reload_acl().await.unwrap();
+    context.reload_acl().await.unwrap();
 
     let result = Socks5TcpClient::connect(Address::SocketAddress(target_addr), &local_addr).await;
     assert!(
@@ -101,7 +101,7 @@ async fn acl_hot_reload_changes_new_connection_routing() {
 
     // Reload back: new connections are bypassed again
     std::fs::write(&acl_path, ACL_BYPASS_LOOPBACK).unwrap();
-    acl_reload_context.reload_acl().await.unwrap();
+    context.reload_acl().await.unwrap();
 
     let mut c = Socks5TcpClient::connect(Address::SocketAddress(target_addr), &local_addr)
         .await

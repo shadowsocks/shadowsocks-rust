@@ -20,7 +20,7 @@ use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 
 use crate::{
-    acl::{AccessControl, AclHandle},
+    acl::{AccessControl, AccessControlHandle},
     config::{OutboundProxy, SecurityConfig},
     net::{FlowStat, OutboundProxyClient},
 };
@@ -35,9 +35,9 @@ pub struct ServiceContext {
     connect_opts: ConnectOpts,
     accept_opts: AcceptOpts,
 
-    // Access Control. Wrapped in `AclHandle` so the active rules can be hot-reloaded
+    // Access Control. Wrapped in `AccessControlHandle` so the active rules can be hot-reloaded
     // without interrupting the service. Cloned contexts share the same handle.
-    acl: Option<Arc<AclHandle>>,
+    acl: Option<Arc<AccessControlHandle>>,
 
     // Flow statistic report
     flow_stat: Arc<FlowStat>,
@@ -111,10 +111,10 @@ impl ServiceContext {
 
     /// Set Access Control List
     ///
-    /// This creates a new [`AclHandle`]. Contexts cloned before this call keep sharing
+    /// This creates a new [`AccessControlHandle`]. Contexts cloned before this call keep sharing
     /// the previous handle, which is how a private ACL overrides the global one.
     pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
-        self.acl = Some(Arc::new(AclHandle::from(acl)));
+        self.acl = Some(Arc::new(AccessControlHandle::from(acl)));
     }
 
     /// Get a snapshot of the Access Control List
@@ -134,27 +134,18 @@ impl ServiceContext {
     /// If the file cannot be read or parsed, the previous rules stay active and the
     /// error is returned. Does nothing if no ACL is configured.
     pub async fn reload_acl(&self) -> io::Result<()> {
-        use log::{error, info, warn};
+        use log::warn;
 
         let Some(handle) = self.acl.as_ref() else {
             warn!("ACL reload requested, but no ACL is configured");
             return Ok(());
         };
 
-        let file_path = handle.file_path();
-        if let Err(err) = handle.reload() {
-            error!(
-                "ACL reload failed for {:?}, keeping the previous rules, error: {}",
-                file_path, err
-            );
-            return Err(err);
-        }
+        handle.reload()?;
 
         // Decisions derived from the old rules must not outlive them
         #[cfg(feature = "local-dns")]
         self.reverse_lookup_cache.lock().await.clear();
-
-        info!("ACL reloaded from {:?}", file_path);
 
         Ok(())
     }

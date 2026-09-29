@@ -1179,6 +1179,8 @@ These Ciphers require `"password"` to be a Base64 string of key that have **exac
 - `SIGUSR1` - Reload the server list from the configuration file. Listeners and established connections are not affected. Requires that `sslocal` was started with a configuration file.
 - `SIGUSR2` - Reload the ACL file. The file is parsed completely before the new rules are swapped in; if parsing fails, the previous rules stay active. Established connections keep their routing decisions, and only new connections are checked against the new rules.
 
+The configuration file and the ACL file are recorded as absolute paths at startup, so reloads keep working even if the process changes its working directory afterwards (e.g. when daemonized).
+
 Both signals are no-ops on Windows. Example:
 
 ```bash

@@ -85,8 +85,9 @@ pub struct Server {
     flow_stat: Arc<FlowStat>,
     #[cfg(feature = "local-online-config")]
     online_config: Option<OnlineConfigService>,
-    /// Global `ServiceContext`, kept for hot-reloading the global ACL
-    acl_reload_context: Arc<ServiceContext>,
+    /// Shared global `ServiceContext`, for runtime operations on the whole service
+    /// (e.g. hot-reloading the global ACL file)
+    context: Arc<ServiceContext>,
 }
 
 impl Server {
@@ -235,8 +236,9 @@ impl Server {
             balancer_builder.build().await?
         };
 
-        // Keep a shared copy of the global context, used for hot-reloading the global ACL
-        let acl_reload_context = Arc::new(context.clone());
+        // Keep a shared copy of the global context, for runtime operations that need
+        // a handle to the whole service (e.g. hot-reloading the global ACL)
+        let global_context = Arc::new(context.clone());
 
         let mut local_server = Self {
             balancer: balancer.clone(),
@@ -272,7 +274,7 @@ impl Server {
                     Some(builder.build().await?)
                 }
             },
-            acl_reload_context,
+            context: global_context,
         };
 
         for local_instance in config.local {
@@ -609,14 +611,14 @@ impl Server {
         &self.balancer
     }
 
-    /// Get a shareable context for hot-reloading the global ACL file
+    /// Get a shareable handle to the global [`ServiceContext`]
     ///
-    /// The returned context shares the global ACL and the DNS reverse-lookup cache with
-    /// every listener. Call [`ServiceContext::reload_acl`] on it to re-read the ACL file
-    /// and swap in the new rules at runtime, e.g. triggered by a signal. Contexts with
+    /// The returned context is shared with every listener. It can be used for runtime
+    /// operations on the whole service, e.g. hot-reloading the global ACL file with
+    /// [`ServiceContext::reload_acl`], typically triggered by a signal. Contexts with
     /// their own private ACL (`local.acl` in the configuration file) are not affected.
-    pub fn acl_reload_context(&self) -> Arc<ServiceContext> {
-        self.acl_reload_context.clone()
+    pub fn context(&self) -> Arc<ServiceContext> {
+        self.context.clone()
     }
 
     /// Get SOCKS server instances
