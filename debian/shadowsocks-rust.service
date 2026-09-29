@@ -6,10 +6,11 @@
 [Unit]
 Description=Shadowsocks-rust Default Server Service
 Documentation=https://github.com/shadowsocks/shadowsocks-rust
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-Type=simple
+Type=exec
 EnvironmentFile=/etc/default/shadowsocks-rust
 DynamicUser=yes
 LimitNOFILE=32768
@@ -17,4 +18,3 @@ ExecStart=/usr/bin/ssservice server -c ${CONFFILE} ${DAEMON_ARGS}
 
 [Install]
 WantedBy=multi-user.target
-
