@@ -7,7 +7,8 @@
 [Unit]
 Description=Shadowsocks-rust Custom Server Service for %I
 Documentation=https://github.com/shadowsocks/shadowsocks-rust
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -18,4 +19,3 @@ ExecStart=/usr/bin/ssservice server --log-without-time -c /etc/shadowsocks-rust/
 
 [Install]
 WantedBy=multi-user.target
-
