@@ -15,7 +15,8 @@ CapabilityBoundingSet=CAP_NET_ADMIN
 AmbientCapabilities=CAP_NET_ADMIN
 NoNewPrivileges=yes
 DynamicUser=yes
-ExecStart=/usr/bin/ssservice local --log-without-time -c /etc/shadowsocks-rust/%i.json
+LoadCredential=%i.json:/etc/shadowsocks-rust/%i.json
+ExecStart=/usr/bin/ssservice local --log-without-time -c ${CREDENTIALS_DIRECTORY}/%i.json
 
 [Install]
 WantedBy=multi-user.target
