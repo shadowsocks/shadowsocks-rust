@@ -6,7 +6,7 @@ use std::{io, net::SocketAddr, time::Duration};
 
 use log::{debug, trace};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use shadowsocks::relay::tcprelay::splice::copy_bidirectional_splice_monitored;
+use shadowsocks::relay::tcprelay::splice::{copy_bidirectional_splice, copy_bidirectional_splice_monitored};
 use shadowsocks::{
     config::ServerConfig,
     relay::{socks5::Address, tcprelay::utils::copy_encrypted_bidirectional},
@@ -129,6 +129,32 @@ where
     None
 }
 
+/// Relays between the client socket and the target socket in the kernel, if both are plain TCP
+/// sockets. `None`, without having touched the streams, if not.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn splice_bypassed_tunnel<'a, P, S>(
+    plain: &'a P,
+    shadow: &'a S,
+) -> Option<impl Future<Output = io::Result<(u64, u64)>> + 'a>
+where
+    P: SpliceIo,
+    S: SpliceIo,
+{
+    Some(copy_bidirectional_splice(
+        plain.splice_socket()?,
+        shadow.splice_socket()?,
+    ))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn splice_bypassed_tunnel<P, S>(_plain: &P, _shadow: &S) -> Option<std::future::Ready<io::Result<(u64, u64)>>>
+where
+    P: SpliceIo,
+    S: SpliceIo,
+{
+    None
+}
+
 pub(crate) async fn establish_tcp_tunnel_bypassed<P, S>(
     plain: &mut P,
     shadow: &mut S,
@@ -136,12 +162,18 @@ pub(crate) async fn establish_tcp_tunnel_bypassed<P, S>(
     target_addr: &Address,
 ) -> io::Result<()>
 where
-    P: AsyncRead + AsyncWrite + Unpin,
-    S: AsyncRead + AsyncWrite + Unpin,
+    P: AsyncRead + AsyncWrite + SpliceIo + Unpin,
+    S: AsyncRead + AsyncWrite + SpliceIo + Unpin,
 {
     debug!("established tcp tunnel {} <-> {} bypassed", peer_addr, target_addr);
 
-    match copy_bidirectional(plain, shadow).await {
+    let result = if let Some(splice) = splice_bypassed_tunnel(plain, shadow) {
+        splice.await
+    } else {
+        copy_bidirectional(plain, shadow).await
+    };
+
+    match result {
         Ok((rn, wn)) => {
             trace!(
                 "tcp tunnel {} <-> {} (bypassed) closed, L2R {} bytes, R2L {} bytes",

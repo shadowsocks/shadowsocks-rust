@@ -476,3 +476,82 @@ fn none_many_connections() {
         }
     });
 }
+
+/// A connection that the ACL sends around the proxy is a plain TCP relay in sslocal, whatever the
+/// cipher: byte-exact with half-close, and counted by neither flow statistic.
+#[cfg(feature = "local")]
+#[test]
+fn bypassed_connection_is_spliced() {
+    scenario(async {
+        let target = target_server(|mut s| async move {
+            let up = check_stream(&mut s, 7).await;
+            assert_eq!(up, BULK / 4);
+            send_stream(&mut s, 8, BULK / 4).await;
+            s.shutdown().await.unwrap();
+        })
+        .await;
+
+        let acl =
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("none-splice-acl-{}", std::process::id()));
+        std::fs::write(&acl, "[bypass_all]\n[white_list]\n8.8.8.8\n").unwrap();
+        let local_port = free_port();
+        let mut config = Config::load_from_str(
+            &format!(
+                r#"{{
+                "locals": [{{ "local_port": {local_port}, "local_address": "127.0.0.1", "protocol": "socks" }}],
+                "server": "127.0.0.1",
+                "server_port": 1,
+                "password": "password",
+                "method": "none"
+            }}"#
+            ),
+            ConfigType::Local,
+        )
+        .unwrap();
+        // not through the JSON: a Windows path would need escaping there
+        config.acl = Some(shadowsocks_service::acl::AccessControl::load_from_file(&acl).unwrap());
+        let local = LocalServer::new(config).await.unwrap();
+        let flow = local.context().flow_stat();
+        tokio::task::spawn_local(async move {
+            let _ = local.run().await;
+        });
+        let mut tries = 0;
+        let mut c = loop {
+            match TcpStream::connect(("127.0.0.1", local_port)).await {
+                Ok(c) => break c,
+                Err(_) => {
+                    tries += 1;
+                    assert!(tries < 200);
+                    time::sleep(Duration::from_millis(50)).await;
+                }
+            }
+        };
+        let before = splice_relays();
+
+        // SOCKS5: no authentication, CONNECT to the target
+        c.write_all(&[5, 1, 0]).await.unwrap();
+        let mut reply = [0u8; 2];
+        c.read_exact(&mut reply).await.unwrap();
+        assert_eq!(reply, [5, 0]);
+        let mut connect = vec![5, 1, 0, 1, 127, 0, 0, 1];
+        connect.extend_from_slice(&target.port().to_be_bytes());
+        c.write_all(&connect).await.unwrap();
+        let mut reply = [0u8; 10];
+        c.read_exact(&mut reply).await.unwrap();
+        assert_eq!(reply[1], 0, "SOCKS5 CONNECT failed");
+
+        let (mut r, mut w) = c.split();
+        let up = async {
+            send_stream(&mut w, 7, BULK / 4).await;
+            w.shutdown().await.unwrap();
+        };
+        let (got, ()) = tokio::join!(check_stream(&mut r, 8), up);
+        assert_eq!(got, BULK / 4);
+        drop(c);
+
+        time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(splice_relays() - before, on_splice_platforms(1));
+        assert_eq!((flow.tx(), flow.rx()), (0, 0));
+        let _ = std::fs::remove_file(acl);
+    });
+}

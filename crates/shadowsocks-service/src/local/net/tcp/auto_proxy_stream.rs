@@ -299,7 +299,7 @@ impl SpliceIo for AutoProxyClientStream {
                 OutboundTransport::Direct(ref s) => s.as_tokio(),
                 OutboundTransport::Chained(..) => None,
             },
-            Self::Bypassed(..) => None,
+            Self::Bypassed(ref s) => s.as_tokio(),
         }
     }
 
