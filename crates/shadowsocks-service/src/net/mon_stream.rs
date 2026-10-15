@@ -37,6 +37,11 @@ impl<S> MonProxyStream<S> {
     }
 
     #[inline]
+    pub fn flow_stat(&self) -> &FlowStat {
+        &self.flow_stat
+    }
+
+    #[inline]
     pub fn into_inner(self) -> S {
         self.stream
     }

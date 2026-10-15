@@ -98,6 +98,14 @@ impl TcpStream {
         Ok(Self::FastOpen(stream))
     }
 
+    /// The tokio socket, unless the connection is driven by the TCP Fast Open machinery
+    pub fn as_tokio(&self) -> Option<&TokioTcpStream> {
+        match *self {
+            Self::Standard(ref s) => Some(s),
+            Self::FastOpen(..) => None,
+        }
+    }
+
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         match *self {
             Self::Standard(ref s) => s.local_addr(),

@@ -21,7 +21,7 @@ use crate::{
     net::{MonProxyStream, OutboundProxyStream, TcpDialer},
 };
 
-use super::auto_proxy_io::AutoProxyIo;
+use super::{auto_proxy_io::AutoProxyIo, splice_io::SpliceIo};
 
 /// Outbound transport used by [`AutoProxyClientStream`]: either a direct
 /// TCP connection or a tunnel through the configured outbound proxy chain.
@@ -287,6 +287,27 @@ impl AutoProxyClientStream {
 impl AutoProxyIo for AutoProxyClientStream {
     fn is_proxied(&self) -> bool {
         matches!(*self, Self::Proxied(..))
+    }
+}
+
+impl SpliceIo for AutoProxyClientStream {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn splice_socket(&self) -> Option<&tokio::net::TcpStream> {
+        match *self {
+            // Only for the `none` cipher, after the address has been sent: see `passthrough_ref`.
+            Self::Proxied(ref s) => match *s.passthrough_ref()?.get_ref() {
+                OutboundTransport::Direct(ref s) => s.as_tokio(),
+                OutboundTransport::Chained(..) => None,
+            },
+            Self::Bypassed(..) => None,
+        }
+    }
+
+    fn splice_flow_stat(&self) -> Option<&crate::net::FlowStat> {
+        match *self {
+            Self::Proxied(ref s) => Some(s.passthrough_ref()?.flow_stat()),
+            Self::Bypassed(..) => None,
+        }
     }
 }
 

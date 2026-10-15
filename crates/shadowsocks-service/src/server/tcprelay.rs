@@ -11,6 +11,8 @@ use std::{
 };
 
 use log::{debug, error, info, trace, warn};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use shadowsocks::relay::tcprelay::splice::copy_bidirectional_splice_monitored;
 use shadowsocks::{
     ProxyListener, ServerConfig,
     crypto::CipherKind,
@@ -78,6 +80,17 @@ impl AsyncWrite for RemoteStream {
 }
 
 impl Unpin for RemoteStream {}
+
+impl RemoteStream {
+    /// The socket behind this stream, unless a proxy chain or TCP Fast Open stands in the way
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn as_tokio(&self) -> Option<&TokioTcpStream> {
+        match *self {
+            Self::Direct(ref s) => s.as_tokio(),
+            Self::Proxied(..) => None,
+        }
+    }
+}
 
 /// TCP server instance
 pub struct TcpServer {
@@ -168,6 +181,30 @@ where
             Err(..) => Err(ErrorKind::TimedOut.into()),
         },
     }
+}
+
+/// Relays between the client and the target in the kernel, if the bytes of the client's stream are
+/// the target's bytes: the `none` cipher, after the target address was read (which leaves everything
+/// behind it in the socket), and the monitor wrapper holds no bytes. `None` if that isn't the case.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn splice_relay<'a>(
+    client: &'a ProxyServerStream<MonProxyStream<TokioTcpStream>>,
+    remote: &'a RemoteStream,
+) -> Option<impl Future<Output = io::Result<(u64, u64)>> + 'a> {
+    let client = client.passthrough_ref()?;
+    Some(copy_bidirectional_splice_monitored(
+        client.get_ref(),
+        remote.as_tokio()?,
+        client.flow_stat(),
+    ))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn splice_relay(
+    _client: &ProxyServerStream<MonProxyStream<TokioTcpStream>>,
+    _remote: &RemoteStream,
+) -> Option<std::future::Ready<io::Result<(u64, u64)>>> {
+    None
 }
 
 struct TcpServerClient {
@@ -324,7 +361,13 @@ impl TcpServerClient {
             self.context.connect_opts_ref()
         );
 
-        match copy_encrypted_bidirectional(self.method, &mut self.stream, &mut remote_stream).await {
+        let result = if let Some(splice) = splice_relay(&self.stream, &remote_stream) {
+            splice.await
+        } else {
+            copy_encrypted_bidirectional(self.method, &mut self.stream, &mut remote_stream).await
+        };
+
+        match result {
             Ok((rn, wn)) => {
                 trace!(
                     "tcp tunnel {} <-> {} closed, L2R {} bytes, R2L {} bytes",
