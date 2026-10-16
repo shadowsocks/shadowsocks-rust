@@ -7,7 +7,7 @@ use std::{
     task::{self, Poll},
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use cfg_if::cfg_if;
 use futures::ready;
 use log::trace;
@@ -33,7 +33,9 @@ use crate::{
 #[derive(Debug)]
 enum ProxyClientStreamWriteState {
     Connect(Address),
-    Connecting(BytesMut),
+    /// The rest of the first packet (the target address and the first payload), and the length of
+    /// that payload
+    Connecting(BytesMut, usize),
     Connected,
 }
 
@@ -291,7 +293,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        let this = self.project();
+        let mut this = self.project();
 
         loop {
             match this.writer_state {
@@ -303,13 +305,18 @@ where
                     //
                     // Proactor APIs like IOCP on Windows, pointers of buffers have to be kept alive
                     // before IO completion.
-                    *(this.writer_state) = ProxyClientStreamWriteState::Connecting(buffer);
+                    *(this.writer_state) = ProxyClientStreamWriteState::Connecting(buffer, buf.len());
                 }
-                &mut ProxyClientStreamWriteState::Connecting(ref buffer) => {
-                    let n = ready!(this.stream.poll_write_encrypted(cx, buffer))?;
-
-                    // In general, poll_write_encrypted should perform like write_all.
-                    debug_assert!(n == buffer.len());
+                &mut ProxyClientStreamWriteState::Connecting(ref mut buffer, payload_len) => {
+                    // poll_write_encrypted may take a part of the buffer only: the none cipher writes to the
+                    // stream as it is, and AEAD ciphers encrypt one chunk at a time.
+                    while !buffer.is_empty() {
+                        let n = ready!(this.stream.as_mut().poll_write_encrypted(cx, buffer))?;
+                        if n == 0 {
+                            return Poll::Ready(Err(io::Error::from(ErrorKind::WriteZero)));
+                        }
+                        buffer.advance(n);
+                    }
 
                     *(this.writer_state) = ProxyClientStreamWriteState::Connected;
 
@@ -321,7 +328,15 @@ where
                     //
                     // For protocols that requires *Server Hello* message, like FTP, clients won't send anything to the server until server sends handshake messages.
                     // This could be achieved by calling poll_write with an empty input buffer.
-                    return Ok(buf.len()).into();
+                    //
+                    // Only the payload that went out with the address has been written: after Poll::Pending,
+                    // the caller may come back with a longer buffer (tokio's copy appends what it has read in
+                    // the meantime), and the rest of it goes with the next call.
+                    if payload_len > 0 || buf.is_empty() {
+                        return Ok(payload_len).into();
+                    }
+
+                    // The handshake went out without payload, and now the caller has some: write it.
                 }
                 ProxyClientStreamWriteState::Connected => {
                     return this.stream.poll_write_encrypted(cx, buf).map_err(Into::into);
