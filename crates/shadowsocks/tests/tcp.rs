@@ -1,10 +1,16 @@
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{
+    io,
+    net::SocketAddr,
+    pin::Pin,
+    sync::Arc,
+    task::{self, Poll},
+};
 
 use byte_string::ByteStr;
 use futures::future;
 use log::info;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf},
     net::{TcpListener, TcpStream},
     sync::Barrier,
 };
@@ -253,4 +259,135 @@ async fn tcp_tunnel_aead_2022_chacha20() {
     )
     .await
     .unwrap();
+}
+
+/// The methods of the first-packet tests, with a password each
+fn first_packet_methods() -> Vec<(CipherKind, &'static str)> {
+    #[allow(unused_mut)]
+    let mut methods = vec![(CipherKind::NONE, "")];
+    #[cfg(feature = "stream-cipher")]
+    methods.push((CipherKind::AES_128_CFB128, "p$p"));
+    #[cfg(feature = "aead-cipher")]
+    methods.push((CipherKind::AES_128_GCM, "p$p"));
+    #[cfg(feature = "aead-cipher-2022")]
+    methods.push((CipherKind::AEAD2022_BLAKE3_AES_128_GCM, "3L69X4PF2eSL/JSLkoWnXg=="));
+    methods
+}
+
+// ProxyClientStream sends the target address together with the payload of the first write. That
+// write must not report bytes that it didn't send: the `none` cipher writes to the stream as it is,
+// which may take fewer bytes than given, and the AEAD ciphers encrypt at most one chunk per write.
+#[tokio::test]
+async fn tcp_first_write_larger_than_one_stream_write() {
+    let _ = env_logger::try_init();
+
+    let target_addr = Address::from(("www.example.com".to_owned(), 80));
+    let payload = (0..100_000u32).map(|i| (i % 251) as u8).collect::<Vec<u8>>();
+
+    let ctx_server = Context::new_shared(ServerType::Server);
+    let ctx_local = Context::new_shared(ServerType::Local);
+
+    for (method, password) in first_packet_methods() {
+        let svr_cfg = ServerConfig::new("127.0.0.1:0".parse::<SocketAddr>().unwrap(), password, method).unwrap();
+
+        // A pipe that holds less than the first packet
+        let (client_side, server_side) = tokio::io::duplex(4096);
+
+        let mut server = ProxyServerStream::from_stream(ctx_server.clone(), server_side, method, svr_cfg.key());
+        let mut client = ProxyClientStream::from_stream(ctx_local.clone(), client_side, &svr_cfg, target_addr.clone());
+
+        let write = async {
+            client.write_all(&payload).await.unwrap();
+            client.shutdown().await.unwrap();
+        };
+        let read = async {
+            let addr = server.handshake().await.unwrap();
+            let mut received = Vec::new();
+            server.read_to_end(&mut received).await.unwrap();
+            (addr, received)
+        };
+        let ((), (addr, received)) = tokio::join!(write, read);
+
+        assert_eq!(addr, target_addr, "{method}");
+        assert_eq!(received.len(), payload.len(), "{method}");
+        assert!(received == payload, "{method}: the payload differs");
+    }
+}
+
+/// A stream that takes nothing while it is closed, then everything. It registers no waker: the
+/// test polls by hand.
+#[derive(Default)]
+struct Gate {
+    open: bool,
+    written: Vec<u8>,
+}
+
+impl AsyncRead for Gate {
+    fn poll_read(self: Pin<&mut Self>, _: &mut task::Context<'_>, _: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl AsyncWrite for Gate {
+    fn poll_write(self: Pin<&mut Self>, _: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        if !this.open {
+            return Poll::Pending;
+        }
+        this.written.extend_from_slice(buf);
+        Poll::Ready(Ok(buf.len()))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
+// After Poll::Pending, the caller may come back with a longer buffer (tokio's copy appends what it
+// has read in the meantime, see #2175). Only the payload that went into the first packet has been
+// written then, and if there was none (a handshake without data), the new bytes are written next.
+#[tokio::test]
+async fn tcp_first_write_retried_with_more_data() {
+    let _ = env_logger::try_init();
+
+    let target_addr = Address::from(("www.example.com".to_owned(), 80));
+
+    let ctx_server = Context::new_shared(ServerType::Server);
+    let ctx_local = Context::new_shared(ServerType::Local);
+
+    for (method, password) in first_packet_methods() {
+        let svr_cfg = ServerConfig::new("127.0.0.1:0".parse::<SocketAddr>().unwrap(), password, method).unwrap();
+
+        // The first buffer, the longer one that the caller comes back with, and what that call reports
+        for (first, retry, reported) in [(&b"a"[..], &b"ab"[..], 1), (&b""[..], &b"ab"[..], 2)] {
+            let mut client =
+                ProxyClientStream::from_stream(ctx_local.clone(), Gate::default(), &svr_cfg, target_addr.clone());
+            let mut cx = task::Context::from_waker(futures::task::noop_waker_ref());
+
+            assert!(Pin::new(&mut client).poll_write(&mut cx, first).is_pending());
+            client.get_mut().open = true;
+            let n = match Pin::new(&mut client).poll_write(&mut cx, retry) {
+                Poll::Ready(Ok(n)) => n,
+                other => panic!("{method}: {other:?}"),
+            };
+            assert_eq!(n, reported, "{method}: first write {first:?}");
+            client.write_all(&retry[n..]).await.unwrap();
+
+            let wire = std::mem::take(&mut client.get_mut().written);
+            let mut server = ProxyServerStream::from_stream(
+                ctx_server.clone(),
+                tokio::io::join(&wire[..], tokio::io::sink()),
+                method,
+                svr_cfg.key(),
+            );
+            assert_eq!(server.handshake().await.unwrap(), target_addr, "{method}");
+            let mut received = Vec::new();
+            server.read_to_end(&mut received).await.unwrap();
+            assert_eq!(received, retry, "{method}: first write {first:?}");
+        }
+    }
 }
