@@ -12,6 +12,8 @@ mod aead_2022;
 pub mod crypto_io;
 pub mod proxy_listener;
 pub mod proxy_stream;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub mod splice;
 #[cfg(feature = "stream-cipher")]
 mod stream;
 pub mod utils;

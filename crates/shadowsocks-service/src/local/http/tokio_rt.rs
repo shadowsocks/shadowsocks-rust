@@ -13,6 +13,9 @@ pub struct TokioIo<T> {
     inner: T,
 }
 
+/// An upgraded connection may hold bytes that were read ahead: it stays out of the kernel relay.
+impl<T> crate::local::net::SpliceIo for TokioIo<T> {}
+
 impl<T> TokioIo<T> {
     pub fn new(inner: T) -> Self {
         Self { inner }

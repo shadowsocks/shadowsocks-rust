@@ -96,6 +96,17 @@ impl<S> ProxyServerStream<S> {
         self.stream.get_mut()
     }
 
+    /// The internal stream, if what is read from and written to this stream is exactly what is read
+    /// from and written to it, so that the two may be relayed without going through `self`
+    ///
+    /// That is the case for the `none` cipher once [`handshake`](Self::handshake) has read the target
+    /// address, which reads it byte by byte and leaves everything after it in the socket. Before
+    /// that, and for any other cipher, this returns `None`.
+    pub fn passthrough_ref(&self) -> Option<&S> {
+        let established = self.has_handshaked && matches!(self.writer_state, ProxyServerStreamWriteState::Established);
+        (self.stream.is_passthrough() && established).then(|| self.stream.get_ref())
+    }
+
     /// Consumes the object and return the internal stream
     pub fn into_inner(self) -> S {
         self.stream.into_inner()
