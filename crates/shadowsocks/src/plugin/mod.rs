@@ -27,6 +27,8 @@ use crate::config::{Mode, ServerAddr};
 mod obfs_proxy;
 mod ss_plugin;
 
+const PLUGIN_START_CHECK_INTERVAL: Duration = Duration::from_millis(20);
+
 /// Config for plugin
 #[derive(Debug, Clone)]
 pub struct PluginConfig {
@@ -147,14 +149,21 @@ impl Plugin {
             let remain_time = timeout - elapsed_time;
 
             match time::timeout(remain_time, TcpStream::connect(self.local_addr)).await {
-                Ok(Ok(..)) => {
-                    return true;
+                Ok(Ok(stream)) => {
+                    // The plugin listens on a port in the ephemeral range. If it is not listening yet,
+                    // connect() may pick the same port as source and connect to itself (TCP simultaneous open).
+                    if stream.local_addr().ok() != Some(self.local_addr) {
+                        return true;
+                    }
                 }
                 Ok(Err(..)) => {}
                 Err(..) => {
                     return false;
                 }
             }
+
+            // Don't spin on connect(), each attempt allocates an ephemeral port
+            time::sleep(PLUGIN_START_CHECK_INTERVAL).await;
         }
     }
 
