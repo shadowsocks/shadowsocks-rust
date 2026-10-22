@@ -76,7 +76,7 @@ impl DnsResolver {
                     {
                         Ok(msg) => return Ok(msg),
                         Err(err) => {
-                            last_err = io::Error::new(io::ErrorKind::Other, err);
+                            last_err = io::Error::other(err);
                         }
                     }
                 }
@@ -85,7 +85,7 @@ impl DnsResolver {
                     match self.client_cache.lookup_local(ns, msg, &self.connect_opts, false).await {
                         Ok(msg) => return Ok(msg),
                         Err(err) => {
-                            last_err = io::Error::new(io::ErrorKind::Other, err);
+                            last_err = io::Error::other(err);
                         }
                     }
                 }
@@ -98,7 +98,7 @@ impl DnsResolver {
                 .client_cache
                 .lookup_unix_stream(path, msg)
                 .await
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, err)),
+                .map_err(io::Error::other),
         }
     }
 }

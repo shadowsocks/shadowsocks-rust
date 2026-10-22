@@ -161,7 +161,7 @@ pub async fn create_resolver(
                 Ok(resolver) => Ok(resolver),
                 Err(err) => {
                     error!("initialize DNS resolver with config failed, error: {}", err);
-                    Err(io::Error::new(io::ErrorKind::Other, err))
+                    Err(io::Error::other(err))
                 }
             }
         }
@@ -186,13 +186,13 @@ pub async fn create_resolver(
                         Ok(resolver) => Ok(resolver),
                         Err(err) => {
                             error!("initialize DNS resolver with config failed, error: {}", err);
-                            Err(io::Error::new(io::ErrorKind::Other, err))
+                            Err(io::Error::other(err))
                         }
                     }
                 }
                 Err(err) => {
                     error!("initialize DNS resolver with system-config failed, error: {}", err);
-                    Err(io::Error::new(io::ErrorKind::Other, err))
+                    Err(io::Error::other(err))
                 }
             }
         }
