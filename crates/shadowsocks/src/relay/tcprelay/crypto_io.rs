@@ -444,6 +444,13 @@ impl<S> CryptoStream<S> {
         self.stream
     }
 
+    /// `true` if the bytes of the stream are written to and read from the underlying stream as they
+    /// are: the `none` cipher has no framing, no padding and no buffer of its own.
+    #[inline]
+    pub fn is_passthrough(&self) -> bool {
+        self.method.category() == CipherCategory::None
+    }
+
     /// Get received IV (Stream) or Salt (AEAD, AEAD2022)
     #[inline]
     pub fn received_nonce(&self) -> Option<&[u8]> {

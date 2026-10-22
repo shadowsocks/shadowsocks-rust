@@ -74,6 +74,15 @@ impl TcpStream {
         Ok(Self(stream))
     }
 
+    /// The underlying tokio socket, for callers that do their own I/O on it (`splice(2)`)
+    ///
+    /// `None` for a connection that is driven by TCP Fast Open, which keeps the socket private until
+    /// the first write has gone out.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn as_tokio(&self) -> Option<&TokioTcpStream> {
+        self.0.as_tokio()
+    }
+
     /// Returns the local address that this stream is bound to.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.0.local_addr()

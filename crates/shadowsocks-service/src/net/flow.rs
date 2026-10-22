@@ -48,3 +48,18 @@ impl FlowStat {
         self.rx.fetch_add(n as _, Ordering::AcqRel);
     }
 }
+
+/// `FlowStat` counts what a [`MonProxyStream`](super::MonProxyStream) would have counted for a relay
+/// that moves the bytes of the monitored socket in the kernel.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl shadowsocks::relay::tcprelay::splice::SpliceMonitor for FlowStat {
+    #[inline]
+    fn read_a(&self, n: u64) {
+        self.incr_rx(n);
+    }
+
+    #[inline]
+    fn wrote_a(&self, n: u64) {
+        self.incr_tx(n);
+    }
+}

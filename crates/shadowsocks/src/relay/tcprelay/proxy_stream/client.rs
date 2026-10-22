@@ -188,6 +188,18 @@ where
         self.stream.get_mut()
     }
 
+    /// The underlying stream, if what is read from and written to this stream is exactly what is
+    /// read from and written to it, so that the two may be relayed without going through `self`
+    ///
+    /// That is the case for the `none` cipher once the target address has been sent, which the first
+    /// call of `poll_write` does (an empty write is enough). Until then, and for any other cipher,
+    /// this returns `None`.
+    pub fn passthrough_ref(&self) -> Option<&S> {
+        let established = matches!(self.writer_state, ProxyClientStreamWriteState::Connected)
+            && matches!(self.reader_state, ProxyClientStreamReadState::Established);
+        (self.stream.is_passthrough() && established).then(|| self.stream.get_ref())
+    }
+
     /// Consumes the `ProxyClientStream` and return the underlying stream
     pub fn into_inner(self) -> S {
         self.stream.into_inner()

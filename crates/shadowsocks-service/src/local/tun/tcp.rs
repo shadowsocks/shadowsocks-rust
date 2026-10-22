@@ -96,6 +96,9 @@ struct TcpConnection {
     manager_notify: Arc<ManagerNotify>,
 }
 
+/// A userspace TCP stack, there is no kernel socket to splice
+impl crate::local::net::SpliceIo for TcpConnection {}
+
 impl Drop for TcpConnection {
     fn drop(&mut self) {
         let mut control = self.control.lock();
