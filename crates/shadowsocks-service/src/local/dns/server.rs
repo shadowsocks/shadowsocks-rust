@@ -321,7 +321,7 @@ impl DnsTcpServer {
                 Ok(m) => m,
                 Err(err) => {
                     error!("dns tcp {} parse message failed, error: {}", peer_addr, err);
-                    return Err(io::Error::new(io::ErrorKind::Other, err));
+                    return Err(io::Error::other(err));
                 }
             };
 
@@ -329,13 +329,13 @@ impl DnsTcpServer {
                 Ok(m) => m,
                 Err(err) => {
                     error!("dns tcp {} lookup error: {}", peer_addr, err);
-                    return Err(io::Error::new(io::ErrorKind::Other, err));
+                    return Err(io::Error::other(err));
                 }
             };
 
             let mut buf = match respond_message.to_vec() {
                 Ok(buf) => buf,
-                Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
+                Err(err) => return Err(io::Error::other(err)),
             };
             let length = buf.len();
             buf.resize(length + 2, 0);
@@ -485,7 +485,7 @@ impl DnsUdpServer {
 
         let buf = match respond_message.to_vec() {
             Ok(buf) => buf,
-            Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
+            Err(err) => return Err(io::Error::other(err)),
         };
         listener.send_to(&buf, peer_addr).await?;
 
@@ -877,14 +877,14 @@ impl DnsClient {
                 self.client_cache
                     .lookup_remote(&self.context, server.server_config(), remote_addr, message, false)
                     .await
-                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                    .map_err(io::Error::other)
             }
             Mode::UdpOnly => {
                 let server = self.balancer.best_udp_server();
                 self.client_cache
                     .lookup_remote(&self.context, server.server_config(), remote_addr, message, true)
                     .await
-                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                    .map_err(io::Error::other)
             }
             Mode::TcpAndUdp => {
                 // Query TCP & UDP simultaneously
@@ -916,11 +916,11 @@ impl DnsClient {
                 match future::select(tcp_fut, udp_fut).await {
                     Either::Left((res, next)) => match res {
                         Ok(o) => Ok(o),
-                        Err(..) => next.await.map_err(|err| io::Error::new(io::ErrorKind::Other, err)),
+                        Err(..) => next.await.map_err(io::Error::other),
                     },
                     Either::Right((res, next)) => match res {
                         Ok(o) => Ok(o),
-                        Err(..) => next.await.map_err(|err| io::Error::new(io::ErrorKind::Other, err)),
+                        Err(..) => next.await.map_err(io::Error::other),
                     },
                 }
             }
@@ -968,13 +968,9 @@ impl DnsClient {
 
                 match future::select(udp_query, tcp_query).await {
                     Either::Left((Ok(m), ..)) => Ok(m),
-                    Either::Left((Err(..), next)) => {
-                        next.await.map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-                    }
+                    Either::Left((Err(..), next)) => next.await.map_err(io::Error::other),
                     Either::Right((Ok(m), ..)) => Ok(m),
-                    Either::Right((Err(..), next)) => {
-                        next.await.map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-                    }
+                    Either::Right((Err(..), next)) => next.await.map_err(io::Error::other),
                 }
             }
             #[cfg(unix)]
@@ -982,7 +978,7 @@ impl DnsClient {
                 .client_cache
                 .lookup_unix_stream(path, message)
                 .await
-                .map_err(|err| io::Error::new(io::ErrorKind::Other, err)),
+                .map_err(io::Error::other),
         }
     }
 }
