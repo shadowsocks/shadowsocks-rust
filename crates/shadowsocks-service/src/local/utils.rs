@@ -1,8 +1,12 @@
 //! Shadowsocks Local Utilities
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::future::Future;
 use std::{io, net::SocketAddr, time::Duration};
 
 use log::{debug, trace};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use shadowsocks::relay::tcprelay::splice::{copy_bidirectional_splice, copy_bidirectional_splice_monitored};
 use shadowsocks::{
     config::ServerConfig,
     relay::{socks5::Address, tcprelay::utils::copy_encrypted_bidirectional},
@@ -12,7 +16,7 @@ use tokio::{
     time,
 };
 
-use crate::local::net::AutoProxyIo;
+use crate::local::net::{AutoProxyIo, SpliceIo};
 
 pub(crate) async fn establish_tcp_tunnel<P, S>(
     svr_cfg: &ServerConfig,
@@ -22,8 +26,8 @@ pub(crate) async fn establish_tcp_tunnel<P, S>(
     target_addr: &Address,
 ) -> io::Result<()>
 where
-    P: AsyncRead + AsyncWrite + Unpin,
-    S: AsyncRead + AsyncWrite + AutoProxyIo + Unpin,
+    P: AsyncRead + AsyncWrite + SpliceIo + Unpin,
+    S: AsyncRead + AsyncWrite + AutoProxyIo + SpliceIo + Unpin,
 {
     if shadow.is_proxied() {
         debug!(
@@ -66,7 +70,13 @@ where
         }
     }
 
-    match copy_encrypted_bidirectional(svr_cfg.method(), shadow, plain).await {
+    let result = if let Some(splice) = splice_tunnel(shadow, plain) {
+        splice.await
+    } else {
+        copy_encrypted_bidirectional(svr_cfg.method(), shadow, plain).await
+    };
+
+    match result {
         Ok((wn, rn)) => {
             trace!(
                 "tcp tunnel {} <-> {} (proxied) closed, L2R {} bytes, R2L {} bytes",
@@ -84,6 +94,67 @@ where
     Ok(())
 }
 
+/// Relays between the server socket and the client socket in the kernel, if both are plain TCP
+/// sockets, and the cipher leaves the bytes alone
+///
+/// Returns `None`, without having touched the streams, if that isn't possible: the caller copies
+/// through userspace then. The result is the number of bytes from the server and from the client.
+///
+/// The streams are inspected here, outside of the returned future, which only holds the sockets.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn splice_tunnel<'a, P, S>(shadow: &'a S, plain: &'a P) -> Option<impl Future<Output = io::Result<(u64, u64)>> + 'a>
+where
+    P: SpliceIo,
+    S: SpliceIo,
+{
+    let (shadow_socket, plain_socket, flow_stat) = (
+        shadow.splice_socket()?,
+        plain.splice_socket()?,
+        shadow.splice_flow_stat()?,
+    );
+
+    Some(copy_bidirectional_splice_monitored(
+        shadow_socket,
+        plain_socket,
+        flow_stat,
+    ))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn splice_tunnel<P, S>(_shadow: &S, _plain: &P) -> Option<std::future::Ready<io::Result<(u64, u64)>>>
+where
+    P: SpliceIo,
+    S: SpliceIo,
+{
+    None
+}
+
+/// Relays between the client socket and the target socket in the kernel, if both are plain TCP
+/// sockets. `None`, without having touched the streams, if not.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn splice_bypassed_tunnel<'a, P, S>(
+    plain: &'a P,
+    shadow: &'a S,
+) -> Option<impl Future<Output = io::Result<(u64, u64)>> + 'a>
+where
+    P: SpliceIo,
+    S: SpliceIo,
+{
+    Some(copy_bidirectional_splice(
+        plain.splice_socket()?,
+        shadow.splice_socket()?,
+    ))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn splice_bypassed_tunnel<P, S>(_plain: &P, _shadow: &S) -> Option<std::future::Ready<io::Result<(u64, u64)>>>
+where
+    P: SpliceIo,
+    S: SpliceIo,
+{
+    None
+}
+
 pub(crate) async fn establish_tcp_tunnel_bypassed<P, S>(
     plain: &mut P,
     shadow: &mut S,
@@ -91,12 +162,18 @@ pub(crate) async fn establish_tcp_tunnel_bypassed<P, S>(
     target_addr: &Address,
 ) -> io::Result<()>
 where
-    P: AsyncRead + AsyncWrite + Unpin,
-    S: AsyncRead + AsyncWrite + Unpin,
+    P: AsyncRead + AsyncWrite + SpliceIo + Unpin,
+    S: AsyncRead + AsyncWrite + SpliceIo + Unpin,
 {
     debug!("established tcp tunnel {} <-> {} bypassed", peer_addr, target_addr);
 
-    match copy_bidirectional(plain, shadow).await {
+    let result = if let Some(splice) = splice_bypassed_tunnel(plain, shadow) {
+        splice.await
+    } else {
+        copy_bidirectional(plain, shadow).await
+    };
+
+    match result {
         Ok((rn, wn)) => {
             trace!(
                 "tcp tunnel {} <-> {} (bypassed) closed, L2R {} bytes, R2L {} bytes",
