@@ -40,6 +40,8 @@ impl<'a> TcpDialer for ServerTcpDialer<'a> {
 }
 
 /// Unified outbound stream: either direct or through the outbound proxy chain.
+// Not boxed: one instance per connection, boxing would add an allocation on the hot path
+#[allow(clippy::large_enum_variant)]
 enum RemoteStream {
     Direct(OutboundTcpStream),
     Proxied(OutboundProxyStream),
