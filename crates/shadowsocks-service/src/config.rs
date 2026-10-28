@@ -1338,30 +1338,24 @@ impl LocalConfig {
 
         match self.protocol {
             #[cfg(feature = "local-dns")]
-            ProtocolType::Dns => {
-                if self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
-                    let err = Error::new(
-                        ErrorKind::MissingField,
-                        "missing `local_dns_addr` or `remote_dns_addr` in configuration",
-                        None,
-                    );
-                    return Err(err);
-                }
+            ProtocolType::Dns if self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() => {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `local_dns_addr` or `remote_dns_addr` in configuration",
+                    None,
+                );
+                return Err(err);
             }
             #[cfg(feature = "local-tunnel")]
-            ProtocolType::Tunnel => {
-                if self.forward_addr.is_none() {
-                    let err = Error::new(ErrorKind::MissingField, "missing `forward_addr` in configuration", None);
-                    return Err(err);
-                }
+            ProtocolType::Tunnel if self.forward_addr.is_none() => {
+                let err = Error::new(ErrorKind::MissingField, "missing `forward_addr` in configuration", None);
+                return Err(err);
             }
 
             #[cfg(feature = "local-http")]
-            ProtocolType::Http => {
-                if !self.mode.enable_tcp() {
-                    let err = Error::new(ErrorKind::Invalid, "TCP mode have to be enabled for http", None);
-                    return Err(err);
-                }
+            ProtocolType::Http if !self.mode.enable_tcp() => {
+                let err = Error::new(ErrorKind::Invalid, "TCP mode have to be enabled for http", None);
+                return Err(err);
             }
 
             _ => {}
