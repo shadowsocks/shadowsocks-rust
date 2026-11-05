@@ -672,9 +672,7 @@ impl EncryptedWriter {
                     let header_len = 1 + 8 + request_salt_len + 2 + self.cipher.tag_len();
                     self.buffer.reserve(header_len);
 
-                    let mbuf = &mut self.buffer.chunk_mut()[..header_len];
-                    let mbuf = unsafe { slice::from_raw_parts_mut(mbuf.as_mut_ptr(), mbuf.len()) };
-
+                    let start = self.buffer.len();
                     let stream_ty = match self.stream_ty {
                         StreamType::Client => 0,
                         StreamType::Server => 1,
@@ -685,19 +683,17 @@ impl EncryptedWriter {
                         self.buffer.put_slice(salt);
                     }
                     self.buffer.put_u16(buf.len() as u16);
-                    self.cipher.encrypt_packet(mbuf);
-                    unsafe { self.buffer.advance_mut(self.cipher.tag_len()) };
+                    self.buffer.put_bytes(0, self.cipher.tag_len());
+                    self.cipher.encrypt_packet(&mut self.buffer[start..]);
 
                     // Step 2. Data Chunk
                     let data_size = buf.len() + self.cipher.tag_len();
                     self.buffer.reserve(data_size);
 
-                    let mbuf = &mut self.buffer.chunk_mut()[..data_size];
-                    let mbuf = unsafe { slice::from_raw_parts_mut(mbuf.as_mut_ptr(), mbuf.len()) };
-
+                    let start = self.buffer.len();
                     self.buffer.put_slice(buf);
-                    self.cipher.encrypt_packet(mbuf);
-                    unsafe { self.buffer.advance_mut(self.cipher.tag_len()) };
+                    self.buffer.put_bytes(0, self.cipher.tag_len());
+                    self.cipher.encrypt_packet(&mut self.buffer[start..]);
 
                     // Step 3. Write all
                     self.state = EncryptWriteState::Writing {
@@ -711,23 +707,19 @@ impl EncryptedWriter {
                     let length_size = 2 + self.cipher.tag_len();
                     self.buffer.reserve(length_size);
 
-                    let mbuf = &mut self.buffer.chunk_mut()[..length_size];
-                    let mbuf = unsafe { slice::from_raw_parts_mut(mbuf.as_mut_ptr(), mbuf.len()) };
-
+                    let start = self.buffer.len();
                     self.buffer.put_u16(buf.len() as u16);
-                    self.cipher.encrypt_packet(mbuf);
-                    unsafe { self.buffer.advance_mut(self.cipher.tag_len()) };
+                    self.buffer.put_bytes(0, self.cipher.tag_len());
+                    self.cipher.encrypt_packet(&mut self.buffer[start..]);
 
                     // Step 2. Append data
                     let data_size = buf.len() + self.cipher.tag_len();
                     self.buffer.reserve(data_size);
 
-                    let mbuf = &mut self.buffer.chunk_mut()[..data_size];
-                    let mbuf = unsafe { slice::from_raw_parts_mut(mbuf.as_mut_ptr(), mbuf.len()) };
-
+                    let start = self.buffer.len();
                     self.buffer.put_slice(buf);
-                    self.cipher.encrypt_packet(mbuf);
-                    unsafe { self.buffer.advance_mut(self.cipher.tag_len()) };
+                    self.buffer.put_bytes(0, self.cipher.tag_len());
+                    self.cipher.encrypt_packet(&mut self.buffer[start..]);
 
                     // Step 3. Write all
                     self.state = EncryptWriteState::Writing {
@@ -884,5 +876,49 @@ mod tests {
         }
 
         assert_eq!(output, b"ab");
+    }
+
+    // chacha8-poly1305 is pure Rust, so unlike the AES test above this one also runs under
+    // Miri (with `-Zmiri-disable-isolation` for the timestamp), which checks the buffer
+    // handling of `poll_write_encrypted` for the header and the data chunks.
+    #[cfg(feature = "aead-cipher-2022-extra")]
+    #[test]
+    fn test_write_read_round_trip_chacha8() {
+        let context = Context::new_shared(ServerType::Server);
+        let key = [0x42u8; 32];
+        let nonce = [0x24u8; 32];
+        let method = CipherKind::AEAD2022_BLAKE3_CHACHA8_POLY1305;
+        let mut writer = EncryptedWriter::new(StreamType::Client, method, &key, &nonce);
+        let mut stream = TestStream {
+            blocked: false,
+            bytes: Vec::new(),
+            read_pos: 0,
+        };
+        let mut cx = TaskContext::from_waker(Waker::noop());
+
+        for chunk in [&b"hello"[..], &b" world"[..]] {
+            match writer.poll_write_encrypted(&mut cx, &mut stream, chunk) {
+                TaskPoll::Ready(Ok(n)) => assert_eq!(n, chunk.len()),
+                v => panic!("unexpected result: {v:?}"),
+            }
+        }
+
+        let mut reader = DecryptedReader::new(StreamType::Server, method, &key);
+        let mut output = Vec::new();
+        loop {
+            let mut buffer = [0u8; 16];
+            let mut read_buf = ReadBuf::new(&mut buffer);
+            match reader.poll_read_decrypted(&mut cx, &context, &mut stream, &mut read_buf) {
+                TaskPoll::Ready(Ok(())) => {
+                    if read_buf.filled().is_empty() {
+                        break;
+                    }
+                    output.extend_from_slice(read_buf.filled());
+                }
+                v => panic!("unexpected read result: {v:?}"),
+            }
+        }
+
+        assert_eq!(output, b"hello world");
     }
 }
