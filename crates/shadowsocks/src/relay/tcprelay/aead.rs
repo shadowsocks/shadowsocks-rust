@@ -383,23 +383,19 @@ impl EncryptedWriter {
                     let length_size = 2 + self.cipher.tag_len();
                     self.buffer.reserve(length_size);
 
-                    let mbuf = &mut self.buffer.chunk_mut()[..length_size];
-                    let mbuf = unsafe { slice::from_raw_parts_mut(mbuf.as_mut_ptr(), mbuf.len()) };
-
+                    let start = self.buffer.len();
                     self.buffer.put_u16(buf.len() as u16);
-                    self.cipher.encrypt_packet(mbuf);
-                    unsafe { self.buffer.advance_mut(self.cipher.tag_len()) };
+                    self.buffer.put_bytes(0, self.cipher.tag_len());
+                    self.cipher.encrypt_packet(&mut self.buffer[start..]);
 
                     // Step 2. Append data
                     let data_size = buf.len() + self.cipher.tag_len();
                     self.buffer.reserve(data_size);
 
-                    let mbuf = &mut self.buffer.chunk_mut()[..data_size];
-                    let mbuf = unsafe { slice::from_raw_parts_mut(mbuf.as_mut_ptr(), mbuf.len()) };
-
+                    let start = self.buffer.len();
                     self.buffer.put_slice(buf);
-                    self.cipher.encrypt_packet(mbuf);
-                    unsafe { self.buffer.advance_mut(self.cipher.tag_len()) };
+                    self.buffer.put_bytes(0, self.cipher.tag_len());
+                    self.cipher.encrypt_packet(&mut self.buffer[start..]);
 
                     // Step 3. Write all
                     self.state = EncryptWriteState::Writing {
@@ -555,5 +551,28 @@ mod tests {
         }
 
         assert_eq!(output, b"ab");
+    }
+
+    // `CipherKind::NONE` needs no FFI, so unlike the AES test above this one also runs
+    // under Miri, which checks the buffer handling in `poll_write_encrypted`.
+    #[test]
+    fn test_write_frames_none() {
+        let mut writer = EncryptedWriter::new(CipherKind::NONE, &[], &[]);
+        let mut stream = TestStream {
+            blocked: false,
+            bytes: Vec::new(),
+            read_pos: 0,
+        };
+        let mut cx = TaskContext::from_waker(Waker::noop());
+
+        for chunk in [&b"hello"[..], &b" world"[..]] {
+            match writer.poll_write_encrypted(&mut cx, &mut stream, chunk) {
+                TaskPoll::Ready(Ok(n)) => assert_eq!(n, chunk.len()),
+                v => panic!("unexpected result: {v:?}"),
+            }
+        }
+
+        // No salt and no tags: each frame is the 2-byte length followed by the data.
+        assert_eq!(stream.bytes, b"\x00\x05hello\x00\x06 world");
     }
 }
