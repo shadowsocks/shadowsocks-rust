@@ -8,7 +8,7 @@ use shadowsocks::{ServerAddr, config::Mode};
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
 pub use self::server::{SocksTcpServer, SocksTcpServerBuilder, SocksUdpServer};
-use self::socks5::Socks5UdpServerBuilder;
+use self::socks5::{Socks5UdpAuth, Socks5UdpServerBuilder};
 
 use super::config::Socks5AuthConfig;
 #[cfg(feature = "local-http")]
@@ -126,6 +126,18 @@ impl SocksBuilder {
             .unwrap_or(&self.client_config)
             .clone();
 
+        // With authentication, UDP is relayed only for live authenticated UDP ASSOCIATE connections
+        let mut udp_auth = None;
+        if self.mode.enable_udp() && self.socks5_auth.auth_required() {
+            if !self.mode.enable_tcp() {
+                return Err(io::Error::other(
+                    "socks5 authentication requires TCP for UDP ASSOCIATE, mode udp_only cannot be used with it",
+                ));
+            }
+            udp_auth = Some(Socks5UdpAuth::new());
+        }
+        let udp_clients = udp_auth.as_ref().map(|a| a.clients.clone());
+
         let mut udp_server = None;
         if self.mode.enable_udp() {
             #[allow(unused_mut)]
@@ -135,6 +147,7 @@ impl SocksBuilder {
                 self.udp_expiry_duration,
                 self.udp_capacity,
                 self.balancer.clone(),
+                udp_auth,
             );
 
             #[cfg(target_os = "macos")]
@@ -159,6 +172,10 @@ impl SocksBuilder {
                 #[cfg(feature = "local-http")]
                 self.http_auth,
             );
+
+            if let Some(c) = udp_clients {
+                builder.set_udp_clients(c);
+            }
 
             #[cfg(target_os = "macos")]
             if let Some(s) = self.launchd_tcp_socket_name {

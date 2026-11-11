@@ -1,14 +1,16 @@
 //! UDP Tunnel server
 
 use std::{
+    collections::HashMap,
     io::{self, Cursor},
     net::{IpAddr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
+use futures::future;
 use log::{debug, error, info, trace};
 use shadowsocks::{
     ServerAddr,
@@ -17,7 +19,7 @@ use shadowsocks::{
         udprelay::MAXIMUM_UDP_PAYLOAD_SIZE,
     },
 };
-use tokio::{net::UdpSocket, time};
+use tokio::{net::UdpSocket, sync::mpsc, time};
 
 use crate::{
     local::{
@@ -28,12 +30,75 @@ use crate::{
     net::utils::to_ipv4_mapped,
 };
 
+/// Client endpoints holding a live, authenticated UDP ASSOCIATE control connection (RFC 1928 section 7)
+///
+/// Key is (client IP, client UDP port), port 0 means any port of that IP.
+#[derive(Clone)]
+pub struct Socks5UdpClients {
+    clients: Arc<Mutex<HashMap<(IpAddr, u16), usize>>>,
+    closed_tx: mpsc::UnboundedSender<()>,
+}
+
+impl Socks5UdpClients {
+    /// Allows UDP from `ip:port` (any port if 0) until the returned guard is dropped
+    pub fn register(&self, ip: IpAddr, port: u16) -> Socks5UdpClientGuard {
+        let key = (ip.to_canonical(), port);
+        *self.clients.lock().unwrap().entry(key).or_insert(0) += 1;
+        Socks5UdpClientGuard {
+            clients: self.clone(),
+            key,
+        }
+    }
+
+    pub fn is_allowed(&self, peer_addr: &SocketAddr) -> bool {
+        let ip = peer_addr.ip().to_canonical();
+        let clients = self.clients.lock().unwrap();
+        clients.contains_key(&(ip, 0)) || clients.contains_key(&(ip, peer_addr.port()))
+    }
+}
+
+pub struct Socks5UdpClientGuard {
+    clients: Socks5UdpClients,
+    key: (IpAddr, u16),
+}
+
+impl Drop for Socks5UdpClientGuard {
+    fn drop(&mut self) {
+        let mut clients = self.clients.clients.lock().unwrap();
+        if let Some(count) = clients.get_mut(&self.key) {
+            *count -= 1;
+            if *count == 0 {
+                clients.remove(&self.key);
+            }
+        }
+        let _ = self.clients.closed_tx.send(());
+    }
+}
+
+/// Only peers in `clients` may use the relay; associations are dropped once their control connection closes
+pub struct Socks5UdpAuth {
+    pub clients: Socks5UdpClients,
+    closed_rx: mpsc::UnboundedReceiver<()>,
+}
+
+impl Socks5UdpAuth {
+    pub fn new() -> Self {
+        let (closed_tx, closed_rx) = mpsc::unbounded_channel();
+        let clients = Socks5UdpClients {
+            clients: Arc::new(Mutex::new(HashMap::new())),
+            closed_tx,
+        };
+        Self { clients, closed_rx }
+    }
+}
+
 pub struct Socks5UdpServerBuilder {
     context: Arc<ServiceContext>,
     client_config: ServerAddr,
     time_to_live: Option<Duration>,
     capacity: Option<usize>,
     balancer: PingBalancer,
+    auth: Option<Socks5UdpAuth>,
     #[cfg(target_os = "macos")]
     launchd_socket_name: Option<String>,
 }
@@ -45,6 +110,7 @@ impl Socks5UdpServerBuilder {
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
         balancer: PingBalancer,
+        auth: Option<Socks5UdpAuth>,
     ) -> Self {
         Self {
             context,
@@ -52,6 +118,7 @@ impl Socks5UdpServerBuilder {
             time_to_live,
             capacity,
             balancer,
+            auth,
             #[cfg(target_os = "macos")]
             launchd_socket_name: None,
         }
@@ -88,6 +155,7 @@ impl Socks5UdpServerBuilder {
             capacity: self.capacity,
             listener: Arc::new(socket),
             balancer: self.balancer,
+            auth: self.auth,
         })
     }
 }
@@ -134,6 +202,7 @@ pub struct Socks5UdpServer {
     capacity: Option<usize>,
     listener: Arc<UdpSocket>,
     balancer: PingBalancer,
+    auth: Option<Socks5UdpAuth>,
 }
 
 impl Socks5UdpServer {
@@ -145,6 +214,11 @@ impl Socks5UdpServer {
     /// Run server accept loop
     pub async fn run(self) -> io::Result<()> {
         info!("shadowsocks socks5 UDP listening on {}", self.listener.local_addr()?);
+
+        let (clients, mut closed_rx) = match self.auth {
+            Some(auth) => (Some(auth.clients), Some(auth.closed_rx)),
+            None => (None, None),
+        };
 
         let (mut manager, cleanup_interval, mut keepalive_rx) = UdpAssociationManager::new(
             self.context.clone(),
@@ -171,6 +245,18 @@ impl Socks5UdpServer {
                     manager.keep_alive(&peer_addr).await;
                 }
 
+                _ = async {
+                    match closed_rx {
+                        Some(ref mut rx) => rx.recv().await,
+                        None => future::pending().await,
+                    }
+                } => {
+                    // A control connection was closed, drop the associations it was authorizing
+                    if let Some(ref clients) = clients {
+                        manager.retain(|peer_addr| clients.is_allowed(peer_addr));
+                    }
+                }
+
                 recv_result = self.listener.recv_from(&mut buffer) => {
                     let (n, peer_addr) = match recv_result {
                         Ok(s) => s,
@@ -180,6 +266,13 @@ impl Socks5UdpServer {
                             continue;
                         }
                     };
+
+                    if let Some(ref clients) = clients
+                        && !clients.is_allowed(&peer_addr)
+                    {
+                        debug!("dropped UDP packet from {} without an authenticated UDP ASSOCIATE", peer_addr);
+                        continue;
+                    }
 
                     let data = &buffer[..n];
 

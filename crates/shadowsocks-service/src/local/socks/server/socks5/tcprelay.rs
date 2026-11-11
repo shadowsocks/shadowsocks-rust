@@ -29,12 +29,15 @@ use crate::{
     net::utils::ignore_until_end,
 };
 
+use super::Socks5UdpClients;
+
 pub struct Socks5TcpHandler {
     context: Arc<ServiceContext>,
     udp_associate_addr: Arc<ServerAddr>,
     balancer: PingBalancer,
     mode: Mode,
     auth: Arc<Socks5AuthConfig>,
+    udp_clients: Option<Socks5UdpClients>,
 }
 
 impl Socks5TcpHandler {
@@ -44,6 +47,7 @@ impl Socks5TcpHandler {
         balancer: PingBalancer,
         mode: Mode,
         auth: Arc<Socks5AuthConfig>,
+        udp_clients: Option<Socks5UdpClients>,
     ) -> Self {
         Self {
             context,
@@ -51,6 +55,7 @@ impl Socks5TcpHandler {
             balancer,
             mode,
             auth,
+            udp_clients,
         }
     }
 
@@ -206,7 +211,7 @@ impl Socks5TcpHandler {
             Command::UdpAssociate => {
                 debug!("UDP ASSOCIATE from {}", addr);
 
-                self.handle_udp_associate(stream, addr).await
+                self.handle_udp_associate(stream, peer_addr, addr).await
             }
             Command::TcpBind => {
                 warn!("BIND is not supported");
@@ -286,7 +291,12 @@ impl Socks5TcpHandler {
         }
     }
 
-    async fn handle_udp_associate(self, mut stream: TcpStream, client_addr: Address) -> io::Result<()> {
+    async fn handle_udp_associate(
+        self,
+        mut stream: TcpStream,
+        peer_addr: SocketAddr,
+        client_addr: Address,
+    ) -> io::Result<()> {
         if !self.mode.enable_udp() {
             warn!("socks5 udp is disabled");
 
@@ -297,6 +307,13 @@ impl Socks5TcpHandler {
         }
 
         // shadowsocks accepts both TCP and UDP from the same address
+
+        // With authentication, the UDP relay serves only this client's IP (and the port it announced)
+        // until this connection closes (RFC 1928 section 7). Its announced IP is ignored, it may be behind NAT.
+        let _udp_client = self
+            .udp_clients
+            .as_ref()
+            .map(|c| c.register(peer_addr.ip(), client_addr.port()));
 
         let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, self.udp_associate_addr.as_ref().into());
         rh.write_to(&mut stream).await?;
