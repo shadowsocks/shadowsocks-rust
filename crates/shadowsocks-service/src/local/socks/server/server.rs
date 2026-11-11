@@ -13,7 +13,7 @@ use crate::local::{
 
 #[cfg(feature = "local-socks4")]
 use super::socks4::Socks4TcpHandler;
-use super::socks5::{Socks5TcpHandler, Socks5UdpServer};
+use super::socks5::{Socks5TcpHandler, Socks5UdpClients, Socks5UdpServer};
 
 pub struct SocksTcpServerBuilder {
     context: Arc<ServiceContext>,
@@ -22,6 +22,7 @@ pub struct SocksTcpServerBuilder {
     balancer: PingBalancer,
     mode: Mode,
     socks5_auth: Arc<Socks5AuthConfig>,
+    udp_clients: Option<Socks5UdpClients>,
     #[cfg(target_os = "macos")]
     launchd_socket_name: Option<String>,
     #[cfg(feature = "local-http")]
@@ -45,11 +46,17 @@ impl SocksTcpServerBuilder {
             balancer,
             mode,
             socks5_auth: Arc::new(socks5_auth),
+            udp_clients: None,
             #[cfg(target_os = "macos")]
             launchd_socket_name: None,
             #[cfg(feature = "local-http")]
             http_auth: Arc::new(http_auth),
         }
+    }
+
+    /// Registry of clients allowed to use the SOCKS5 UDP relay, set when authentication is required
+    pub(crate) fn set_udp_clients(&mut self, c: Socks5UdpClients) {
+        self.udp_clients = Some(c);
     }
 
     /// macOS launchd activate socket
@@ -85,6 +92,7 @@ impl SocksTcpServerBuilder {
             balancer: self.balancer,
             mode: self.mode,
             socks5_auth: self.socks5_auth,
+            udp_clients: self.udp_clients,
             #[cfg(feature = "local-http")]
             http_auth: self.http_auth,
         })
@@ -99,6 +107,7 @@ pub struct SocksTcpServer {
     balancer: PingBalancer,
     mode: Mode,
     socks5_auth: Arc<Socks5AuthConfig>,
+    udp_clients: Option<Socks5UdpClients>,
     #[cfg(feature = "local-http")]
     http_auth: Arc<HttpAuthConfig>,
 }
@@ -137,6 +146,7 @@ impl SocksTcpServer {
                 peer_addr,
                 mode: self.mode,
                 socks5_auth: self.socks5_auth.clone(),
+                udp_clients: self.udp_clients.clone(),
                 #[cfg(feature = "local-http")]
                 http_handler: http_handler.clone(),
             };
@@ -158,6 +168,7 @@ struct SocksTcpHandler {
     peer_addr: SocketAddr,
     mode: Mode,
     socks5_auth: Arc<Socks5AuthConfig>,
+    udp_clients: Option<Socks5UdpClients>,
     #[cfg(feature = "local-http")]
     http_handler: HttpConnectionHandler,
 }
@@ -171,6 +182,7 @@ impl SocksTcpHandler {
             self.balancer,
             self.mode,
             self.socks5_auth,
+            self.udp_clients,
         );
         handler.handle_socks5_client(self.stream, self.peer_addr).await
     }
@@ -204,6 +216,7 @@ impl SocksTcpHandler {
                     self.balancer,
                     self.mode,
                     self.socks5_auth,
+                    self.udp_clients,
                 );
                 handler.handle_socks5_client(self.stream, self.peer_addr).await
             }

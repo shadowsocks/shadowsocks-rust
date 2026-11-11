@@ -218,6 +218,20 @@ where
     pub async fn keep_alive(&mut self, peer_addr: &SocketAddr) {
         self.assoc_map.get(peer_addr);
     }
+
+    /// Close every association whose peer address does not satisfy `keep`
+    pub fn retain<F: FnMut(&SocketAddr) -> bool>(&mut self, mut keep: F) {
+        let closed: Vec<SocketAddr> = self
+            .assoc_map
+            .peek_iter()
+            .map(|(peer_addr, _)| *peer_addr)
+            .filter(|peer_addr| !keep(peer_addr))
+            .collect();
+        for peer_addr in closed {
+            debug!("closed udp association for {}", peer_addr);
+            self.assoc_map.remove(&peer_addr);
+        }
+    }
 }
 
 struct UdpAssociation<W>

@@ -105,3 +105,76 @@ async fn udp_relay() {
     assert_eq!(recv_addr, remote_addr);
     assert_eq!(&buf[..amt], payload);
 }
+
+#[tokio::test]
+async fn udp_relay_requires_socks5_auth_association() {
+    use shadowsocks_service::{
+        local::socks::{client::socks5::Socks5TcpClient, config::Socks5AuthConfig},
+        net::Socks5Auth,
+        shadowsocks::relay::socks5::UdpAssociateHeader,
+    };
+    use tokio::net::UdpSocket;
+
+    let _ = env_logger::try_init();
+
+    const SERVER_ADDR: &str = "127.0.0.1:8094";
+    const LOCAL_ADDR: &str = "127.0.0.1:8292";
+    const ECHO_ADDR: &str = "127.0.0.1:50404";
+
+    let mut svr_cfg = get_svr_config();
+    svr_cfg.server[0]
+        .config
+        .set_addr(SERVER_ADDR.parse::<SocketAddr>().unwrap());
+    tokio::spawn(run_server(svr_cfg));
+
+    let mut cli_cfg = get_cli_config();
+    cli_cfg.local[0].config.addr = Some(LOCAL_ADDR.parse::<SocketAddr>().unwrap().into());
+    cli_cfg.server[0]
+        .config
+        .set_addr(SERVER_ADDR.parse::<SocketAddr>().unwrap());
+    let mut auth = Socks5AuthConfig::new();
+    auth.passwd.add_user("user", "pass");
+    cli_cfg.local[0].config.socks5_auth = auth;
+    tokio::spawn(run_local(cli_cfg));
+
+    tokio::spawn(async {
+        let l = UdpSocket::bind(ECHO_ADDR).await.unwrap();
+        let mut buf = vec![0u8; 65536];
+        loop {
+            let (n, src) = l.recv_from(&mut buf).await.unwrap();
+            l.send_to(&buf[..n], src).await.unwrap();
+        }
+    });
+
+    time::sleep(Duration::from_secs(1)).await;
+
+    // Sends one datagram from `socket` through the relay and reports whether the echo came back
+    async fn echoed(socket: &UdpSocket, payload: &[u8]) -> bool {
+        let mut pkt = Vec::new();
+        UdpAssociateHeader::new(0, Address::SocketAddress(ECHO_ADDR.parse().unwrap())).write_to_buf(&mut pkt);
+        pkt.extend_from_slice(payload);
+        socket.send_to(&pkt, LOCAL_ADDR).await.unwrap();
+
+        let mut buf = vec![0u8; 65536];
+        match time::timeout(Duration::from_millis(500), socket.recv(&mut buf)).await {
+            Ok(n) => buf[..n.unwrap()].ends_with(payload),
+            Err(..) => false,
+        }
+    }
+
+    let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    assert!(!echoed(&socket, b"no association").await);
+
+    let auth = Socks5Auth::username_password("user", "pass");
+    let (control, _) = Socks5TcpClient::udp_associate_with_auth(socket.local_addr().unwrap(), LOCAL_ADDR, &auth)
+        .await
+        .unwrap();
+    assert!(echoed(&socket, b"associated").await);
+
+    let other = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    assert!(!echoed(&other, b"other port").await);
+
+    drop(control);
+    time::sleep(Duration::from_millis(200)).await;
+    assert!(!echoed(&socket, b"control closed").await);
+}
