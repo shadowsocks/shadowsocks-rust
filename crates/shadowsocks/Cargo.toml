@@ -15,7 +15,16 @@ rust-version = "1.91"
 maintenance = { status = "passively-maintained" }
 
 [features]
-default = ["hickory-dns", "aead-cipher"]
+default = ["hickory-dns", "aead-cipher", "aws-lc"]
+
+# Crypto backend used by shadowsocks-crypto for the accelerated cipher paths.
+# Without any of these, pure Rust (RustCrypto) implementations are used.
+# If both are enabled, aws-lc takes precedence.
+#
+# Use aws-lc-rs (default)
+aws-lc = ["shadowsocks-crypto/aws-lc"]
+# Use ring, e.g. for targets where aws-lc-rs cannot be built
+ring = ["shadowsocks-crypto/ring"]
 
 # Uses Hickory-DNS instead of tokio's builtin DNS resolver
 hickory-dns = ["hickory-resolver", "arc-swap", "notify"]
@@ -26,16 +35,10 @@ trust-dns = ["hickory-dns"]
 # WARN: Stream Cipher Protocol is proved to be insecure
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
-stream-cipher = [
-    "shadowsocks-crypto/v1-stream",
-    "shadowsocks-crypto/aws-lc",
-]
+stream-cipher = ["shadowsocks-crypto/v1-stream"]
 
 # Enable AEAD ciphers
-aead-cipher = [
-    "shadowsocks-crypto/v1-aead",
-    "shadowsocks-crypto/aws-lc",
-]
+aead-cipher = ["shadowsocks-crypto/v1-aead"]
 
 # Enable extra AEAD ciphers
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
@@ -43,7 +46,6 @@ aead-cipher-extra = ["aead-cipher", "shadowsocks-crypto/v1-aead-extra"]
 
 aead-cipher-2022 = [
     "shadowsocks-crypto/v2",
-    "shadowsocks-crypto/aws-lc",
     "rand",
     "aes",
     "lru_time_cache",
