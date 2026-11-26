@@ -100,17 +100,17 @@ local-online-config = [
 # WARN: Stream Cipher Protocol is proved to be insecure
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
-stream-cipher = ["shadowsocks/stream-cipher"]
+stream-cipher = ["shadowsocks/stream-cipher", "shadowsocks/aws-lc"]
 
 # Enable AEAD ciphers
-aead-cipher = ["shadowsocks/aead-cipher"]
+aead-cipher = ["shadowsocks/aead-cipher", "shadowsocks/aws-lc"]
 
 # Enable extra AEAD ciphers
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
 aead-cipher-extra = ["aead-cipher", "shadowsocks/aead-cipher-extra"]
 
 # Enable AEAD 2022
-aead-cipher-2022 = ["shadowsocks/aead-cipher-2022"]
+aead-cipher-2022 = ["shadowsocks/aead-cipher-2022", "shadowsocks/aws-lc"]
 # Enable AEAD 2022 with extra ciphers
 aead-cipher-2022-extra = [
     "aead-cipher-2022",
